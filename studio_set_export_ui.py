@@ -4,10 +4,10 @@ from pathlib import Path
 from threading import Event
 from uuid import uuid4
 
-from PyQt6.QtCore import QEvent, QPoint, QSize, QThread, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QCursor, QFont, QIcon, QImage, QImageReader, QPainter, QPixmap
+from PyQt6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, QSizeF, QThread, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QCursor, QFont, QIcon, QImage, QImageReader, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QApplication, QCheckBox, QDialog, QFileDialog, QFrame,
+    QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QDialog, QFileDialog, QFrame,
     QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem,
     QComboBox, QMenu, QMessageBox, QProgressBar, QPushButton, QSizePolicy, QStackedWidget, QWidgetAction,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
@@ -129,35 +129,146 @@ class _PngCheckWorker(QThread):
 
 
 class _CheckerPreview(QLabel):
-    """The picture on a checkerboard, always as large as the free space allows."""
+    """The picture on a checkerboard, as large as the free space allows.
+
+    Ctrl+wheel zooms (to the cursor), space+drag or the middle button pans, a double click fits it again."""
+
+    ZOOM_MIN, ZOOM_MAX, ZOOM_STEP = 1.0, 16.0, 1.25
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._path = ''
         self._background = 'checkerboard'
+        self._zoom = 1.0
+        self._offset = QPointF(0.0, 0.0)  # of the zoomed picture's centre from the widget centre
+        self._space = False
+        self._drag = None
+        self._base = QPixmap()
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self.setMinimumSize(160, 160)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def set_path(self, path):
         self._path = str(path or '')
-        self._refit()
+        self.fit()
 
     def set_background(self, background):
         self._background = background
         self._refit()
 
+    def fit(self):
+        self._zoom, self._offset = 1.0, QPointF(0.0, 0.0)
+        self._refit()
+
     def _refit(self):
         if not self._path:
+            self._base = QPixmap()
             self.setPixmap(QPixmap())
             return
         bound = max(min(self.width(), self.height()) - 4, 64)
-        self.setPixmap(SetExportDialog._checker_pixmap(self._path, bound, self._background))
+        # A zoomed picture is rendered from a larger source so that it stays sharp.
+        self._base = SetExportDialog._checker_pixmap(self._path, int(bound * min(self._zoom, 4.0)), self._background)
+        self.update()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self._path:
             self._refit()
+
+    def _fitted_size(self):
+        """Size on screen: the base pixmap is rendered at up to 4x the fit, beyond that it is scaled."""
+        if self._base.isNull():
+            return QSizeF(0, 0)
+        extra = self._zoom / min(self._zoom, 4.0)
+        return QSizeF(self._base.width() * extra, self._base.height() * extra)
+
+    def _clamp_offset(self):
+        size = self._fitted_size()
+        limit_x = max((size.width() - self.width()) / 2 + 40, 0.0)
+        limit_y = max((size.height() - self.height()) / 2 + 40, 0.0)
+        self._offset = QPointF(min(max(self._offset.x(), -limit_x), limit_x), min(max(self._offset.y(), -limit_y), limit_y))
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        if self._base.isNull():
+            painter.end()
+            super().paintEvent(event)
+            return
+        size = self._fitted_size()
+        self._clamp_offset()
+        target = QRectF(
+            (self.width() - size.width()) / 2 + self._offset.x(),
+            (self.height() - size.height()) / 2 + self._offset.y(),
+            size.width(), size.height())
+        painter.drawPixmap(target, self._base, QRectF(self._base.rect()))
+        painter.end()
+
+    def wheelEvent(self, event):
+        if not (event.modifiers() & Qt.KeyboardModifier.ControlModifier) or self._base.isNull():
+            super().wheelEvent(event)
+            return
+        old = self._zoom
+        factor = self.ZOOM_STEP if event.angleDelta().y() > 0 else 1 / self.ZOOM_STEP
+        self._zoom = min(max(old * factor, self.ZOOM_MIN), self.ZOOM_MAX)
+        if self._zoom != old:
+            anchor = event.position() - QPointF(self.width() / 2, self.height() / 2)
+            ratio = self._zoom / old
+            self._offset = anchor - (anchor - self._offset) * ratio  # the point under the cursor stays put
+            if self._zoom == self.ZOOM_MIN:
+                self._offset = QPointF(0.0, 0.0)
+            self._refit()
+        event.accept()
+
+    def mouseDoubleClickEvent(self, event):
+        self.fit()
+        event.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
+            self._space = True
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
+            self._space = False
+            self.unsetCursor()
+            event.accept()
+            return
+        super().keyReleaseEvent(event)
+
+    def mousePressEvent(self, event):
+        self.setFocus()
+        if event.button() == Qt.MouseButton.MiddleButton or (event.button() == Qt.MouseButton.LeftButton and self._space):
+            self._drag = (event.position(), QPointF(self._offset))
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag is not None:
+            start, offset = self._drag
+            self._offset = offset + (event.position() - start)
+            self.update()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self._drag is not None:
+            self._drag = None
+            if self._space:
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
+            else:
+                self.unsetCursor()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
 
 class SetExportDialog(QDialog):
@@ -437,37 +548,43 @@ class SetExportDialog(QDialog):
     def _build_quality_page(self):
         page = QWidget()
         layout = QVBoxLayout(page)
-        title = QLabel('Проверка PNG перед экспортом')
-        title.setProperty('v3Title', True)
+        # Owner 2026-10-27: no title, counter, filter buttons or captions on this screen. The widgets stay (hidden)
+        # because other code reads them; the filter is always «all» and problems are marked on the pictures.
+        self._quality_only_problems = False
         self.quality_page_summary_label = QLabel('')
-        self.quality_page_summary_label.setProperty('v3Small', True)
-        self._quality_only_problems = False  # the owner must see every PNG before publishing; problems are a filter
-        filters = QHBoxLayout()
-        filters.addWidget(title)
-        filters.addWidget(self.quality_page_summary_label)
-        filters.addSpacing(12)
         self.quality_filter_problems = QPushButton('')
         self.quality_filter_all = QPushButton('')
-        for button, only_problems in ((self.quality_filter_problems, True), (self.quality_filter_all, False)):
-            button.setProperty('v3Button', True)
-            button.clicked.connect(lambda _=False, value=only_problems: self._set_quality_filter(value))
-            filters.addWidget(button)
-        filters.addStretch(1)
-        filters.addWidget(QLabel('Фон'))
+        for hidden in (self.quality_page_summary_label, self.quality_filter_problems, self.quality_filter_all):
+            hidden.hide()
         self.quality_background_buttons = {}
+        swatch_row = QHBoxLayout()
+        swatch_row.setSpacing(5)
+        swatch_group = QButtonGroup(self)
+        swatch_group.setExclusive(True)
         for label, value in PREVIEW_BACKGROUND_OPTIONS:
-            button = QPushButton(label)
+            button = QPushButton('')
             button.setCheckable(True)
-            button.setAutoExclusive(True)
-            button.setProperty('v3Chip', True)
+            button.setFixedSize(28, 28)
             button.setAccessibleName(f'Фон: {label}')
-            button.setToolTip(f'Подставить фон «{label}» под PNG')
+            button.setToolTip(label)
+            colour = '#d7dde2' if value == 'checkerboard' else value
+            button.setStyleSheet(
+                f'QPushButton {{background: {colour}; border: 2px solid #526174;}} '
+                'QPushButton:checked {border: 3px solid #24d8c5;}')
+            if value == 'checkerboard':
+                tile = QPixmap(20, 20)
+                tile.fill(QColor('#eef1f4'))
+                tile_painter = QPainter(tile)
+                tile_painter.fillRect(0, 0, 10, 10, QColor('#c8ced4'))
+                tile_painter.fillRect(10, 10, 10, 10, QColor('#c8ced4'))
+                tile_painter.end()
+                button.setIcon(QIcon(tile))
+                button.setIconSize(QSize(20, 20))
             button.setChecked(value == 'checkerboard')
             button.clicked.connect(lambda _=False, v=value: self._set_quality_background(v))
+            swatch_group.addButton(button)
             self.quality_background_buttons[value] = button
-            filters.addWidget(button)
-        layout.addLayout(filters)
-
+            swatch_row.addWidget(button)
         body = QHBoxLayout()
         self.quality_list = QListWidget()
         self.quality_list.setViewMode(QListView.ViewMode.IconMode)
@@ -506,14 +623,11 @@ class SetExportDialog(QDialog):
             button.clicked.connect(lambda _=False, mark=key: self._quality_mark_clicked(mark))
             self.quality_mark_buttons[key] = button
             marks_layout.addWidget(button)
-        marks_layout.addStretch(1)
         self.quality_marks_row.hide()
-        detail_layout.addWidget(self.quality_marks_row)
-        detail_layout.addWidget(self.quality_issue_title)
-        detail_layout.addWidget(self.quality_issue_text)
-        detail_layout.addWidget(self.quality_action_text)
+        # One row under the picture: marks, «Исключить из наборов», and the short edit button on the right.
         detail_actions = QHBoxLayout()
-        self.quality_fix_button = QPushButton('Открыть в проверке прозрачности')
+        detail_actions.addWidget(self.quality_marks_row)
+        self.quality_fix_button = QPushButton('Редактировать прозрачность')
         self.quality_fix_button.setProperty('v3Button', True)
         self.quality_fix_button.setProperty('variant', 'primary')
         self.quality_fix_button.clicked.connect(self._request_quality_fix)
@@ -521,9 +635,13 @@ class SetExportDialog(QDialog):
         self.quality_exclude_button.setProperty('v3Button', True)
         self.quality_exclude_button.setProperty('variant', 'secondary')
         self.quality_exclude_button.clicked.connect(self._exclude_quality_selected)
-        detail_actions.addWidget(self.quality_fix_button)
         detail_actions.addWidget(self.quality_exclude_button)
+        detail_actions.addStretch(1)
+        detail_actions.addWidget(self.quality_fix_button)
         detail_layout.addLayout(detail_actions)
+        # The issue texts stay out of sight (owner 2026-10-27): problems are shown only as a mark on the picture.
+        for hidden in (self.quality_issue_title, self.quality_issue_text, self.quality_action_text):
+            hidden.hide()
         body.addWidget(detail, 3)
         layout.addLayout(body, 1)
 
@@ -534,6 +652,8 @@ class SetExportDialog(QDialog):
         self.quality_back_button.clicked.connect(self._show_summary)
         footer.addWidget(self.quality_back_button)
         footer.addStretch(1)
+        footer.addWidget(QLabel('Фон'))
+        footer.addLayout(swatch_row)
         self.quality_export_button = QPushButton('Создать ZIP-наборы')
         self.quality_export_button.setProperty('v3Button', True)
         self.quality_export_button.setProperty('variant', 'primary')
@@ -768,7 +888,7 @@ class SetExportDialog(QDialog):
             mark = {'bad_generation': 'Брак генерации', 'bad_cutout': 'Брак вырезания'}.get(self._marks.get(key, ''), '')
             if mark and active:
                 status = mark if report.status == 'ok' else f'{status} · {mark}'
-            row = QListWidgetItem(path.name if (active and report.status == 'ok' and not mark) else f'{path.name}\n{status}')
+            row = QListWidgetItem(path.name)  # status is a mark on the picture and a tooltip, not a caption
             row.setData(Qt.ItemDataRole.UserRole, key)
             row.setToolTip(f'{path.name} — {status}')
             row.setIcon(self._quality_icon(key, report, active, key in self._viewed_quality))
@@ -809,12 +929,20 @@ class SetExportDialog(QDialog):
             painter.setPen(QColor(ink))
             painter.drawText(x, y, 22, 22, int(Qt.AlignmentFlag.AlignCenter), glyph)
 
-        if viewed:
-            badge(size - 25, 3, '#2dd4bf', '✓', '#06201c')
-        if active and report.status == 'review':
-            badge(3, size - 25, '#f59e0b', '!', '#1f1300')
-        elif active and report.status == 'block':
-            badge(3, size - 25, '#f87171', '✕', '#2a0a0a')
+        mark = self._marks.get(key, '')
+        if not active:
+            painter.setPen(QPen(QColor('#8ea3b8'), 2))
+            painter.setBrush(QColor('#2b3340'))
+            painter.drawEllipse(size - 24, 4, 18, 18)
+            painter.drawLine(size - 21, 19, size - 9, 7)
+        elif mark == 'ok':
+            badge(size - 25, 3, '#34d399', '', '#06201c')
+        elif mark == 'bad_generation':
+            badge(size - 25, 3, '#f59e0b', '', '#1f1300')
+        elif mark == 'bad_cutout':
+            badge(size - 25, 3, '#a78bfa', '', '#140a2e')
+        elif self._needs_attention(key):
+            badge(size - 25, 3, '#f59e0b', '!', '#1f1300')
         painter.end()
         icon = QIcon()
         for mode in (QIcon.Mode.Normal, QIcon.Mode.Active, QIcon.Mode.Selected):
@@ -849,7 +977,7 @@ class SetExportDialog(QDialog):
         self._sync_mark_buttons(key)
         if report is None:
             self.quality_issue_title.setText('Выберите PNG')
-            self.quality_issue_title.show()
+            self.quality_picture.setToolTip('')
             self.quality_issue_text.clear()
             self.quality_action_text.clear()
             self.quality_issue_text.hide()
@@ -865,8 +993,8 @@ class SetExportDialog(QDialog):
         actions = '\n'.join(f'• {issue.action}' for issue in report.issues if issue.action)
         self.quality_issue_text.setText(messages)
         self.quality_action_text.setText(('Что сделать:\n' + actions) if actions else '')
-        for label in (self.quality_issue_title, self.quality_issue_text, self.quality_action_text):
-            label.setVisible(bool(label.text()))
+        # No visible captions (owner 2026-10-27); the explanation stays one hover away.
+        self.quality_picture.setToolTip('\n'.join(part for part in (title, messages, actions) if part))
         self.quality_fix_button.setEnabled(active and self.worker is None)
         self.quality_exclude_button.setEnabled(active and self.worker is None)
 
@@ -898,29 +1026,34 @@ class SetExportDialog(QDialog):
         self.mark_requested.emit(key, mark)
         self._refresh_quality_page()
 
+    def _needs_attention(self, key):
+        """A PNG the owner still has to look at: the check flags it and no mark says she has seen it."""
+        report = self.quality_reports.get(key)
+        if report is None or report.status == 'ok' or not self._path_is_active(key):
+            return False
+        if self._marks_enabled:
+            return self._marks.get(key, '') not in ('ok', 'bad_generation', 'bad_cutout')
+        return key not in self._viewed_quality  # a flow without marks: opening the picture counts
+
     def _mark_quality_viewed(self, key, item, report, active):
         if key in self._viewed_quality:
             return
         self._viewed_quality.add(key)
         item.setIcon(self._quality_icon(key, report, active, True))
-        self._set_quality_page_text(self._quality_page_base_text)
 
     def _viewed_counts(self):
         keys = [str(path) for path in self.paths if str(path) in self.quality_reports and self._path_is_active(path)]
-        return sum(key in self._viewed_quality for key in keys), len(keys)
+        return sum(not self._needs_attention(key) for key in keys), len(keys)
 
     def _set_quality_page_text(self, base):
-        self._quality_page_base_text = base
-        viewed, total = self._viewed_counts()
-        counter = f'Просмотрено {viewed} из {total}' if total else ''
-        self.quality_page_summary_label.setText(' · '.join(part for part in (counter, base) if part))
+        self._quality_page_base_text = base  # kept for callers; the screen shows no counter any more
 
     def _confirm_unviewed(self, viewed, total):
         """True = create the sets anyway; False = go back and look at the rest."""
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
-        box.setWindowTitle('Не все PNG просмотрены')
-        box.setText(f'Просмотрено {viewed} из {total}. Всё равно создать наборы?')
+        box.setWindowTitle('Не все PNG проверены')
+        box.setText(f'Нужно посмотреть: {total - viewed}. Всё равно создать наборы?')
         review = box.addButton('Просмотреть оставшиеся', QMessageBox.ButtonRole.AcceptRole)
         create = box.addButton('Создать', QMessageBox.ButtonRole.DestructiveRole)
         box.setDefaultButton(review)
@@ -930,7 +1063,7 @@ class SetExportDialog(QDialog):
     def _show_first_unviewed(self):
         self._show_quality_review()
         for row in range(self.quality_list.count()):
-            if str(self.quality_list.item(row).data(Qt.ItemDataRole.UserRole) or '') not in self._viewed_quality:
+            if self._needs_attention(str(self.quality_list.item(row).data(Qt.ItemDataRole.UserRole) or '')):
                 self.quality_list.setCurrentRow(row)
                 break
 

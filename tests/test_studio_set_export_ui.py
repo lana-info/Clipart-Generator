@@ -595,14 +595,13 @@ def test_quality_review_warning_explains_problem_without_blocking_export(images)
     assert dialog.quality_panel.isVisible() or not dialog.isVisible()
     assert '1 нужно проверить' in dialog.quality_summary_label.text()
     dialog._refresh_quality_page()
-    assert dialog.quality_filter_problems.text() == 'Нужно посмотреть (1)'
-    assert 'Просмотрено' in dialog.quality_page_summary_label.text()
     assert dialog.export_button.isEnabled()
     assert dialog.quality_export_button.isEnabled()
     dialog._show_quality_review()
     assert dialog.quality_list.count() == 1
-    assert 'Проверьте края' in dialog.quality_list.item(0).text()
-    assert 'доходят до края' in dialog.quality_issue_text.text()
+    assert dialog.quality_list.item(0).text() == images[0].name  # no caption under the thumbnail
+    assert 'доходят до края' in dialog.quality_picture.toolTip()
+    assert dialog.quality_issue_text.isHidden() and dialog.quality_issue_title.isHidden()
     dialog.reject()
 
 
@@ -631,7 +630,7 @@ def test_quality_blocker_disables_export_until_explicit_exclusion_without_deleti
     assert all(not link['included'] for link in saved[-1][key]['memberships'])
     assert dialog.export_button.isEnabled()
     assert dialog.quality_export_button.isEnabled()
-    assert 'Исключено' in dialog.quality_list.item(0).text()
+    assert 'Исключено' in dialog.quality_list.item(0).toolTip()
     dialog.reject()
 
 
@@ -645,11 +644,9 @@ def test_quality_summary_clears_stale_blocker_text_after_exclusion(images):
     )
     dialog = SetExportDialog(images[:2], membership=membership, quality_reports=[blocked])
     dialog._show_quality_review()
-    assert 'Блокирует экспорт: 1' in dialog.quality_page_summary_label.text()
     dialog.quality_list.setCurrentRow(0)
     dialog.quality_exclude_button.click()
-    assert 'Блокирует экспорт' not in dialog.quality_page_summary_label.text()
-    assert dialog.quality_page_summary_label.text() == ''  # nothing left to look at
+    assert not dialog._needs_attention(str(images[0].resolve()))  # nothing left to look at
     dialog.reject()
 
 
@@ -826,33 +823,31 @@ def test_png_check_screen_filter_picture_and_single_export_button(images):
     )
     dialog = SetExportDialog(images[:2], membership=membership, quality_reports=[ok, review])
     dialog._show_quality_review()
-    assert dialog.quality_filter_problems.text() == 'Нужно посмотреть (1)' and dialog.quality_filter_all.text() == 'Все (2)'
-    # every PNG must be looked at before publishing, so the default view is «Все»; problems are only a filter
+    # no filter buttons any more: every PNG is listed and problems are marked on the picture
+    assert dialog.quality_filter_problems.isHidden() and dialog.quality_filter_all.isHidden()
     assert dialog.quality_list.count() == 2 and dialog.quality_list.currentRow() == 0
-    assert not dialog.quality_picture.pixmap().isNull()
-    assert dialog.quality_fix_button.text() == 'Открыть в проверке прозрачности'
+    assert not dialog.quality_picture._base.isNull()
+    assert dialog.quality_fix_button.text() == 'Редактировать прозрачность'
     assert dialog.quality_fix_button.isEnabled()  # also for a file the automatic check found fine
     assert dialog.quality_export_button.isHidden()
-    dialog.quality_filter_problems.click()
-    assert dialog.quality_list.count() == 1
     dialog.reject()
 
 
-def test_png_check_screen_counts_viewed_files_and_asks_before_exporting_unviewed(images, monkeypatch):
-    from studio_alpha_qc import AlphaQcReport
+def test_png_check_screen_asks_before_exporting_files_that_still_need_a_look(images, monkeypatch):
+    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
     membership = _membership_for_sets(images, ['Мини'])
     reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
+    reports[2] = AlphaQcReport(str(images[2].resolve()), 'review',
+                               (AlphaQcIssue('touches_edge', 'review', 'Доходит до края.', 'Проверьте.'),), width=32, height=32)
     dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
     dialog._show_quality_review()
-    assert dialog.quality_page_summary_label.text().startswith('Просмотрено 1 из 3')  # the first file is open at once
     assert not dialog.quality_list.item(0).icon().isNull()
-    dialog.quality_list.setCurrentRow(1)
-    assert dialog.quality_page_summary_label.text().startswith('Просмотрено 2 из 3')
+    assert dialog._viewed_counts() == (2, 3)  # only the flagged file still needs a look
     asked = []
     monkeypatch.setattr(dialog, '_confirm_unviewed', lambda viewed, total: asked.append((viewed, total)) or False)
     dialog._export()
     assert asked == [(2, 3)] and dialog.stack.currentWidget() is dialog.quality_page
-    assert dialog.quality_list.currentRow() == 2  # sent to the first file not yet looked at
+    assert dialog.quality_list.currentRow() == 2  # sent to the first file that needs a look
     assert dialog.worker is None
     dialog.reject()
 
@@ -871,7 +866,7 @@ def test_png_check_screen_quick_marks_use_the_results_step_marks(images):
     dialog.quality_mark_buttons['bad_cutout'].click()
     assert sent == [(str(images[0].resolve()), 'bad_cutout')]
     assert dialog.quality_mark_buttons['bad_cutout'].isChecked() and not dialog.quality_mark_buttons['ok'].isChecked()
-    assert 'Брак вырезания' in dialog.quality_list.item(0).text()
+    assert 'Брак вырезания' in dialog.quality_list.item(0).toolTip()
     dialog.reject()
 
 
@@ -941,3 +936,62 @@ def test_png_check_loads_one_by_one_off_ui_thread_and_gates_export(tmp_path):
     assert dialog.quality_picture._background == '#000000'
     dialog._stop_png_check()
     app.processEvents()
+
+
+def test_png_check_picture_zooms_pans_and_fits(images):
+    from PyQt6.QtCore import QPoint, QPointF, Qt
+    from PyQt6.QtGui import QMouseEvent, QWheelEvent
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images[:1], ['Мини'])
+    dialog = SetExportDialog(images[:1], membership=membership,
+                             quality_reports=[AlphaQcReport(str(images[0].resolve()), 'ok', (), width=32, height=32)])
+    dialog.resize(1120, 700)
+    dialog.show()
+    dialog._show_quality_review()
+    picture = dialog.quality_picture
+    assert picture._zoom == 1.0
+
+    def wheel(delta, modifiers):
+        event = QWheelEvent(QPointF(picture.width() / 2, picture.height() / 2), QPointF(), QPoint(0, 0), QPoint(0, delta),
+                            Qt.MouseButton.NoButton, modifiers, Qt.ScrollPhase.NoScrollPhase, False)
+        picture.wheelEvent(event)
+
+    wheel(120, Qt.KeyboardModifier.NoModifier)
+    assert picture._zoom == 1.0  # a bare wheel does not zoom
+    wheel(120, Qt.KeyboardModifier.ControlModifier)
+    assert picture._zoom > 1.0
+    zoomed = picture._zoom
+    start = QPointF(picture._offset)
+    press = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(50, 50), Qt.MouseButton.MiddleButton,
+                        Qt.MouseButton.MiddleButton, Qt.KeyboardModifier.NoModifier)
+    move = QMouseEvent(QMouseEvent.Type.MouseMove, QPointF(80, 70), Qt.MouseButton.NoButton,
+                       Qt.MouseButton.MiddleButton, Qt.KeyboardModifier.NoModifier)
+    release = QMouseEvent(QMouseEvent.Type.MouseButtonRelease, QPointF(80, 70), Qt.MouseButton.MiddleButton,
+                          Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+    picture.mousePressEvent(press)
+    picture.mouseMoveEvent(move)
+    picture.mouseReleaseEvent(release)
+    assert picture._offset != start and picture._zoom == zoomed
+    picture.mouseDoubleClickEvent(QMouseEvent(QMouseEvent.Type.MouseButtonDblClick, QPointF(50, 50),
+                                              Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+                                              Qt.KeyboardModifier.NoModifier))
+    assert picture._zoom == 1.0 and picture._offset == QPointF(0.0, 0.0)
+    dialog.reject()
+
+
+def test_png_check_marks_a_flagged_picture_until_the_owner_says_ok(images):
+    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
+    membership = _membership_for_sets(images[:2], ['Мини'])
+    flagged = AlphaQcReport(str(images[0].resolve()), 'review',
+                            (AlphaQcIssue('touches_edge', 'review', 'Доходит до края.', 'Проверьте.'),), width=32, height=32)
+    fine = AlphaQcReport(str(images[1].resolve()), 'ok', (), width=32, height=32)
+    dialog = SetExportDialog(images[:2], membership=membership, quality_reports=[flagged, fine])
+    dialog.enable_marks({str(images[0].resolve()): 'unchecked', str(images[1].resolve()): 'unchecked'})
+    dialog._show_quality_review()
+    key = str(images[0].resolve())
+    assert dialog._needs_attention(key) and not dialog._needs_attention(str(images[1].resolve()))
+    dialog.quality_list.setCurrentRow(0)
+    dialog.quality_mark_buttons['ok'].click()
+    assert not dialog._needs_attention(key)  # «Ок» removes the «!»
+    assert dialog._viewed_counts() == (2, 2)
+    dialog.reject()
