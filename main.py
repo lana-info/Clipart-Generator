@@ -1759,7 +1759,8 @@ class WorkerThread(QThread):
         )
 
         gen_path = os.path.join(raw_dir, f"gen_{idx:03d}_{self.run_stamp}.png")
-        ensure_record_paths_available(gen_path, out_path)
+        replacing = bool(self.overwrite_existing and os.path.isfile(out_path))
+        ensure_record_paths_available(gen_path, out_path, replaceable=(out_path,) if replacing else ())
         generation_intent = write_generation_intent(
             gen_path,
             color=entry.get("chroma_key_color") or None,
@@ -1849,7 +1850,8 @@ class WorkerThread(QThread):
             generation_stage = self._generation_record_stage(
                 out_path, preserve_surface=preserve_surface
             )
-            bind_generation_record(out_path, generation_intent, stage=generation_stage)
+            bind_generation_record(out_path, generation_intent, stage=generation_stage,
+                                   **({"replace": True} if replacing else {}))
         except (OSError, ValueError):
             # The paid image is already safely published. Do not turn a local sidecar
             # failure into an implicit reason to resubmit a paid generation.

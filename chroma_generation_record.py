@@ -30,10 +30,16 @@ def record_path(image_path, *, pending=False) -> Path:
     return path.with_name(path.name + suffix)
 
 
-def ensure_record_paths_available(*image_paths) -> None:
-    """Fail before provider submission if any planned sidecar path is occupied."""
+def ensure_record_paths_available(*image_paths, replaceable=()) -> None:
+    """Fail before provider submission if any planned sidecar path is occupied.
+
+    A path listed in ``replaceable`` is an output the caller will deliberately
+    replace (regeneration over a chosen picture): its bound record may exist.
+    """
     for image_path in image_paths:
         for pending in (True, False):
+            if not pending and image_path in replaceable:
+                continue
             target = record_path(image_path, pending=pending)
             if target.exists() or target.is_symlink():
                 raise FileExistsError(f"Generation record already exists: {target.name}")
@@ -126,7 +132,7 @@ def discard_generation_intent(image_path, intent: dict) -> bool:
     return True
 
 
-def bind_generation_record(image_path, intent: dict, *, stage: str = "raw") -> None:
+def bind_generation_record(image_path, intent: dict, *, stage: str = "raw", replace: bool = False) -> None:
     pending = isinstance(intent, dict) and intent.get("source_sha256") is None
     data = _validate(intent, pending=pending)
     if data["schema_version"] == 1:
@@ -137,7 +143,7 @@ def bind_generation_record(image_path, intent: dict, *, stage: str = "raw") -> N
             raise ValueError("Unsupported generation record stage")
         data["stage"] = stage
     data["source_sha256"] = image_digest(image_path)
-    _write(record_path(image_path), _validate(data))
+    _write(record_path(image_path), _validate(data), overwrite=replace)
 
 
 def _load_bound_record(image_path):
