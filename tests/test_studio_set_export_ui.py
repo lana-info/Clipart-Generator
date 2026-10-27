@@ -1008,3 +1008,19 @@ def test_png_check_marks_a_flagged_picture_until_the_owner_says_ok(images):
     assert not dialog._needs_attention(key)  # «Ок» removes the «!»
     assert dialog._viewed_counts() == (1, 2)  # the other picture has not been checked yet
     dialog.reject()
+
+
+def test_png_check_screen_marks_are_mutually_exclusive_for_every_pair(images):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images, ['Мини'])
+    reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
+    dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
+    dialog.enable_marks({str(path.resolve()): 'ok' for path in images})
+    dialog._show_quality_review()
+    buttons = dialog.quality_mark_buttons
+    for first in buttons:
+        for second in buttons:
+            buttons[first].click()
+            buttons[second].click()
+            assert [key for key, button in buttons.items() if button.isChecked()] == [second]
+    dialog.reject()
