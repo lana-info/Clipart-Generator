@@ -235,6 +235,22 @@ class ReviewStrip(QFrame):
         self.note.blockSignals(False)
 
 
+def _check_reference_file(path):
+    """A replacement reference must be a readable PNG/JPEG/WebP of sane size (the same limits as the set's references)."""
+    from PIL import Image
+    try:
+        size = Path(path).stat().st_size
+        if size > 25 * 1024 * 1024:
+            raise ValueError("Референс превышает 25 МБ")
+        with Image.open(path) as image:
+            if image.format not in {"PNG", "JPEG", "WEBP"}:
+                raise ValueError("Поддерживаются PNG, JPEG и WebP")
+            if image.width * image.height > 40_000_000:
+                raise ValueError("Референс превышает 40 мегапикселей")
+    except (OSError, Image.DecompressionBombError) as error:
+        raise ValueError("Референс недоступен или повреждён") from error
+
+
 GUIDANCE_LINE = re.compile(r"^Reference image (\d+):")
 
 
@@ -353,9 +369,8 @@ class PromptDialog(QDialog):
         path = self.choose_reference()
         if not path:
             return
-        from studio_clipart_references import reference_file_info
         try:
-            reference_file_info(path)
+            _check_reference_file(path)
         except ValueError as error:
             QMessageBox.warning(self, "Референс", str(error))
             return
