@@ -875,6 +875,24 @@ def test_png_check_screen_quick_marks_use_the_results_step_marks(images):
     dialog.reject()
 
 
+def test_png_check_screen_shows_the_new_mark_before_the_slow_save_runs(images):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images, ['Мини'])
+    reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
+    dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
+    dialog.enable_marks({str(path.resolve()): 'bad_cutout' for path in images})
+    dialog._show_quality_review()
+    lit_while_saving = []
+
+    def slow_save(_path, _mark):  # the real handler writes the project here, taking seconds on a big run
+        lit_while_saving.append([key for key, button in dialog.quality_mark_buttons.items() if button.isChecked()])
+
+    dialog.mark_requested.connect(slow_save)
+    dialog.quality_mark_buttons['ok'].click()
+    assert lit_while_saving == [['ok']]
+    dialog.reject()
+
+
 def test_png_check_screen_hides_quick_marks_when_the_flow_has_none(images):
     from studio_alpha_qc import AlphaQcReport
     membership = _membership_for_sets(images[:1], ['Мини'])

@@ -397,6 +397,8 @@ class AutoClipartFlowController(ClipartFlowController):
             self.brief.error.setText(str(error)[:300])
 
     def flush(self):
+        if getattr(self, "review", None) is not None:
+            self.review.flush_save()
         if self._flushing or self.is_busy():
             return
         self._flushing = True

@@ -390,7 +390,28 @@ class ImageReview:
     def _output_dir(self):
         return self.session.output_dir
 
+    SAVE_DELAY_MS = 350
+
     def _save(self):
+        """Persist soon, not on every click: each save writes the whole project twice and rebuilds the pages,
+        which made a mark lag by seconds on a big run. Clicks inside the delay share one save."""
+        self._save_pending = True
+        timer = getattr(self, "_save_timer", None)
+        if timer is None:
+            timer = self._save_timer = QTimer()
+            timer.setSingleShot(True)
+            timer.setInterval(self.SAVE_DELAY_MS)
+            timer.timeout.connect(self.flush_save)
+        timer.start()
+
+    def flush_save(self):
+        """Run the pending save now (also on close and before anything reads the saved run)."""
+        if not getattr(self, "_save_pending", False):
+            return
+        self._save_pending = False
+        timer = getattr(self, "_save_timer", None)
+        if timer is not None:
+            timer.stop()
         self.flow.shell.mark_dirty()
         self.flow._save_run()
         self.flow.run_queue.page.refresh_from_state()
@@ -694,6 +715,7 @@ class ImageReview:
         self.refresh_editor()
 
     def detach_editor(self):
+        self.flush_save()
         self._editor = None
         self._preview_row = None
 

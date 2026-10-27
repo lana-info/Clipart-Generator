@@ -892,8 +892,10 @@ class SetExportDialog(QDialog):
         if not key or key not in self._marks:
             return
         self._marks[key] = mark
-        self.mark_requested.emit(key, mark)
+        # Show the new mark before the (slow) save runs, so two buttons are never lit while it works.
         self._sync_mark_buttons(key)
+        self.quality_marks_row.repaint()
+        self.mark_requested.emit(key, mark)
         self._refresh_quality_page()
 
     def _mark_quality_viewed(self, key, item, report, active):

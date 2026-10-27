@@ -339,7 +339,8 @@ def test_marks_and_note_are_saved_from_the_strip(tmp_path):
     strip.note.setText("лишняя лапа")
     strip.note.editingFinished.emit()
     assert session.items[0].review_note == "лишняя лапа"
-    assert flow.saved >= 2
+    review.flush_save()
+    assert flow.saved >= 1
     assert "Брак генерации · ✎ заметка" in editor.file_list.item(0).text()
     editor.deleteLater()
 
@@ -509,3 +510,20 @@ def test_checked_flag_is_saved_and_restored_and_validated():
     import pytest
     with pytest.raises(ValueError):
         validate_review_row({"review_checked": "yes"})
+
+
+def test_clicks_share_one_delayed_save_and_close_flushes_it(tmp_path):
+    review, editor, session, flow = open_review(tmp_path)
+    strip = review.strip
+    for mark in ("bad_cutout", "ok", "bad_generation", "ok"):
+        strip.mark_buttons[mark].click()
+    assert flow.saved == 0  # nothing was written while the owner clicks
+    assert session.items[0].review_mark == "ok"  # the mark itself is in memory at once
+    review.flush_save()
+    assert flow.saved == 1
+    review.flush_save()
+    assert flow.saved == 1  # nothing pending: no second write
+    strip.mark_buttons["bad_cutout"].click()
+    review.detach_editor()  # closing the window flushes
+    assert flow.saved == 2
+    editor.deleteLater()
