@@ -134,6 +134,24 @@ def test_old_automatic_run_restores_delivery_flags(workspace):
     assert settings["export_300_dpi"] is True
 
 
+def test_restored_run_and_its_regeneration_keep_chroma_cutout_and_upscale(workspace):
+    _view, controller, _gate, _worker = workspace
+    prepare_launch(controller)
+    controller.run_queue.session = RunQueueSession(
+        build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    controller._save_run()
+    operations = controller.shell.state.data.operations
+    operations.remove_background = False
+    operations.remove_background_provider = "kie"
+    operations.upscale_after = False
+    controller._restore_run()
+    session = controller.run_queue.session
+    settings = session.request.settings  # a regeneration copies these settings
+    assert settings["remove_bg"] is True
+    assert settings["remove_bg_provider"] == "local_chroma_key"
+    assert settings["upscale_after"] is True
+
+
 def test_eight_steps_prepare_prompts_without_paid_work(workspace):
     view, controller, gate, worker = workspace
     assert len(view.shell.step_labels) == 8

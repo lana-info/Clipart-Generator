@@ -321,6 +321,13 @@ class AutoClipartFlowController(ClipartFlowController):
         operations.trim_mode = "alpha"
         operations.trim_padding_percent = 1
         operations.export_300_dpi = True
+        # Auto Clipart always cuts out by chroma key and upscales after it. Every request built from the
+        # project state needs this, not only a fresh start: a reopened project rebuilds its run from here,
+        # and a regeneration from that run came back as a raw picture without cut-out and upscale.
+        operations.upscale_before = False
+        operations.upscale_after = True
+        operations.remove_background = True
+        operations.remove_background_provider = "local_chroma_key"
 
     def _install_pages(self):
         self._ensure_delivery_operations()
@@ -959,10 +966,6 @@ class AutoClipartFlowController(ClipartFlowController):
         if not data.prompts or any(entry.result_kind != "clipart" or not entry.object_id for entry in data.prompts):
             self.review_page.set_run_status("Соберите промпты объектов на предыдущем шаге.", error=True)
             return None
-        data.operations.upscale_before = False
-        data.operations.upscale_after = True
-        data.operations.remove_background = True
-        data.operations.remove_background_provider = "local_chroma_key"
         self._ensure_delivery_operations()
         if self.run_queue.session is not None and not self.run_queue.session.running:
             self._archive_run()
