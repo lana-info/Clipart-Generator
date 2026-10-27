@@ -637,9 +637,11 @@ def test_editor_has_separate_size_and_preview_panels_without_the_file_counter(tm
     editor.show()
     docks = editor.panel_docks
     assert {"files", "tools", "size", "preview"} <= set(docks)
-    # the size panel holds the brush diameter, not the tools panel
-    assert editor.diameter_slider.parentWidget() is editor.size_frame or editor.size_frame.isAncestorOf(editor.diameter_slider)
-    assert not editor.tools_scroll.widget().isAncestorOf(editor.diameter_slider)
+    # the brush diameter sits under «Кисть»; the «Размеры» panel is the zoom bar (owner 2026-10-27)
+    tools = editor.tools_scroll.widget()
+    assert tools.isAncestorOf(editor.diameter_slider) and tools.isAncestorOf(editor.brush_style_buttons[100])
+    assert not editor.size_frame.isAncestorOf(editor.diameter_slider)
+    assert editor.size_frame.isAncestorOf(editor.zoom_bar) and editor.size_frame.isAncestorOf(editor.zoom_menu_button)
     # the preview panel is independent of the files panel
     docks["files"].hide()
     docks["preview"].show()
