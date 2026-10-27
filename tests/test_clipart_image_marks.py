@@ -761,3 +761,25 @@ def test_old_thumbnails_are_dropped_when_the_file_list_changes(tmp_path):
     editor._thumb_pool.waitForDone()
     QApplication.processEvents()
     assert editor.file_strip.count() == 1 and editor.file_strip.item(0).toolTip() == "b_ready.png"
+
+
+def test_only_the_marked_button_is_drawn_lit_after_any_sequence_of_clicks(tmp_path):
+    review, editor, session, flow = open_review(tmp_path)
+    editor.resize(1200, 800)
+    editor.show()
+    QApplication.processEvents()
+    strip = review.strip
+    strip.show_state(None)
+    QApplication.processEvents()
+    plain = {key: button.grab().toImage() for key, button in strip.mark_buttons.items()}
+    for sequence in (("ok", "bad_generation", "bad_cutout"), ("bad_cutout", "ok", "deleted", "bad_generation")):
+        for chosen in sequence:
+            strip.mark_buttons[chosen].click()
+            QApplication.processEvents()
+            for key, button in strip.mark_buttons.items():
+                drawn = button.grab().toImage()
+                if key == chosen:
+                    assert drawn != plain[key]
+                else:
+                    assert drawn == plain[key], f"{key} is still drawn lit after {chosen} was chosen"
+    editor.deleteLater()
