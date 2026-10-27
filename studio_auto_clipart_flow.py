@@ -677,6 +677,7 @@ class AutoClipartFlowController(ClipartFlowController):
             self.review.marks_listeners.append(self._marks_listener)
             panel.mark_requested.connect(self.review.mark_output)
             panel.prompt_requested.connect(lambda path: self.review.edit_prompt_for(path, panel))
+            panel.regenerate_requested.connect(self._regenerate_from_png_check)
 
     def navigate(self, direction):
         if self.is_busy():
@@ -798,6 +799,11 @@ class AutoClipartFlowController(ClipartFlowController):
             self._select_step(route[index + 1])
         except (ValueError, OSError, RuntimeError) as error:
             QMessageBox.warning(self.brief, "Clipart", str(error)[:500])
+
+    def _regenerate_from_png_check(self, path):
+        """Start the confirmed paid re-creation of one picture and show its progress on the results step."""
+        if self.review is not None and self.review.regenerate_path(path) is not None:
+            self._select_step(StepId.RESULTS)
 
     def _open_png_check(self):
         if self.is_busy() or self.run_queue.session is None or self.run_queue.session.running:

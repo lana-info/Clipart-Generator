@@ -989,3 +989,34 @@ def test_prompt_dialog_reset_brings_back_text_and_references(tmp_path):
     dialog.remove_reference(0)
     dialog.reset_to_original()
     assert dialog.references() == [str(first), str(second)] and dialog.prompt() == GUIDED
+
+
+def test_png_check_regenerate_button_follows_the_prompt_button_and_starts_one_picture(tmp_path):
+    from studio_alpha_qc import AlphaQcReport
+    from studio_set_export_ui import SetExportDialog
+    review, editor, session, flow = open_review(tmp_path)
+    paths = [Path(item.output_path) for item in session.items]
+    reports = [AlphaQcReport(str(path.resolve()), "ok", (), width=8, height=8) for path in paths]
+    dialog = SetExportDialog(paths, quality_reports=reports)
+    dialog.enable_marks({str(paths[0].resolve()): "bad_generation", str(paths[1].resolve()): "ok"})
+    dialog._show_quality_review()
+    dialog.quality_list.setCurrentRow(0)
+    assert not dialog.quality_regenerate_button.isHidden() and not dialog.quality_prompt_button.isHidden()
+    dialog.quality_list.setCurrentRow(1)
+    assert dialog.quality_regenerate_button.isHidden()
+    dialog.quality_list.setCurrentRow(0)
+    asked = []
+    dialog.regenerate_requested.connect(asked.append)
+    dialog.quality_regenerate_button.click()
+    assert asked == [str(paths[0].resolve())]
+    dialog.reject()
+    flow.is_busy = lambda: False
+    flow.run_queue.regenerate_selected = Mock(return_value=object())
+    assert review.regenerate_path(paths[1]) is not None
+    flow.run_queue.regenerate_selected.assert_called_once_with([1])
+    flow.run_queue.regenerate_selected.reset_mock()
+    flow.is_busy = lambda: True  # a run is going: nothing starts
+    assert review.regenerate_path(paths[1]) is None
+    flow.run_queue.regenerate_selected.assert_not_called()
+    assert review.regenerate_path(tmp_path / "unknown.png") is None
+    editor.deleteLater()
