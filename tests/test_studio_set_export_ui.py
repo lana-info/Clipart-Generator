@@ -1037,3 +1037,61 @@ def test_png_check_screen_follows_marks_set_elsewhere(images):
     assert dialog.quality_mark_buttons['bad_cutout'].isChecked() and not dialog.quality_mark_buttons['ok'].isChecked()
     assert 'Брак вырезания' in dialog.quality_list.item(0).toolTip()
     dialog.reject()
+
+
+def test_thumbnail_cache_on_disk_serves_second_read_and_ignores_a_changed_file(images, tmp_path):
+    import os
+    from studio_set_export_ui import read_thumbnail, thumb_cache_dir
+    cache = thumb_cache_dir(tmp_path)
+    assert cache == tmp_path / '.thumb-cache' and thumb_cache_dir(None) is None
+    first = read_thumbnail(images[0], 120, cache)
+    assert not first.isNull() and len(list(cache.glob('*.png'))) == 1
+    cached_file = next(cache.glob('*.png'))
+    stamp_before = cached_file.stat().st_mtime
+    again = read_thumbnail(images[0], 120, cache)
+    assert again.size() == first.size() and len(list(cache.glob('*.png'))) == 1  # served from disk, no second entry
+    assert cached_file.stat().st_mtime >= stamp_before
+    # the picture is regenerated or edited: another size/time, so a new entry and never the stale thumbnail
+    Image.new('RGBA', (64, 48), (200, 20, 20, 255)).save(images[0])
+    changed = read_thumbnail(images[0], 120, cache)
+    assert len(list(cache.glob('*.png'))) == 2 and changed.size() != first.size()
+    assert not list(cache.glob('*.tmp.png'))
+
+
+def test_thumbnail_cache_is_pruned_least_recently_used_first(tmp_path):
+    import os
+    from studio_set_export_ui import prune_thumb_cache
+    cache = tmp_path / '.thumb-cache'
+    cache.mkdir()
+    for n in range(6):
+        file = cache / f'{n}.png'
+        file.write_bytes(b'x' * 10)
+        os.utime(file, (1000 + n, 1000 + n))
+    (cache / 'keep.txt').write_text('not a thumbnail')
+    prune_thumb_cache(cache, max_files=3, max_bytes=10_000)
+    assert sorted(file.name for file in cache.glob('*.png')) == ['3.png', '4.png', '5.png']
+    assert (cache / 'keep.txt').exists()
+    prune_thumb_cache(cache, max_files=100, max_bytes=20)
+    assert sorted(file.name for file in cache.glob('*.png')) == ['4.png', '5.png']
+
+
+def test_png_check_lists_every_picture_at_once_while_the_check_runs(images):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images, ['Мини'])
+    dialog = SetExportDialog(images, membership=membership, quality_reports=[],
+                             quality_loader=lambda path: None)
+    dialog._stop_png_check()
+    dialog._qc_pending = len(images)  # the check has not delivered anything yet
+    dialog._show_quality_review()
+    assert dialog.quality_list.count() == len(images)
+    assert [dialog.quality_list.item(row).text() for row in range(len(images))] == [path.name for path in images]
+    assert all(not (dialog.quality_list.item(row).flags() & Qt.ItemFlag.ItemIsSelectable) for row in range(len(images)))
+    assert dialog._current_quality_key() == ''
+    dialog.quality_reports[str(images[1].resolve())] = AlphaQcReport(str(images[1].resolve()), 'ok', (), width=32, height=32)
+    dialog._refresh_quality_page()
+    assert dialog.quality_list.count() == len(images)
+    assert dialog._current_quality_key() == str(images[1].resolve())  # the first real picture gets the selection
+    dialog._qc_pending = 0
+    dialog._refresh_quality_page()
+    assert dialog.quality_list.count() == 1  # unchecked pictures are not listed once the check is over
+    dialog.reject()
