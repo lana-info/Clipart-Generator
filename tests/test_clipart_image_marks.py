@@ -610,3 +610,45 @@ def test_editor_has_separate_size_and_preview_panels_without_the_file_counter(tm
     assert QColor(marked.pixelColor(56 - 10, 9)).name() == "#a78bfa"
     assert "selected" in editor.file_strip.styleSheet()  # the current picture is lit
     editor.deleteLater()
+
+
+def test_prompt_can_be_edited_from_the_png_check_for_a_generation_defect(tmp_path, monkeypatch):
+    """Owner 2026-10-27: after the check there was no visible place to change the prompt of a picture to re-create."""
+    import studio_clipart_review_ui as ui
+    from PyQt6.QtWidgets import QDialog
+    from studio_set_export_ui import SetExportDialog
+    review, editor, session, flow = open_review(tmp_path)
+    from types import SimpleNamespace
+    flow.shell.state = SimpleNamespace(data=SimpleNamespace(prompts=[]))
+
+    class FakePrompt:
+        def __init__(self, parent, **kwargs):
+            self.kwargs = kwargs
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+        def prompt(self):
+            return "a goose, softer outline"
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr(ui, "PromptDialog", FakePrompt)
+    paths = [Path(item.output_path) for item in session.items]
+    review.mark_output(paths[0], "bad_generation")
+    review.edit_prompt_for(paths[0], None)
+    assert session.items[0].payload["prompt"] == "a goose, softer outline"
+    assert session.items[1].payload["prompt"] == "object 1"
+    # the PNG-check screen offers the button only for a picture marked as a generation defect
+    from studio_alpha_qc import AlphaQcReport
+    dialog = SetExportDialog(paths, quality_reports=[AlphaQcReport(str(path.resolve()), "ok", (), width=8, height=8) for path in paths])
+    dialog.enable_marks({str(paths[0].resolve()): "bad_generation", str(paths[1].resolve()): "ok"})
+    dialog._show_quality_review()
+    dialog.quality_list.setCurrentRow(0)
+    assert not dialog.quality_prompt_button.isHidden()
+    asked = []
+    dialog.prompt_requested.connect(asked.append)
+    dialog.quality_prompt_button.click()
+    assert asked == [str(paths[0].resolve())]
+    dialog.quality_list.setCurrentRow(1)
+    assert dialog.quality_prompt_button.isHidden()
+    dialog.reject()
+    editor.deleteLater()

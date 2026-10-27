@@ -885,14 +885,27 @@ class ImageReview:
             self._editor.reload_file(old, item.output_path)
         self.refresh_editor()
 
+    def edit_prompt_for(self, path, parent):
+        """«Изменить промпт» from the PNG-check screen: the same dialog as in the transparency window."""
+        if self.session is None or self._job is not None:
+            return
+        target = str(Path(path).resolve())
+        for index, item in enumerate(self.session.items):
+            if item.output_path and str(Path(item.output_path).resolve()) == target:
+                self._edit_prompt_of(index, parent)
+                return
+
     def _edit_prompt(self):
         row, index = self._current()
         if index is None:
             return
+        self._edit_prompt_of(index, self._editor)
+
+    def _edit_prompt_of(self, index, parent):
         item = self.session.items[index]
         current = self._prompt(item)
         original = self._origin_prompts.get(index, current)
-        dialog = PromptDialog(self._editor, path=item.output_path,
+        dialog = PromptDialog(parent, path=item.output_path,
                               title=f"{Path(item.output_path or '').name} · Брак генерации",
                               note=item.review_note, prompt=current, original=original)
         accepted = dialog.exec() == QDialog.DialogCode.Accepted

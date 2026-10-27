@@ -644,6 +644,7 @@ class AutoClipartFlowController(ClipartFlowController):
         if self.review is not None:
             panel.enable_marks(self.review.marks_by_path())
             panel.mark_requested.connect(self.review.mark_output)
+            panel.prompt_requested.connect(lambda path: self.review.edit_prompt_for(path, panel))
 
     def navigate(self, direction):
         if self.is_busy():

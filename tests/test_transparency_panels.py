@@ -38,7 +38,7 @@ def test_panels_menu_hides_and_resets(page, app):
     files, tools = page.panel_docks["files"], page.panel_docks["tools"]
     assert files.widget() is page.files_frame and tools.widget() is page.tools_scroll
     names = [action.text() for action in page.panels_button.menu().actions() if action.text()]
-    assert names == ["Файлы", "Инструменты", "Сбросить расположение"]
+    assert names == ["Файлы", "Инструменты", "Размеры", "Превью", "Сбросить расположение"]
     assert not files.isVisible() and tools.isVisible()  # the file list is out of the way until asked for
     files.show()
     page.panel_host.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, tools)
@@ -55,7 +55,7 @@ def test_review_window_keeps_the_file_panel_it_works_through(page, app):
     assert page.panel_docks["files"].isVisible()
 
 
-def test_next_and_previous_file_buttons_and_counter(app, tmp_path, monkeypatch):
+def test_files_are_stepped_by_keys_and_there_is_no_counter_or_arrows(app, tmp_path, monkeypatch):
     monkeypatch.setattr(ClipartTransparencyEditorPage, "PANEL_SETTINGS", ("Vibix-test", f"nav-{os.getpid()}"))
     QSettings(*ClipartTransparencyEditorPage.PANEL_SETTINGS).clear()
     files = []
@@ -68,11 +68,13 @@ def test_next_and_previous_file_buttons_and_counter(app, tmp_path, monkeypatch):
     window.set_files(files)
     window.show()
     app.processEvents()
-    assert window.file_counter_label.text() == "1 из 3" and window.prev_file_button.isVisible()
-    window.next_file_button.click()
-    assert window.file_list.currentRow() == 1 and window.file_counter_label.text() == "2 из 3"
-    window.prev_file_button.click()
-    window.prev_file_button.click()
+    # owner 2026-10-27: no «N из M» counter and no ‹ › arrows; PageUp/PageDown and the thumbnails move along the files
+    assert not window.file_counter_label.isVisible() and not window.prev_file_button.isVisible()
+    assert not window.next_file_button.isVisible()
+    window._step_file(1)
+    assert window.file_list.currentRow() == 1
+    window._step_file(-1)
+    window._step_file(-1)
     assert window.file_list.currentRow() == 2  # wraps around
     window.close()
     single = ClipartTransparencyEditorPage()
@@ -117,7 +119,7 @@ def test_zoom_bar_on_the_picture(page, app):
     assert page.zoom_buttons["fit"].isChecked() and page.zoom_menu_button.text().endswith(" % ▾")
 
 
-def test_thumbnail_strip_follows_the_files_when_the_file_panel_is_hidden(app, tmp_path, monkeypatch):
+def test_thumbnail_strip_is_its_own_panel_independent_of_the_files_panel(app, tmp_path, monkeypatch):
     monkeypatch.setattr(ClipartTransparencyEditorPage, "PANEL_SETTINGS", ("Vibix-test", f"strip-{os.getpid()}"))
     QSettings(*ClipartTransparencyEditorPage.PANEL_SETTINGS).clear()
     files = []
@@ -133,11 +135,14 @@ def test_thumbnail_strip_follows_the_files_when_the_file_panel_is_hidden(app, tm
     assert window.file_strip.isVisible() and window.file_strip.count() == 3
     assert not window.file_strip.item(0).icon().isNull()
     window.file_strip.setCurrentRow(2)  # a click on the third thumbnail
-    assert window.file_list.currentRow() == 2 and window.file_counter_label.text() == "3 из 3"
-    window.next_file_button.click()
+    assert window.file_list.currentRow() == 2
+    window._step_file(1)
     assert window.file_strip.currentRow() == 0
     window.panel_docks["files"].show()
     app.processEvents()
-    assert not window.file_strip.isVisible()  # the file panel shows the same files already
+    assert window.file_strip.isVisible()  # the preview panel does not depend on the file panel
+    window.panel_docks["preview"].hide()
+    app.processEvents()
+    assert not window.file_strip.isVisible() and window.panel_docks["files"].isVisible()
     window.close()
     QSettings(*ClipartTransparencyEditorPage.PANEL_SETTINGS).clear()
