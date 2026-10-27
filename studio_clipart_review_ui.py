@@ -30,6 +30,7 @@ MARKS = (
     ("bad_cutout", "Брак вырезания", CUT),
     ("deleted", "Удалить", DEL),
 )
+MARK_BACKGROUND = {"ok": "#1d3a40", "bad_generation": "#3a3326", "bad_cutout": "#2e2a45", "deleted": "#2b3340"}
 MARK_LABEL = {key: label for key, label, _ in MARKS}
 LIST_LABEL = dict(MARK_LABEL, deleted="Удалено")
 MARK_COLOR = {key: colour for key, _, colour in MARKS}
@@ -140,7 +141,11 @@ class ReviewStrip(QFrame):
         self.setStyleSheet(
             "QFrame#reviewStrip {background:#172131; border-top:1px solid #354154;}"
             " QPushButton[reviewMark=\"true\"] {border:1px solid #3b4b60; border-radius:6px;"
-            " background:#263548; color:#e4edf6; padding:0 10px; min-height:28px;}")
+            " background:#263548; color:#e4edf6; padding:0 10px; min-height:28px;}"
+            + "".join(
+                f" QPushButton[reviewMark=\"true\"][markKey=\"{key}\"]:checked {{border-color:{colour};"
+                f" color:{colour}; background:{MARK_BACKGROUND[key]};}}"
+                for key, _label, colour in MARKS))
         box = QVBoxLayout(self)
         box.setContentsMargins(12, 10, 12, 10)
         box.setSpacing(8)
@@ -154,6 +159,7 @@ class ReviewStrip(QFrame):
             button = QPushButton(label)
             button.setCheckable(True)
             button.setProperty("reviewMark", True)
+            button.setProperty("markKey", key)
             button.setAccessibleName(f"Метка: {label}")
             self.mark_group.addButton(button)
             self.mark_buttons[key] = button
@@ -203,13 +209,13 @@ class ReviewStrip(QFrame):
         for key, button in self.mark_buttons.items():
             button.blockSignals(True)
             button.setChecked(key == mark)
-            colour = MARK_COLOR[key]
-            button.setStyleSheet(
-                f"border-color:{colour}; color:{colour}; font-weight:bold;"
-                f" background:{'#1d3a40' if key == 'ok' else '#3a3326' if key == 'bad_generation' else '#2e2a45' if key == 'bad_cutout' else '#2b3340'};"
-                if key == mark else "")
             button.setEnabled(enabled)
             button.blockSignals(False)
+            # The look follows :checked in the strip's stylesheet, so no stale per-button style can stay lit;
+            # the explicit repolish covers styles that Qt does not refresh by itself.
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.update()
         self.mark_group.setExclusive(True)
         for widget in self.actions:
             widget.setVisible(widget in actions)
