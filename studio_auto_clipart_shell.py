@@ -44,6 +44,14 @@ class AutoClipartShell(AppShell):
             self.project_save_label = QLabel('')
             self.project_save_label.setProperty('v3Small', True)
             self.footer.layout().insertWidget(0, self.project_save_label)
+        if not hasattr(self, 'sets_back_button'):
+            self.sets_back_button = V3Button('← К наборам', ButtonVariant.SECONDARY)
+            self.sets_back_button.clicked.connect(self._back_to_sets)
+            self.footer.layout().insertWidget(0, self.sets_back_button)
+        panel_now = getattr(controller, 'export_panel', None)
+        self.sets_back_button.setVisible(
+            index == 7 and panel_now is not None and panel_now.stack.currentWidget() is panel_now.quality_page)
+        self.sets_back_button.setEnabled(not busy)
         self.save_project_button.setVisible(index == 7)
         self.save_project_button.setEnabled(bool(controller) and not busy)
         self.project_save_label.setVisible(index == 7)
@@ -60,6 +68,13 @@ class AutoClipartShell(AppShell):
         self.next_button.setText({5: "Создать изображения", 6: "К экспорту", 7: "Создать ZIP-наборы"}.get(index, "Далее"))
         self.next_button.setAccessibleName(self.next_button.text())
         self.change_mode_button.setEnabled(not busy)
+
+    def _back_to_sets(self):
+        controller = self.workflow_controller(self.module_id)
+        panel = getattr(controller, 'export_panel', None)
+        if panel is not None and not controller.is_busy():
+            panel._show_summary()
+            self.refresh()
 
     def _save_export_project(self):
         controller = self.workflow_controller(self.module_id)

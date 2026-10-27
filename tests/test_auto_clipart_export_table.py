@@ -102,3 +102,17 @@ def test_empty_export_can_save_and_reports_project_save_failure(workspace, monke
     assert 'Не удалось сохранить' in view.shell.save_error_label.text()
     assert view.shell.project_save_label.text() == ''
     factory.assert_not_called()
+
+
+def test_sets_back_button_is_in_the_window_footer_only_on_the_png_check(workspace):
+    view, controller, _, factory = workspace
+    _legacy_partial(controller)
+    panel = controller.export_panel
+    shell = view.shell
+    assert shell.sets_back_button.isHidden()  # the sets table is shown first
+    panel._show_quality_review()
+    shell.refresh()
+    assert not shell.sets_back_button.isHidden()
+    assert panel.quality_back_button.isHidden()  # no second «К наборам» inside the page
+    shell.sets_back_button.click()
+    assert panel.stack.currentWidget() is panel.summary_page and shell.sets_back_button.isHidden()

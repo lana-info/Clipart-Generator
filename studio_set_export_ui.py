@@ -372,6 +372,8 @@ class SetExportDialog(QDialog):
 
         self.summary_page = self._build_summary_page()
         self.quality_page = self._build_quality_page()
+        if self.embedded:
+            self.quality_back_button.hide()  # «К наборам» lives in the window footer next to «Назад» (owner 2026-10-27)
         self.manual_page = self.summary_page
         self.create_page = self._build_create_page()
         self.stack.addWidget(self.summary_page)
@@ -1041,9 +1043,15 @@ class SetExportDialog(QDialog):
         self._viewed_quality.add(key)
         item.setIcon(self._quality_icon(key, report, active, True))
 
+    def _is_checked(self, key):
+        """The owner has dealt with this PNG: she marked it («Ок» or a defect) or, without marks, opened it."""
+        if self._marks_enabled:
+            return self._marks.get(key, '') in ('ok', 'bad_generation', 'bad_cutout')
+        return key in self._viewed_quality
+
     def _viewed_counts(self):
         keys = [str(path) for path in self.paths if str(path) in self.quality_reports and self._path_is_active(path)]
-        return sum(not self._needs_attention(key) for key in keys), len(keys)
+        return sum(self._is_checked(key) for key in keys), len(keys)
 
     def _set_quality_page_text(self, base):
         self._quality_page_base_text = base  # kept for callers; the screen shows no counter any more
@@ -1052,9 +1060,9 @@ class SetExportDialog(QDialog):
         """True = create the sets anyway; False = go back and look at the rest."""
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
-        box.setWindowTitle('Не все PNG проверены')
-        box.setText(f'Нужно посмотреть: {total - viewed}. Всё равно создать наборы?')
-        review = box.addButton('Просмотреть оставшиеся', QMessageBox.ButtonRole.AcceptRole)
+        box.setWindowTitle('Не все изображения проверены')
+        box.setText(f'Не все изображения проверены: {viewed} из {total}. Всё равно создать наборы?')
+        review = box.addButton('Проверить остальные', QMessageBox.ButtonRole.AcceptRole)
         create = box.addButton('Создать', QMessageBox.ButtonRole.DestructiveRole)
         box.setDefaultButton(review)
         box.exec()
@@ -1063,7 +1071,7 @@ class SetExportDialog(QDialog):
     def _show_first_unviewed(self):
         self._show_quality_review()
         for row in range(self.quality_list.count()):
-            if self._needs_attention(str(self.quality_list.item(row).data(Qt.ItemDataRole.UserRole) or '')):
+            if not self._is_checked(str(self.quality_list.item(row).data(Qt.ItemDataRole.UserRole) or '')):
                 self.quality_list.setCurrentRow(row)
                 break
 

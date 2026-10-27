@@ -577,3 +577,4 @@ def test_editor_zoom_100_button_edge_rows_and_middle_button_pan(tmp_path):
                                              Qt.KeyboardModifier.NoModifier))
     assert fits == [True]
     editor.deleteLater()
+

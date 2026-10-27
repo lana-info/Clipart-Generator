@@ -833,22 +833,35 @@ def test_png_check_screen_filter_picture_and_single_export_button(images):
     dialog.reject()
 
 
-def test_png_check_screen_asks_before_exporting_files_that_still_need_a_look(images, monkeypatch):
-    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
+def test_png_check_screen_asks_before_exporting_when_not_all_images_are_checked(images, monkeypatch):
+    from studio_alpha_qc import AlphaQcReport
     membership = _membership_for_sets(images, ['Мини'])
     reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
-    reports[2] = AlphaQcReport(str(images[2].resolve()), 'review',
-                               (AlphaQcIssue('touches_edge', 'review', 'Доходит до края.', 'Проверьте.'),), width=32, height=32)
     dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
+    dialog.enable_marks({str(path.resolve()): 'unchecked' for path in images})
     dialog._show_quality_review()
-    assert not dialog.quality_list.item(0).icon().isNull()
-    assert dialog._viewed_counts() == (2, 3)  # only the flagged file still needs a look
+    assert dialog._viewed_counts() == (0, 3)  # opening a picture is not checking it when «Ок» can be given
+    dialog.quality_list.setCurrentRow(0)
+    dialog.quality_mark_buttons['ok'].click()
+    assert dialog._viewed_counts() == (1, 3)
     asked = []
     monkeypatch.setattr(dialog, '_confirm_unviewed', lambda viewed, total: asked.append((viewed, total)) or False)
     dialog._export()
-    assert asked == [(2, 3)] and dialog.stack.currentWidget() is dialog.quality_page
-    assert dialog.quality_list.currentRow() == 2  # sent to the first file that needs a look
+    assert asked == [(1, 3)] and dialog.stack.currentWidget() is dialog.quality_page
+    assert dialog.quality_list.currentRow() == 1  # sent to the first picture not checked yet
     assert dialog.worker is None
+    dialog.reject()
+
+
+def test_png_check_screen_without_marks_counts_opened_pictures_as_checked(images):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images, ['Мини'])
+    reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
+    dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
+    dialog._show_quality_review()
+    assert dialog._viewed_counts() == (1, 3)
+    dialog.quality_list.setCurrentRow(1)
+    assert dialog._viewed_counts() == (2, 3)
     dialog.reject()
 
 
@@ -993,5 +1006,5 @@ def test_png_check_marks_a_flagged_picture_until_the_owner_says_ok(images):
     dialog.quality_list.setCurrentRow(0)
     dialog.quality_mark_buttons['ok'].click()
     assert not dialog._needs_attention(key)  # «Ок» removes the «!»
-    assert dialog._viewed_counts() == (2, 2)
+    assert dialog._viewed_counts() == (1, 2)  # the other picture has not been checked yet
     dialog.reject()

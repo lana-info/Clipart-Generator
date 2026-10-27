@@ -640,6 +640,7 @@ class AutoClipartFlowController(ClipartFlowController):
         panel.busy_changed.connect(self.shell.refresh)
         panel.export_availability_changed.connect(lambda _enabled: self.shell.refresh())
         panel.review_requested.connect(lambda: self._select_step(StepId.RESULTS))
+        panel.stack.currentChanged.connect(lambda _index: self.shell.refresh())
         if self.review is not None:
             panel.enable_marks(self.review.marks_by_path())
             panel.mark_requested.connect(self.review.mark_output)
