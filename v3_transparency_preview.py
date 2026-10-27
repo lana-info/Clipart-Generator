@@ -2941,7 +2941,7 @@ class ClipartTransparencyEditorPage(QWidget):
                 item.setText(name)
                 item.setHidden(False)
                 continue
-            colour, text, dimmed, hidden = row
+            colour, text, dimmed, hidden = row[:4]
             item.setText(f"{name}\n   {text}")
             pixmap = QPixmap(12, 12)
             pixmap.fill(Qt.GlobalColor.transparent)
@@ -2971,7 +2971,7 @@ class ClipartTransparencyEditorPage(QWidget):
         if row is None:
             strip_item.setIcon(base)
             return
-        colour, _text, dimmed, _hidden = row
+        colour, _text, dimmed, _hidden = row[:4]
         pixmap = base.pixmap(56, 56)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -2980,6 +2980,15 @@ class ClipartTransparencyEditorPage(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(colour))
         painter.drawEllipse(pixmap.width() - 17, 2, 14, 14)
+        if len(row) > 4 and row[4]:  # corrected prompt: a small pencil badge, opposite the mark dot
+            painter.setOpacity(1.0)
+            painter.setBrush(QColor("#1b2636"))
+            painter.drawEllipse(2, pixmap.height() - 17, 15, 15)
+            painter.setPen(QColor("#e4edf6"))
+            font = painter.font()
+            font.setPixelSize(11)
+            painter.setFont(font)
+            painter.drawText(2, pixmap.height() - 17, 15, 15, int(Qt.AlignmentFlag.AlignCenter), "✎")
         painter.end()
         strip_item.setIcon(QIcon(pixmap))
 

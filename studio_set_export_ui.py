@@ -897,6 +897,8 @@ class SetExportDialog(QDialog):
             mark = {'bad_generation': 'Брак генерации', 'bad_cutout': 'Брак вырезания'}.get(self._marks.get(key, ''), '')
             if mark and active:
                 status = mark if report.status == 'ok' else f'{status} · {mark}'
+            if key in getattr(self, '_edited', ()):
+                status += ' · промпт исправлен'
             row = QListWidgetItem(path.name)  # status is a mark on the picture and a tooltip, not a caption
             row.setData(Qt.ItemDataRole.UserRole, key)
             row.setToolTip(f'{path.name} — {status}')
@@ -952,6 +954,8 @@ class SetExportDialog(QDialog):
             badge(size - 25, 3, '#a78bfa', '', '#140a2e')
         elif self._needs_attention(key):
             badge(size - 25, 3, '#f59e0b', '!', '#1f1300')
+        if key in getattr(self, '_edited', ()):  # a corrected prompt: pencil badge, opposite the mark
+            badge(3, size - 25, '#1b2636', '✎', '#e4edf6')
         painter.end()
         icon = QIcon()
         for mode in (QIcon.Mode.Normal, QIcon.Mode.Active, QIcon.Mode.Selected):
@@ -1007,9 +1011,10 @@ class SetExportDialog(QDialog):
         self.quality_fix_button.setEnabled(active and self.worker is None)
         self.quality_exclude_button.setEnabled(active and self.worker is None)
 
-    def enable_marks(self, marks):
+    def enable_marks(self, marks, edited=()):
         """Show the quick marks; ``marks`` maps a PNG path to its current mark."""
         self._marks = {str(Path(path).resolve()): mark for path, mark in dict(marks).items()}
+        self._edited = {str(Path(path).resolve()) for path in edited}
         self._marks_enabled = True
         self._sync_mark_buttons(self._current_quality_key())
         self._refresh_quality_page()
