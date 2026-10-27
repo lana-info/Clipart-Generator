@@ -713,3 +713,18 @@ def test_strip_marks_are_mutually_exclusive_for_every_pair(tmp_path):
             assert lit == [second]
             assert session.items[0].review_mark == second
     editor.deleteLater()
+
+
+def test_mark_shows_in_the_results_list_and_reaches_listeners_before_the_delayed_save(tmp_path):
+    review, editor, session, flow = open_review(tmp_path)
+    queue = flow.run_queue.page.queue
+    heard = []
+    review.marks_listeners.append(lambda: heard.append(review.marks_by_path()))
+    review.strip.mark_buttons["bad_cutout"].click()
+    assert flow.saved == 0  # the project is not saved yet
+    assert queue.item(0).text().endswith("Брак вырезания")
+    assert heard and list(heard[-1].values())[0] == "bad_cutout"
+    review.mark_output(session.items[1].output_path, "bad_generation")
+    assert "Брак генерации" in queue.item(1).text()
+    assert list(heard[-1].values())[1] == "bad_generation"
+    editor.deleteLater()

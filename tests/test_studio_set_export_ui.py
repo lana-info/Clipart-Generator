@@ -1024,3 +1024,16 @@ def test_png_check_screen_marks_are_mutually_exclusive_for_every_pair(images):
             buttons[second].click()
             assert [key for key, button in buttons.items() if button.isChecked()] == [second]
     dialog.reject()
+
+
+def test_png_check_screen_follows_marks_set_elsewhere(images):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images, ['Мини'])
+    reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
+    dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
+    dialog.enable_marks({str(path.resolve()): 'ok' for path in images})
+    dialog._show_quality_review()
+    dialog.enable_marks({str(path.resolve()): 'bad_cutout' for path in images})  # set in the editor meanwhile
+    assert dialog.quality_mark_buttons['bad_cutout'].isChecked() and not dialog.quality_mark_buttons['ok'].isChecked()
+    assert 'Брак вырезания' in dialog.quality_list.item(0).toolTip()
+    dialog.reject()
