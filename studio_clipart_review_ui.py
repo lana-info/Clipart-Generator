@@ -7,6 +7,7 @@ price confirmation; a cut-out redo uses the saved raw generation, never a new on
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
@@ -23,6 +24,7 @@ from studio_clipart_versions import (
 from v3_components import ButtonVariant, V3Button
 from v3_provider_registry import provider_requires_cost
 
+KEY_HEX = re.compile(r"#(?:0000FF|00FF00|FF0000)\b", re.IGNORECASE)
 OK, GEN, CUT, DEL = "#24cabb", "#f0c38a", "#b9a3f5", "#8a97a8"
 MARKS = (
     ("ok", "Ок", OK),
@@ -278,10 +280,42 @@ class PromptDialog(QDialog):
         root.addLayout(row)
         self.resize(760, 520)
 
+    def _lost_background_sentences(self):
+        """Sentences of the original that name a chroma-key colour, when the new text no longer names it.
+
+        The key colour is written into the prompt itself; without it the model draws any background and the
+        cut-out finds no key to remove (a regenerated picture came back on black)."""
+        new_text = self.editor.toPlainText().lower()
+        lost = []
+        for sentence in re.split(r"(?<=[.!?])\s+", self.original):
+            colours = {code.lower() for code in KEY_HEX.findall(sentence)}
+            if colours and not any(code in new_text for code in colours):
+                lost.append(sentence.strip())
+        return lost
+
+    def ask_background(self, sentences):
+        """'add' puts the lost sentences back, 'keep' saves as written, anything else returns to editing."""
+        box = QMessageBox(QMessageBox.Icon.Warning, "Фон хромакея",
+                          "В новом тексте нет фразы про однотонный фон нужного цвета:\n\n" + "\n".join(sentences),
+                          QMessageBox.StandardButton.NoButton, self)
+        add = box.addButton("Вернуть фразу", QMessageBox.ButtonRole.AcceptRole)
+        keep = box.addButton("Сохранить как есть", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton("Назад", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(add)
+        box.exec()
+        return "add" if box.clickedButton() is add else "keep" if box.clickedButton() is keep else "back"
+
     def _save(self):
         if not self.editor.toPlainText().strip():
             QMessageBox.warning(self, "Промпт", "Промпт не может быть пустым.")
             return
+        lost = self._lost_background_sentences()
+        if lost:
+            answer = self.ask_background(lost)
+            if answer == "add":
+                self.editor.setPlainText(self.editor.toPlainText().rstrip() + " " + " ".join(lost))
+            elif answer != "keep":
+                return
         self.accept()
 
     def prompt(self):
