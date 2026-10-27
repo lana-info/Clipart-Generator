@@ -127,6 +127,7 @@ class V3StepLabel(QLabel):
     """Sidebar step row. The text keeps the "<marker> <n>. <title>" contract;
     painting renders the marker as a status badge so state is not colour-only."""
 
+    clicked = pyqtSignal()
     _PATTERN = re.compile(r"^([✓●○✕])\s*(\d+)\.\s*(.*)$", re.S)
     _BADGE = 22
     _PAD_X = 10
@@ -136,7 +137,18 @@ class V3StepLabel(QLabel):
     def __init__(self, text: str = "", tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
         super().__init__(text)
         self._tokens = tokens
+        self._clickable = False
         self.setWordWrap(True)
+
+    def set_clickable(self, clickable: bool) -> None:
+        self._clickable = bool(clickable)
+        self.setCursor(Qt.CursorShape.PointingHandCursor if self._clickable else Qt.CursorShape.ArrowCursor)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if (self._clickable and event.button() == Qt.MouseButton.LeftButton
+                and self.rect().contains(event.position().toPoint())):
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
 
     def setText(self, text: str) -> None:  # noqa: N802 - Qt API
         """A shell may rename a step after the row was created; the row height must follow the new title."""

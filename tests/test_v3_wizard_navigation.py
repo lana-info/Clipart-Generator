@@ -82,26 +82,45 @@ class V3WizardNavigationTests(unittest.TestCase):
                 shell.close()
                 shell.deleteLater()
 
-    def test_invalid_step_blocks_only_forward_navigation(self):
+    def test_unfilled_step_does_not_block_navigation_and_is_marked(self):
         state = complete_state(ProjectMode.CLIPART)
         shell = AppShell(state)
         self.assertEqual(shell.go_next(), StepId.PROMPTS)
 
         state.clipart.prompts.clear()
         failures = []
-        shell.validation_failed.connect(
-            lambda step, issues: failures.append((step, issues))
-        )
-        self.assertEqual(shell.go_next(), StepId.PROMPTS)
-        self.assertEqual(
-            failures,
-            [(StepId.PROMPTS.value, ("prompts_required",))],
-        )
-        self.assertFalse(shell.validation_label.isHidden())
+        shell.validation_failed.connect(lambda step, issues: failures.append((step, issues)))
+        self.assertEqual(shell.go_next(), StepId.PROMPT_REVIEW)
+        self.assertEqual(failures, [])
         self.assertTrue(shell.step_labels[1].text().startswith("✕"))
+        self.assertEqual(shell.step_labels[1].accessibleName(), "Промпты: Не заполнен")
+        self.assertTrue(shell.step_labels[2].text().startswith("●"))
 
-        self.assertEqual(shell.go_back(), StepId.PROJECT)
+        self.assertEqual(shell.go_back(), StepId.PROMPTS)
         self.assertTrue(shell.validation_label.isHidden())
+        shell.close()
+        shell.deleteLater()
+
+    def test_step_list_opens_any_step_and_run_still_checks_everything(self):
+        state = complete_state(ProjectMode.CLIPART)
+        state.clipart.prompts.clear()
+        shell = AppShell(state)
+        last = StepId.REVIEW_RUN
+        self.assertEqual(shell.go_to_step(last), last)
+        self.assertEqual(state.current_step, last)
+        emitted, failures = [], []
+        shell.run_requested.connect(emitted.append)
+        shell.validation_failed.connect(lambda step, issues: failures.append(issues))
+        shell.go_next()
+        self.assertEqual(emitted, [])
+        self.assertIn("prompts_required", failures[0])
+
+        labels = shell.step_labels
+        self.assertTrue(labels[0]._clickable)
+        current_label = labels[state.route.index(last)]
+        self.assertFalse(current_label._clickable)  # the current step is not a link
+        labels[0].clicked.emit()
+        self.assertEqual(state.current_step, state.route[0])
         shell.close()
         shell.deleteLater()
 

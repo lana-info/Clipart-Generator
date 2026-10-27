@@ -595,6 +595,8 @@ class V3ProcessingFlowTests(unittest.TestCase):
         shell = AppShell(state)
         install_processing_flow(WorkflowHost(shell, 'processing', worker_factory=WorkerFactory()))
 
+        # An empty pipeline no longer stops «Далее»; «Запустить» explains it in plain Russian.
+        self.assertEqual(shell.go_next(), StepId.REVIEW_RUN)
         shell.go_next()
 
         self.assertIn("Включите хотя бы одну операцию", shell.validation_label.text())

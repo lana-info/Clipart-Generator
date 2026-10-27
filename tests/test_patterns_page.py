@@ -91,7 +91,19 @@ def test_page_runs_from_the_signed_package(runtime, app, tmp_path):
     handle, page, host = open_page(runtime, tmp_path)
     assert page.__class__.__module__.startswith("_studio_module_patterns_")
     assert [label.text() for label in page.step_labels][0].startswith("● 1.")
-    assert not page.next_button.isEnabled() and not page.back_button.isEnabled()
+    assert page.next_button.isEnabled() and not page.back_button.isEnabled()
+    close_page(app, handle, page, host)
+
+
+def test_unfilled_steps_are_marked_and_every_step_opens_from_the_list(runtime, app, tmp_path, dialogs):
+    handle, page, host = open_page(runtime, tmp_path, "unfilled")
+    page._go_next()  # no files yet: «Далее» still moves on
+    assert page._step == 1 and page.step_labels[0].text().startswith("✕ 1.")
+    page.step_labels[3].clicked.emit()
+    assert page._step == 3 and page.step_labels[3].text().startswith("● 4.")
+    page.step_labels[0].clicked.emit()
+    assert page._step == 0 and page.step_labels[0].text().startswith("● 1.")
+    assert not dialogs
     close_page(app, handle, page, host)
 
 
@@ -181,7 +193,7 @@ def test_saved_projects_can_be_deleted(runtime, app, tmp_path, dialogs, monkeypa
 def test_tile_mode_hides_unsupported_choices_and_fails_visibly(runtime, app, tmp_path, dialogs):
     handle, page, host = open_page(runtime, tmp_path)
     page._set_mode("tile")
-    assert not page.next_button.isEnabled() and page.pick_tile.isVisibleTo(page) and not page.add_files.isVisibleTo(page)
+    assert page.next_button.isEnabled() and page.pick_tile.isVisibleTo(page) and not page.add_files.isVisibleTo(page)
     cut = Image.new("RGB", (160, 120))
     ramp = ImageDraw.Draw(cut)
     for x in range(160):

@@ -27,12 +27,15 @@ from app_identity import APP_NAME
 from v3_project_state import (
     ProjectMode,
     ProjectState,
+    ProjectStateError,
     ProjectStateValidationError,
     StepId,
     route_for_mode,
 )
 from workflow_definitions import WorkflowDefinition, workflow_for_mode
 
+
+_TERMINAL_STEPS = frozenset({StepId.RESULTS, StepId.TRANSPARENCY})
 
 MODE_TITLES: dict[ProjectMode, str] = {
     ProjectMode.CLIPART: "Генерация изображений",
@@ -555,6 +558,9 @@ class AppShell(QWidget):
             if key == self._invalid_key:
                 marker = "✕"
                 status = "Ошибка"
+            elif index < current_index and not direct_editor and self._step_issues(step):
+                marker = "✕"
+                status = "Не заполнен"
             elif index < current_index and not direct_editor:
                 marker = "✓"
                 status = "Пройден"
@@ -578,10 +584,39 @@ class AppShell(QWidget):
                 continue
             label = V3StepLabel(f"{marker} {index + 1}. {STEP_TITLES[step]}", self.tokens)
             label.setAccessibleName(f"{STEP_TITLES[step]}: {status}")
+            if self._steps_navigable() and step is not self.state.current_step and step not in _TERMINAL_STEPS:
+                label.set_clickable(True)
+                label.clicked.connect(lambda _=None, target=step: self.go_to_step(target))
             self.steps_layout.addWidget(label)
             label.show()
             self.step_labels.append(label)
         self.steps_layout.addStretch()
+
+    def _step_issues(self, step: StepId) -> tuple[str, ...]:
+        try:
+            return self.state.validation_issues(step)
+        except ProjectStateError:
+            return ()
+
+    def _steps_navigable(self) -> bool:
+        """Any step can be opened from the list, except around the results page and a direct transparency editor."""
+        if self.state.current_step in _TERMINAL_STEPS:
+            return False
+        return not (self.state.mode is ProjectMode.PROCESSING and self.state.processing.transparency_direct)
+
+    def go_to_step(self, step: StepId) -> StepId:
+        """Open a step from the step list; a step that is not filled in does not stop the move."""
+        if not self._steps_navigable() or step in _TERMINAL_STEPS or step not in self.state.route:
+            return self.state.current_step
+        previous = self.state.current_step
+        if step is previous:
+            return previous
+        self._run_request_key = None
+        current = self.state.set_step(step)
+        self._clear_validation()
+        self.mark_dirty()
+        self.step_changed.emit(self.state.mode.value, current.value)
+        return current
 
     def _open_processing_transparency(self) -> None:
         controller = self.workflow_controller("processing")
@@ -677,17 +712,15 @@ class AppShell(QWidget):
             self.refresh()
             return self.state.current_step
 
-        page_issues = self._page_validation_issues()
+        # A step that is not filled in («…_required») does not stop «Далее»: it is marked in the step list
+        # and «Запустить» checks everything. Unusable input (bad folder, bad files, limits) still stops it.
+        page_issues = tuple(issue for issue in self._page_validation_issues() if not issue.endswith("_required"))
         if page_issues:
             self._show_validation(page_issues)
             return self.state.current_step
 
         previous = self.state.current_step
-        try:
-            current = self.state.next_step()
-        except ProjectStateValidationError:
-            self._show_validation(self.state.validation_issues())
-            return self.state.current_step
+        current = self.state.next_step(require_valid=False)
 
         self._clear_validation()
         if current is not previous:

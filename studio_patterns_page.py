@@ -533,6 +533,8 @@ class PatternsPage(QWidget):
         for _ in STEPS:
             label = V3StepLabel("") if V3StepLabel is not None else _text("")
             self.step_labels.append(label)
+            if hasattr(label, "clicked"):
+                label.clicked.connect(lambda _=None, index=len(self.step_labels) - 1: self._jump(index))
             side_layout.addWidget(label)
         side_layout.addStretch()
         body.addWidget(side)
@@ -1279,18 +1281,28 @@ class PatternsPage(QWidget):
             return
         self._goto(max(0, self._step - 1))
 
+    def _source_ready(self):
+        return bool(self._assets) if self._mode == "pngs" else self._tile is not None
+
     def _can_leave(self):
-        if self._step == 0:
-            ready = bool(self._assets) if self._mode == "pngs" else self._tile is not None
-            if not ready:
-                self._show_error("Добавьте хотя бы один файл.")
-            return ready
-        if self._step == 2 and self._current is None:
-            return False
-        if self._step == 3 and not self._exportable():
-            self._show_error("В наборе нет листов, которые можно экспортировать. Оставьте как есть лист со статусом Review или пересоберите.")
+        # An unfilled step does not stop «Далее» (owner 2026-10-26): it is marked ✕ in the step list instead.
+        if self._step == 2 and self._current is None and self._source_ready():
             return False
         return True
+
+    def _step_unfilled(self, index):
+        if index == 0:
+            return not self._source_ready()
+        if index == 2:
+            return self._current is None
+        if index == 3:
+            return not self._exportable()
+        return False
+
+    def _jump(self, index):
+        if self._busy or index == self._step:
+            return
+        self._goto(index)
 
     def _go_next(self):
         if self._busy:
@@ -1301,7 +1313,7 @@ class PatternsPage(QWidget):
             return
         if not self._can_leave():
             return
-        if self._step == 2:
+        if self._step == 2 and self._current is not None:
             self._add_current()
             return
         self._goto(self._step + 1)
@@ -1309,7 +1321,7 @@ class PatternsPage(QWidget):
     def _goto(self, step):
         self._step = step
         self._save()
-        if step in (1, 2) and self._current is None:
+        if step in (1, 2) and self._current is None and self._source_ready():
             self._render_current()
         if step == 3:
             self._fill_sheets()
@@ -1329,7 +1341,11 @@ class PatternsPage(QWidget):
         self.stack.setCurrentIndex(self._step)
         for index, label in enumerate(self.step_labels):
             marker = "✓" if index < self._step else ("●" if index == self._step else "○")
+            if index < self._step and self._step_unfilled(index):
+                marker = "✕"
             label.setText(f"{marker} {index + 1}. {STEPS[index]}")
+            if hasattr(label, "set_clickable"):  # a Studio core older than the clickable step list has none
+                label.set_clickable(index != self._step)
             label.setProperty("v3Selection", index <= self._step)
             label.setProperty("v3Description", index > self._step)
             _restyle(label)
@@ -1489,9 +1505,7 @@ class PatternsPage(QWidget):
         enabled = not self._busy
         if last:
             enabled = enabled and self._export_folder is not None and bool(self._exportable())
-        elif self._step == 0:
-            enabled = enabled and (bool(self._assets) if self._mode == "pngs" else self._tile is not None)
-        elif self._step == 2:
+        elif self._step == 2 and self._source_ready():
             enabled = enabled and self._current is not None and self._current["seam"]["status"] != "fail"
         self.next_button.setEnabled(enabled)
         if not self._busy:
