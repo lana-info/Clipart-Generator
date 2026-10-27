@@ -934,6 +934,8 @@ def test_edited_prompt_badge_is_drawn_on_the_png_check_and_the_preview_strip(tmp
     assert editor.file_strip.item(0).icon().pixmap(56, 56).toImage() != before
     assert editor.file_strip.item(1).icon().pixmap(56, 56).toImage() == \
         editor.file_strip.item(1).icon().pixmap(56, 56).toImage()
+    # The «Файлы» list shows the pencil too (owner 2026-10-27: it was only on the thumbnails).
+    assert editor.file_list.item(0).icon().pixmap(40, 12).width() > editor.file_list.item(1).icon().pixmap(40, 12).width()
 
 
 GUIDED = ("A goose.\nReference image 1: use only for colors.\nReference image 2: use only for pose.\n"
