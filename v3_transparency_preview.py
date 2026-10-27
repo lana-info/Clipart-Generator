@@ -2943,13 +2943,20 @@ class ClipartTransparencyEditorPage(QWidget):
                 continue
             colour, text, dimmed, hidden = row[:4]
             item.setText(f"{name}\n   {text}")
-            pixmap = QPixmap(12, 12)
+            edited = len(row) > 4 and bool(row[4])
+            pixmap = QPixmap(28 if edited else 12, 12)
             pixmap.fill(Qt.GlobalColor.transparent)
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(colour))
             painter.drawEllipse(1, 1, 10, 10)
+            if edited:  # corrected prompt: the pencil next to the mark dot, as on the thumbnails
+                painter.setPen(QColor("#e4edf6"))
+                font = painter.font()
+                font.setPixelSize(12)
+                painter.setFont(font)
+                painter.drawText(14, 0, 14, 12, int(Qt.AlignmentFlag.AlignCenter), "✎")
             painter.end()
             item.setIcon(QIcon(pixmap))
             item.setForeground(QColor("#74869a" if dimmed else "#e4edf6"))

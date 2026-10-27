@@ -10,7 +10,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QComboBox, QDialog, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QSizePolicy, QTabWidget, QVBoxLayout, QWidget,
+    QMenu, QPushButton, QSizePolicy, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from studio_clipart_builder_ui import ClipartBuilderDialog
@@ -685,6 +685,7 @@ class AutoClipartFlowController(ClipartFlowController):
             panel.mark_requested.connect(self.review.mark_output)
             panel.prompt_requested.connect(lambda path: self.review.edit_prompt_for(path, panel))
             panel.regenerate_requested.connect(self._regenerate_from_png_check)
+            panel.cutout_requested.connect(self._cutout_from_png_check)
 
     def navigate(self, direction):
         if self.is_busy():
@@ -810,7 +811,37 @@ class AutoClipartFlowController(ClipartFlowController):
     def _regenerate_from_png_check(self, path):
         """Start the confirmed paid re-creation of one picture and show its progress on the results step."""
         if self.review is not None and self.review.regenerate_path(path) is not None:
+            self._regen_return = [str(path), False]
             self._select_step(StepId.RESULTS)
+
+    def _cutout_from_png_check(self, path):
+        """Free local re-cutout of one picture; its progress is shown on the results step, then back to the picture."""
+        if self.review is not None and self.review.cutout_path(path) is not None:
+            self._regen_return = [str(path), False]
+            self._select_step(StepId.RESULTS)
+
+    def _return_to_regenerated_png(self):
+        """Owner 2026-10-27: after «Перегенерировать» on the PNG check the new picture is shown there at once
+        (its «Ок»/«Брак» marks were cleared when the old one was kept as a version)."""
+        pending = getattr(self, '_regen_return', None)
+        session = self.run_queue.session
+        if not pending or session is None:
+            return
+        if session.running:
+            pending[1] = True
+            return
+        if not pending[1]:
+            return
+        self._regen_return = None
+        QTimer.singleShot(0, lambda path=pending[0]: self._show_regenerated_png(path))
+
+    def _show_regenerated_png(self, path):
+        session = self.run_queue.session
+        if session is None or session.running or self.is_busy():
+            return
+        self._select_step(StepId.TRANSPARENCY)
+        if self.export_panel is not None:
+            self.export_panel.focus_quality_path(path)
 
     def _open_png_check(self):
         if self.is_busy() or self.run_queue.session is None or self.run_queue.session.running:
@@ -1110,7 +1141,42 @@ class AutoClipartFlowController(ClipartFlowController):
             if previous is not None:
                 previous()
             self._refresh_recovery()
+            self._refresh_more_menu()
+            self._return_to_regenerated_png()
         page.review_refresh = refresh
+        self._install_more_menu()
+
+    def _install_more_menu(self):
+        """Owner 2026-10-27: no more than four buttons on the results. The rare ones (open the folder, reconnect
+        ready files, empty the trash) live in one «Ещё» menu; the old buttons stay hidden and keep their logic."""
+        page = self.run_queue.page
+        self.more_button = V3Button("Ещё", ButtonVariant.SECONDARY)
+        menu = QMenu(self.more_button)
+        self.more_open_action = menu.addAction("Открыть папку с результатами")
+        self.more_open_action.triggered.connect(page.open_folder_button.click)
+        self.more_recover_action = menu.addAction("Вернуть готовые файлы")
+        self.more_recover_action.triggered.connect(self.recover_results)
+        self.more_trash_action = menu.addAction("Корзина")
+        if self.review is not None:
+            self.more_trash_action.triggered.connect(self.review.trash_button.click)
+        self.more_button.setMenu(menu)
+        layout = page.open_folder_button.parentWidget().layout()
+        layout.insertWidget(max(layout.count() - 1, 0), self.more_button)
+        page.open_folder_button.hide()
+        if self.review is not None:
+            self.review.trash_button.hide()
+
+    def _refresh_more_menu(self):
+        page = self.run_queue.page
+        self.more_open_action.setEnabled(page.open_folder_button.isEnabled())
+        found = self._recoverable_outputs()
+        self.more_recover_action.setVisible(bool(found))
+        if found:
+            self.more_recover_action.setText(f"Вернуть готовые файлы ({len(found)})")
+        if self.review is not None:
+            trash = self.review.trash_button
+            self.more_trash_action.setText(trash.text())
+            self.more_trash_action.setEnabled(trash.isEnabled())
 
     def _recoverable_outputs(self):
         from studio_clipart_recovery import recoverable
@@ -1125,7 +1191,7 @@ class AutoClipartFlowController(ClipartFlowController):
 
     def _refresh_recovery(self):
         found = self._recoverable_outputs() if hasattr(self, "recover_row") else {}
-        self.recover_row.setVisible(bool(found))
+        self.recover_row.hide()  # the same action sits in the «Ещё» menu
         if found:
             self.recover_button.setText(f"Вернуть готовые файлы ({len(found)})")
 
