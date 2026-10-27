@@ -382,6 +382,7 @@ class ImageReview:
         self._job_started = False
         self._preview_row = None
         self._installed = False
+        self.marks_listeners = []  # called with no arguments the moment any mark or note changes
 
     # --- shared state --------------------------------------------------------
 
@@ -398,6 +399,7 @@ class ImageReview:
         """Persist soon, not on every click: each save writes the whole project twice and rebuilds the pages,
         which made a mark lag by seconds on a big run. Clicks inside the delay share one save."""
         self._save_pending = True
+        self._show_marks_now()
         timer = getattr(self, "_save_timer", None)
         if timer is None:
             timer = self._save_timer = QTimer()
@@ -405,6 +407,16 @@ class ImageReview:
             timer.setInterval(self.SAVE_DELAY_MS)
             timer.timeout.connect(self.flush_save)
         timer.start()
+
+    def _show_marks_now(self):
+        """Marks must show everywhere at once: the saved copy lags by SAVE_DELAY_MS, the screens must not."""
+        session = self.session
+        page = self.flow.run_queue.page
+        if session is not None and self._installed:
+            page.queue.refresh_items(session.items)
+            self.refresh_results()
+        for listener in self.marks_listeners:
+            listener()
 
     def flush_save(self):
         """Run the pending save now (also on close and before anything reads the saved run)."""

@@ -1012,6 +1012,7 @@ class SetExportDialog(QDialog):
         self._marks = {str(Path(path).resolve()): mark for path, mark in dict(marks).items()}
         self._marks_enabled = True
         self._sync_mark_buttons(self._current_quality_key())
+        self._refresh_quality_page()
 
     def _current_quality_key(self):
         item = self.quality_list.currentItem()
