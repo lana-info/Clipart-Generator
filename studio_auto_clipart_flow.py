@@ -367,6 +367,8 @@ class AutoClipartFlowController(ClipartFlowController):
         self._install_recovery()
         # The separate export step owns collection delivery, not the result toolbar.
         self.run_queue.page.results_extension.export_action_label = ""
+        # Redo of chosen pictures goes through «Пересоздать помеченные» and the PNG check; the problem list only crowds the row.
+        self.run_queue.page.suppressed_buttons = {'regenerate', 'problem_files'}
         # Here the toolbar button opens the PNG check before export (from it a file can be opened in
         # the transparency editor); the shared button keeps its editor-only meaning in other modules.
         check_button = self.run_queue.page.check_transparency_button

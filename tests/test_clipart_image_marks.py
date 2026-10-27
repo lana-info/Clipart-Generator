@@ -251,7 +251,7 @@ def test_recreation_keeps_versions_through_controller_hook(tmp_path):
     support.controller = controller
     support.session = session
     started = []
-    support._start_prepared = lambda request: started.append(request) or request
+    support._start_worker = lambda _worker, request: started.append(request) or request
     support.reprocess_selected([0], {"remove_bg_provider": "local_chroma_key"})
     controller.before_replace_outputs.assert_called_once_with([0], "reprocess")
     assert started and started[0].mode == "mode2_process"
@@ -279,6 +279,29 @@ def test_failed_version_hook_stops_recreation(tmp_path):
     controller._error.assert_called_once_with("Папка версий недоступна")
     assert session.items[0].status is RunItemStatus.SUCCEEDED
     assert session.running is False
+
+
+def test_refused_regeneration_is_journaled_with_its_reason(tmp_path):
+    """Owner 2026-10-27: a regeneration refused before the run left no trace in the diagnostics."""
+    session = generation_session(tmp_path)
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    journal = Mock()
+    session._diagnostic_journal = journal
+    controller = Mock()
+    controller.is_busy.return_value = False
+    controller.worker = None
+    controller.confirm_retry_request.return_value = True
+    controller.before_replace_outputs.side_effect = ValueError("Папка версий недоступна")
+    support = RunQueueSupport.__new__(RunQueueSupport)
+    support.controller = controller
+    support.session = session
+    assert support.regenerate_selected([0]) is None
+    call = journal.record.call_args
+    assert call.args[0] == "regenerate_blocked" and call.kwargs["severity"] == "error"
+    assert call.kwargs["details"]["reason"] == "keep_versions_failed"
+    controller.confirm_retry_request.return_value = False
+    assert support.regenerate_selected([0]) is None
+    assert journal.record.call_args.kwargs["details"]["reason"] == "not_confirmed"
 
 
 def test_results_list_shows_marks_and_filters_rows(tmp_path):

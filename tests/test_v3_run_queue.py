@@ -45,6 +45,17 @@ SECRET_PROMPT = "private prompt do not log"
 SECRET_KEY = "secret-api-key-do-not-log"
 
 
+def test_unclassified_failure_shows_its_reason_without_paths():
+    """Owner 2026-10-27 (UP-14): the stub hid the real error; keep a short, path-free reason."""
+    code, message = _failure_reason(
+        r"[WinError 32] File is busy: 'C:\\Users\\owner\\Clipart\\output\\rose_ready.png'"
+    )
+    assert code == "processing_error"
+    assert message.startswith("Не удалось завершить обработку файла: [WinError 32] File is busy")
+    assert "Users" not in message and "rose_ready.png" in message
+    assert _failure_reason("") == ("processing_error", "Не удалось завершить обработку файла.")
+
+
 def test_failure_reason_explains_kie_credits_and_oversized_reference():
     assert _failure_reason(
         "KIE createTask rejected [errorCode=402; message=Insufficient Credits]"
