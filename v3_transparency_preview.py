@@ -19,7 +19,10 @@ import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageChops, UnidentifiedImageError
-from PyQt6.QtCore import QEvent, QEventLoop, QPoint, QPointF, QSettings, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QEvent, QEventLoop, QObject, QPoint, QPointF, QRunnable, QSettings, QSize, Qt, QThreadPool, QTimer,
+    pyqtSignal,
+)
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -2223,6 +2226,31 @@ class TransparencyCanvas(QGraphicsView):
         return rings
 
 
+class _StripThumbSignals(QObject):
+    ready = pyqtSignal(int, str, QImage)
+
+
+class _StripThumbJob(QRunnable):
+    """Decodes one file's thumbnail off the interface thread; QImage (not QPixmap) is safe to build here."""
+
+    def __init__(self, token: int, path: Path, signals: _StripThumbSignals) -> None:
+        super().__init__()
+        self.token, self.path, self.signals = token, path, signals
+
+    def run(self) -> None:
+        reader = QImageReader(str(self.path))
+        reader.setAutoTransform(True)
+        size = reader.size()
+        image = QImage()
+        if size.isValid() and size.width() * size.height() <= 100_000_000:
+            reader.setScaledSize(size.scaled(QSize(56, 56), Qt.AspectRatioMode.KeepAspectRatio))
+            image = reader.read()
+        try:
+            self.signals.ready.emit(self.token, str(self.path), image)
+        except RuntimeError:  # the page was closed while this decoded
+            pass
+
+
 class ClipartTransparencyEditorPage(QWidget):
     """Dedicated Clipart page for checking and correcting alpha masks."""
 
@@ -2234,6 +2262,11 @@ class ClipartTransparencyEditorPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._paths: list[Path] = []
+        self._thumb_token = 0
+        self._thumb_signals = _StripThumbSignals(self)
+        self._thumb_signals.ready.connect(self._strip_thumb_ready)
+        self._thumb_pool = QThreadPool(self)
+        self._file_rows: list = []
         self._rough_dir: Path | None = None
         self._save_dir: Path | None = None
         self._saved_copies: dict[Path, Path] = {}
@@ -2833,15 +2866,19 @@ class ClipartTransparencyEditorPage(QWidget):
         self.file_list.clear()
         self.file_strip.blockSignals(True)
         self.file_strip.clear()
+        self._thumb_token += 1
+        self._thumb_pool.clear()
+        self._file_rows = []
         for path in self._paths:
             self.file_list.addItem(QListWidgetItem(path.name))
-            base_icon = self._strip_icon(path)
+            base_icon = self._strip_icon(None)
             strip_item = QListWidgetItem(base_icon, "")
             strip_item.setData(Qt.ItemDataRole.UserRole, base_icon)
             strip_item.setToolTip(path.name)
             self.file_strip.addItem(strip_item)
         self.file_strip.blockSignals(False)
         self.file_list.blockSignals(False)
+        self._queue_strip_thumbs(selected_index)
         if self._paths:
             self.file_list.setCurrentRow(
                 min(max(0, selected_index), len(self._paths) - 1)
@@ -2898,25 +2935,29 @@ class ClipartTransparencyEditorPage(QWidget):
 
     def _mark_file_strip(self, rows) -> None:
         """Mark dots (Ок / брак / удалено) on the thumbnails of the «Превью» panel."""
+        self._file_rows = list(rows)  # a thumbnail that arrives later gets its dot from these
         for index, row in enumerate(rows):
-            strip_item = self.file_strip.item(index)
-            base = strip_item.data(Qt.ItemDataRole.UserRole) if strip_item is not None else None
-            if strip_item is None or base is None:
-                continue
-            if row is None:
-                strip_item.setIcon(base)
-                continue
-            colour, _text, dimmed, _hidden = row
-            pixmap = base.pixmap(56, 56)
-            painter = QPainter(pixmap)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            if dimmed:
-                painter.setOpacity(0.45)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(colour))
-            painter.drawEllipse(pixmap.width() - 17, 2, 14, 14)
-            painter.end()
-            strip_item.setIcon(QIcon(pixmap))
+            self._mark_strip_item(index, row)
+
+    def _mark_strip_item(self, index: int, row) -> None:
+        strip_item = self.file_strip.item(index)
+        base = strip_item.data(Qt.ItemDataRole.UserRole) if strip_item is not None else None
+        if strip_item is None or base is None:
+            return
+        if row is None:
+            strip_item.setIcon(base)
+            return
+        colour, _text, dimmed, _hidden = row
+        pixmap = base.pixmap(56, 56)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if dimmed:
+            painter.setOpacity(0.45)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(colour))
+        painter.drawEllipse(pixmap.width() - 17, 2, 14, 14)
+        painter.end()
+        strip_item.setIcon(QIcon(pixmap))
 
     def set_canvas_notice(self, title: str | None, text: str = "") -> None:
         notice = getattr(self, "_canvas_notice", None)
@@ -2956,10 +2997,11 @@ class ClipartTransparencyEditorPage(QWidget):
                 item.setText(Path(new_path).name)
             strip_item = self.file_strip.item(index)
             if strip_item is not None:
-                base_icon = self._strip_icon(Path(new_path))
+                base_icon = self._strip_icon(None)
                 strip_item.setIcon(base_icon)
                 strip_item.setData(Qt.ItemDataRole.UserRole, base_icon)
                 strip_item.setToolTip(Path(new_path).name)
+                self._thumb_pool.start(_StripThumbJob(self._thumb_token, Path(new_path), self._thumb_signals))
         if self.current_path in (old, Path(new_path) if new_path is not None else old):
             self._select_file(self.file_list.currentRow())
 
@@ -3001,10 +3043,8 @@ class ClipartTransparencyEditorPage(QWidget):
             self.file_list.setCurrentRow(row)
 
     @staticmethod
-    def _strip_icon(path: Path) -> QIcon:
-        reader = QImageReader(str(path))
-        reader.setAutoTransform(True)
-        size = reader.size()
+    def _strip_icon(image: QImage | None) -> QIcon:
+        """Checkerboard thumbnail; with ``image`` the picture is centred on it, without it this is the placeholder."""
         pixmap = QPixmap(56, 56)
         pixmap.fill(QColor("#ffffff"))
         painter = QPainter(pixmap)
@@ -3012,16 +3052,34 @@ class ClipartTransparencyEditorPage(QWidget):
             for x in range(0, 56, 8):
                 if (x // 8 + y // 8) % 2:
                     painter.fillRect(x, y, 8, 8, QColor("#d6dce4"))
-        if size.isValid() and size.width() * size.height() <= 100_000_000:
-            reader.setScaledSize(size.scaled(QSize(56, 56), Qt.AspectRatioMode.KeepAspectRatio))
-            picture = QPixmap.fromImage(reader.read())
-            if not picture.isNull():
-                painter.drawPixmap((56 - picture.width()) // 2, (56 - picture.height()) // 2, picture)
+        if image is not None and not image.isNull():
+            picture = QPixmap.fromImage(image)
+            painter.drawPixmap((56 - picture.width()) // 2, (56 - picture.height()) // 2, picture)
         painter.end()
         icon = QIcon()
         for mode in (QIcon.Mode.Normal, QIcon.Mode.Active, QIcon.Mode.Selected):
             icon.addPixmap(pixmap, mode)
         return icon
+
+    def _queue_strip_thumbs(self, selected_index: int) -> None:
+        """Decode thumbnails in the background, the selected file and its neighbours first."""
+        order = sorted(range(len(self._paths)), key=lambda row: abs(row - selected_index))
+        for row in order:
+            self._thumb_pool.start(_StripThumbJob(self._thumb_token, self._paths[row], self._thumb_signals))
+
+    def _strip_thumb_ready(self, token: int, path: str, image: QImage) -> None:
+        if token != self._thumb_token:
+            return
+        target = Path(path)
+        for index, known in enumerate(self._paths):
+            strip_item = self.file_strip.item(index)
+            if known != target or strip_item is None:
+                continue
+            base_icon = self._strip_icon(image)
+            strip_item.setData(Qt.ItemDataRole.UserRole, base_icon)
+            strip_item.setIcon(base_icon)
+            if index < len(self._file_rows):
+                self._mark_strip_item(index, self._file_rows[index])
 
     def _select_file(self, row: int) -> None:
         self._update_file_nav()

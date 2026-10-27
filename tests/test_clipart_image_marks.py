@@ -728,3 +728,36 @@ def test_mark_shows_in_the_results_list_and_reaches_listeners_before_the_delayed
     assert "Брак генерации" in queue.item(1).text()
     assert list(heard[-1].values())[1] == "bad_generation"
     editor.deleteLater()
+
+
+def test_strip_thumbnails_load_in_the_background_and_keep_mark_dots(tmp_path):
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QApplication
+    from v3_transparency_preview import ClipartTransparencyEditorPage
+    editor = ClipartTransparencyEditorPage()
+    paths = [png(tmp_path / f"a{index}_ready.png") for index in range(3)]
+    editor.set_files(paths, selected_index=0)
+    assert editor.file_strip.count() == 3  # the strip is there at once, with placeholders
+    editor.set_file_annotations([("#24cabb", "Ок", False, False), None, ("#f0c38a", "Брак", False, False)])
+    placeholder = editor.file_strip.item(0).data(Qt.ItemDataRole.UserRole).pixmap(56, 56).toImage()
+    editor._thumb_pool.waitForDone()
+    QApplication.processEvents()
+    loaded = editor.file_strip.item(0).data(Qt.ItemDataRole.UserRole).pixmap(56, 56).toImage()
+    assert loaded != placeholder  # the real picture replaced the placeholder
+    dotted = editor.file_strip.item(0).icon().pixmap(56, 56).toImage()
+    assert dotted != loaded  # and the mark dot was drawn on it after it arrived
+    assert editor.file_strip.item(1).icon().pixmap(56, 56).toImage() == \
+        editor.file_strip.item(1).data(Qt.ItemDataRole.UserRole).pixmap(56, 56).toImage()
+
+
+def test_old_thumbnails_are_dropped_when_the_file_list_changes(tmp_path):
+    from PyQt6.QtWidgets import QApplication
+    from v3_transparency_preview import ClipartTransparencyEditorPage
+    editor = ClipartTransparencyEditorPage()
+    first = [png(tmp_path / "a_ready.png")]
+    second = [png(tmp_path / "b_ready.png")]
+    editor.set_files(first, selected_index=0)
+    editor.set_files(second, selected_index=0)
+    editor._thumb_pool.waitForDone()
+    QApplication.processEvents()
+    assert editor.file_strip.count() == 1 and editor.file_strip.item(0).toolTip() == "b_ready.png"
