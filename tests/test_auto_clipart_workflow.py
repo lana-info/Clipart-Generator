@@ -1258,7 +1258,9 @@ def test_ready_files_in_the_result_folder_can_be_reconnected_without_generation(
     controller.run_queue.page.set_session(session)
     controller._save_run()
     controller.save_timer.stop()
-    assert controller.recover_row.isVisibleTo(controller.run_queue.page) or not controller.run_queue.page.isVisible()
+    controller._refresh_more_menu()
+    assert controller.more_recover_action.isVisible()
+    assert controller.more_recover_action.text() == 'Вернуть готовые файлы (3)'
     assert controller._recoverable_outputs().keys() == {0, 1, 3}
     asked = []
     monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: asked.append(args[2]) or QMessageBox.StandardButton.Yes)

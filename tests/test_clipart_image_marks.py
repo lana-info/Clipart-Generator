@@ -1043,3 +1043,21 @@ def test_png_check_regenerate_button_follows_the_prompt_button_and_starts_one_pi
     flow.run_queue.regenerate_selected.assert_not_called()
     assert review.regenerate_path(tmp_path / "unknown.png") is None
     editor.deleteLater()
+
+
+def test_png_check_opens_on_the_regenerated_picture_with_cleared_mark(tmp_path):
+    from PyQt6.QtCore import Qt
+    from studio_alpha_qc import AlphaQcReport
+    from studio_set_export_ui import SetExportDialog
+    paths = [png(tmp_path / "g1.png"), png(tmp_path / "g2.png")]
+    reports = [AlphaQcReport(str(path.resolve()), "ok", (), width=8, height=8) for path in paths]
+    dialog = SetExportDialog(paths, quality_reports=reports)
+    dialog.enable_marks({str(paths[0].resolve()): "bad_generation", str(paths[1].resolve()): "bad_cutout"})
+    dialog._viewed_quality.add(str(paths[1].resolve()))
+    # The regenerated picture lost its mark (kept as a version); the panel is rebuilt with it cleared.
+    dialog.enable_marks({str(paths[0].resolve()): "bad_generation", str(paths[1].resolve()): "ok"})
+    dialog.focus_quality_path(paths[1])
+    assert dialog.quality_list.currentItem().data(Qt.ItemDataRole.UserRole) == str(paths[1].resolve())
+    assert not dialog.quality_marks_row.isHidden() or dialog.quality_mark_buttons["ok"].isChecked()
+    assert dialog.quality_regenerate_button.isHidden()
+    dialog.reject()

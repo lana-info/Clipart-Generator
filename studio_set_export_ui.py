@@ -700,7 +700,7 @@ class SetExportDialog(QDialog):
             marks_layout.addWidget(button)
         self.quality_marks_row.hide()
         # Two rows under the picture so that they fit 1120 px: marks with «Исключить из наборов»,
-        # then the actions on this picture (prompt, regenerate) with the edit button on the right.
+        # then the actions on this picture (prompt, regenerate, edit); everything is left-aligned (owner 2026-10-27).
         detail_actions = QHBoxLayout()
         detail_actions.addWidget(self.quality_marks_row)
         self.quality_fix_button = QPushButton('Редактировать прозрачность')
@@ -711,8 +711,8 @@ class SetExportDialog(QDialog):
         self.quality_exclude_button.setProperty('v3Button', True)
         self.quality_exclude_button.setProperty('variant', 'secondary')
         self.quality_exclude_button.clicked.connect(self._exclude_quality_selected)
-        detail_actions.addStretch(1)
         detail_actions.addWidget(self.quality_exclude_button)
+        detail_actions.addStretch(1)
         detail_layout.addLayout(detail_actions)
         action_row = QHBoxLayout()
         self.quality_prompt_button = QPushButton('Изменить промпт')
@@ -729,8 +729,8 @@ class SetExportDialog(QDialog):
             lambda: self.regenerate_requested.emit(self._current_quality_key()))
         self.quality_regenerate_button.hide()  # next to «Изменить промпт»: only for «Брак генерации»
         action_row.addWidget(self.quality_regenerate_button)
-        action_row.addStretch(1)
         action_row.addWidget(self.quality_fix_button)
+        action_row.addStretch(1)
         detail_layout.addLayout(action_row)
         # The issue texts stay out of sight (owner 2026-10-27): problems are shown only as a mark on the picture.
         for hidden in (self.quality_issue_title, self.quality_issue_text, self.quality_action_text):
@@ -744,9 +744,10 @@ class SetExportDialog(QDialog):
         self.quality_back_button.setProperty('variant', 'secondary')
         self.quality_back_button.clicked.connect(self._show_summary)
         footer.addWidget(self.quality_back_button)
-        footer.addStretch(1)
+        footer.addSpacing(16)
         footer.addWidget(QLabel('Фон'))
         footer.addLayout(swatch_row)
+        footer.addStretch(1)
         self.quality_export_button = QPushButton('Создать ZIP-наборы')
         self.quality_export_button.setProperty('v3Button', True)
         self.quality_export_button.setProperty('variant', 'primary')
@@ -948,9 +949,9 @@ class SetExportDialog(QDialog):
     def _refresh_quality_page(self):
         if not hasattr(self, 'quality_list'):
             return
-        selected_path = ''
+        selected_path = getattr(self, '_select_path', '')
         current = self.quality_list.currentItem()
-        if current is not None:
+        if current is not None and not selected_path:
             selected_path = str(current.data(Qt.ItemDataRole.UserRole) or '')
         self.quality_list.blockSignals(True)
         self.quality_list.clear()
@@ -999,6 +1000,7 @@ class SetExportDialog(QDialog):
             self.quality_list.addItem(row)
             if key == selected_path:
                 selected_row = self.quality_list.count() - 1
+                self._select_path = ''
         self.quality_list.blockSignals(False)
         if selected_row < 0:
             selected_row = next((row for row in range(self.quality_list.count())
@@ -1198,6 +1200,13 @@ class SetExportDialog(QDialog):
             if not self._is_checked(str(self.quality_list.item(row).data(Qt.ItemDataRole.UserRole) or '')):
                 self.quality_list.setCurrentRow(row)
                 break
+
+    def focus_quality_path(self, path):
+        """Open the PNG check on one picture (after its regeneration): fresh preview, no old «viewed» state."""
+        key = str(Path(path).resolve())
+        self._select_path = key
+        self._viewed_quality.discard(key)
+        self._show_quality_review()
 
     def _show_quality_review(self):
         self._refresh_quality_page()
