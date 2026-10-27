@@ -572,7 +572,7 @@ class SetExportDialog(QDialog):
         self.issue_text = QLabel('')
         self.issue_text.setWordWrap(True)
         issue_layout.addWidget(self.issue_text, 1)
-        self.review_now_button = QPushButton('Проверить')
+        self.review_now_button = QPushButton('Разобрать неготовые')
         self.review_now_button.setProperty('v3Button', True)
         self.review_now_button.setProperty('variant', 'secondary')
         self.review_now_button.clicked.connect(self._review_incomplete)
@@ -587,7 +587,7 @@ class SetExportDialog(QDialog):
         self.quality_summary_label = QLabel('')
         self.quality_summary_label.setWordWrap(True)
         quality_layout.addWidget(self.quality_summary_label, 1)
-        self.review_quality_button = QPushButton('Проверить PNG')
+        self.review_quality_button = QPushButton('Открыть проверку PNG')
         self.review_quality_button.setProperty('v3Button', True)
         self.review_quality_button.setProperty('variant', 'secondary')
         self.review_quality_button.clicked.connect(self._show_quality_review)
@@ -1317,10 +1317,11 @@ class SetExportDialog(QDialog):
         block_count = len(self._active_quality_blockers())
         quality_issue_count = review_count + block_count
         self.quality_panel.setVisible(quality_issue_count > 0 or self._qc_pending > 0)
+        self.review_quality_button.setVisible(not self._qc_pending)
         if self._qc_pending:
             done = self._qc_total - self._qc_pending
-            self.quality_summary_label.setText(f'Проверка PNG: {done} из {self._qc_total}…')
-            self.quality_panel.setProperty('state', 'warning')
+            self.quality_summary_label.setText(f'Автопроверка PNG идёт: {done} из {self._qc_total}…')
+            self.quality_panel.setProperty('state', '')
             self.quality_panel.style().unpolish(self.quality_panel)
             self.quality_panel.style().polish(self.quality_panel)
         elif quality_issue_count:

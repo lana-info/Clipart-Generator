@@ -1558,6 +1558,24 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertIsNone(page._completion_dialog)
             page.close()
 
+    def test_retry_is_not_the_main_button_while_another_action_is_main(self):
+        with tempfile.TemporaryDirectory(prefix="v3-one-main-") as temp:
+            root = Path(temp)
+            session = RunQueueSession(
+                processing_request(root, [root / "input.png"]),
+                ProjectMode.PROCESSING,
+            )
+            page = RunResultsPage(ProjectState(mode=ProjectMode.PROCESSING))
+            page.set_session(session)
+            session.handle_fatal_error("failed")
+            self.app.processEvents()
+            page.refresh_from_state()
+            self.assertEqual(page.retry_button.property("variant"), "primary")
+            page.primary_elsewhere = lambda: True
+            page.refresh_from_state()
+            self.assertEqual(page.retry_button.property("variant"), "secondary")
+            page.close()
+
     def test_results_finish_signal_is_ignored_until_the_queue_is_terminal(self):
         with tempfile.TemporaryDirectory(prefix="v3-terminal-guard-") as temp:
             state = ProjectState(
