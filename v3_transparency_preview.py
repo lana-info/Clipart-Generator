@@ -2391,7 +2391,8 @@ class ClipartTransparencyEditorPage(QWidget):
         self.zoom_bar = QFrame()
         self.zoom_bar.setStyleSheet("QFrame {background: rgba(22,32,46,235); border: 1px solid #2b3a4e; "
                                     "border-radius: 8px;} QToolButton {color: #e4edf6; padding: 3px 8px; "
-                                    "font-weight: 600; border: none;} QToolButton::menu-indicator {image: none;} "
+                                    "font-weight: 600; border: 1px solid #3b4b60; border-radius: 6px;} "
+                                    "QToolButton:hover {border-color: #5b6f88;} QToolButton::menu-indicator {image: none;} "
                                     "QLabel {color: #74869a; border: none;}")
         zoom_row = QHBoxLayout(self.zoom_bar)
         zoom_row.setContentsMargins(6, 3, 6, 3)
@@ -2469,7 +2470,6 @@ class ClipartTransparencyEditorPage(QWidget):
         for widget in (zoom_out, self.zoom_menu_button, zoom_in, zoom_fit, zoom_actual):
             zoom_row.addWidget(widget)
         zoom_row.addWidget(QLabel("Ctrl + колесо"))
-        canvas_layout.addWidget(self.zoom_bar, 0, 0, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
         self._update_zoom_label("fit")
 
         tools_layout.addWidget(self._small_label('Край'))
@@ -2554,7 +2554,10 @@ class ClipartTransparencyEditorPage(QWidget):
         size_layout = QVBoxLayout(self.size_frame)
         size_layout.setContentsMargins(10, 8, 10, 8)
         size_layout.setSpacing(6)
-        size_layout.addWidget(self._small_label("Диаметр кисти"))
+        # «Размеры» is the zoom panel (owner 2026-10-27); the brush diameter lives under «Кисть» again.
+        size_layout.addWidget(self.zoom_bar)
+        size_layout.addStretch(1)
+        brush_layout.addWidget(self._small_label("Диаметр кисти"))
         diameter_row = QHBoxLayout()
         self.brush_diameter = DEFAULT_BRUSH_DIAMETER
         self.diameter_slider = QSlider(Qt.Orientation.Horizontal)
@@ -2566,12 +2569,12 @@ class ClipartTransparencyEditorPage(QWidget):
         self.diameter_slider.valueChanged.connect(
             lambda position: self._set_diameter(slider_diameter(position), from_slider=True))
         self.diameter_value = QLabel(f"{DEFAULT_BRUSH_DIAMETER} px")
-        self.diameter_value.setStyleSheet("color: #e8eef6; font-weight: 600; font-size: 11pt;")
+        self.diameter_value.setStyleSheet("font-weight: 600; font-size: 11pt;")
         self.diameter_value.setMinimumWidth(48)
         self.diameter_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         diameter_row.addWidget(self.diameter_slider, 1)
         diameter_row.addWidget(self.diameter_value)
-        size_layout.addLayout(diameter_row)
+        brush_layout.addLayout(diameter_row)
         style_row = QHBoxLayout()
         self.brush_style_buttons = {}
         self.brush_style_group = QButtonGroup(self)
@@ -2583,8 +2586,7 @@ class ClipartTransparencyEditorPage(QWidget):
             self.brush_style_group.addButton(button)
             self.brush_style_buttons[hardness] = button
             style_row.addWidget(button)
-        size_layout.addLayout(style_row)
-        size_layout.addStretch(1)
+        brush_layout.addLayout(style_row)
         brush_hint = self._small_label("Alt + колесо — размер\nShift + щелчок — прямая линия")
         brush_hint.setStyleSheet("color: #7f90a6; font-size: 9pt;")
         brush_layout.addWidget(brush_hint)

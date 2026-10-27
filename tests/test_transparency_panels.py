@@ -107,8 +107,8 @@ def test_focus_mode_hides_panels_and_brings_back_only_the_shown_ones(page, app):
     assert page.panel_docks["tools"].isVisible() and not page.panel_docks["files"].isVisible()
 
 
-def test_zoom_bar_on_the_picture(page, app):
-    assert page.zoom_bar.parentWidget() is page.canvas.parentWidget()
+def test_zoom_bar_is_the_size_panel(page, app):
+    assert page.size_frame.isAncestorOf(page.zoom_bar) and page.panel_docks["size"].widget() is page.size_frame
     assert not any(button.isVisible() for button in page.zoom_buttons.values())
     page.zoom_buttons[150].click()
     assert page.zoom_menu_button.text() == "150 % ▾"

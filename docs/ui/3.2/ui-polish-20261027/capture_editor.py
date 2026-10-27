@@ -24,5 +24,5 @@ editor.set_file_annotations([("#34d399", "Ок", False, False), ("#34d399", "О�
                              ("#34d399", "Ок", False, False), ("#8ea3b8", "Не проверено", True, False), ("#34d399", "Ок", False, False)])
 editor.resize(1120, 780); editor.show()
 for _ in range(8): app.processEvents()
-editor.grab().save(str(Path(__file__).with_name("editor-actual.png")))
+editor.grab().save(str(Path(os.environ.get("SHOT_OUT", str(Path(__file__).with_name("editor-actual.png"))))))
 os._exit(0)
