@@ -1095,3 +1095,22 @@ def test_png_check_lists_every_picture_at_once_while_the_check_runs(images):
     dialog._refresh_quality_page()
     assert dialog.quality_list.count() == 1  # unchecked pictures are not listed once the check is over
     dialog.reject()
+
+
+def test_png_check_buttons_fit_a_1120_px_window_in_two_rows(images):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images, ['Мини'])
+    reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
+    dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
+    dialog.enable_marks({str(path.resolve()): 'bad_generation' for path in images})
+    dialog._show_quality_review()
+    dialog.resize(1120, 780)
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.minimumSizeHint().width() <= 1120
+    # marks and «Исключить» above, the actions on this picture below
+    assert dialog.quality_exclude_button.y() < dialog.quality_prompt_button.y()
+    assert dialog.quality_prompt_button.y() == dialog.quality_regenerate_button.y() == dialog.quality_fix_button.y()
+    for button in dialog.quality_mark_buttons.values():
+        assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+    dialog.reject()

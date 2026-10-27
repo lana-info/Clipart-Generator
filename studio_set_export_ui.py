@@ -7,7 +7,7 @@ from threading import Event
 from uuid import uuid4
 
 from PyQt6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, QSizeF, QThread, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QCursor, QFont, QIcon, QImage, QImageReader, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QImage, QImageReader, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QDialog, QFileDialog, QFrame,
     QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem,
@@ -692,10 +692,15 @@ class SetExportDialog(QDialog):
             button.setProperty('v3Chip', True)
             button.setAccessibleName(f'Метка: {label}')
             button.clicked.connect(lambda _=False, mark=key: self._quality_mark_clicked(mark))
+            bold = QFont(button.font())
+            bold.setBold(True)
+            # The chosen chip is drawn bold; room for that keeps its label whole.
+            button.setMinimumWidth(QFontMetrics(bold).horizontalAdvance(label) + 40)
             self.quality_mark_buttons[key] = button
             marks_layout.addWidget(button)
         self.quality_marks_row.hide()
-        # One row under the picture: marks, «Исключить из наборов», and the short edit button on the right.
+        # Two rows under the picture so that they fit 1120 px: marks with «Исключить из наборов»,
+        # then the actions on this picture (prompt, regenerate) with the edit button on the right.
         detail_actions = QHBoxLayout()
         detail_actions.addWidget(self.quality_marks_row)
         self.quality_fix_button = QPushButton('Редактировать прозрачность')
@@ -706,13 +711,16 @@ class SetExportDialog(QDialog):
         self.quality_exclude_button.setProperty('v3Button', True)
         self.quality_exclude_button.setProperty('variant', 'secondary')
         self.quality_exclude_button.clicked.connect(self._exclude_quality_selected)
+        detail_actions.addStretch(1)
         detail_actions.addWidget(self.quality_exclude_button)
+        detail_layout.addLayout(detail_actions)
+        action_row = QHBoxLayout()
         self.quality_prompt_button = QPushButton('Изменить промпт')
         self.quality_prompt_button.setProperty('v3Button', True)
         self.quality_prompt_button.setProperty('variant', 'secondary')
         self.quality_prompt_button.clicked.connect(lambda: self.prompt_requested.emit(self._current_quality_key()))
         self.quality_prompt_button.hide()  # shown only for «Брак генерации»
-        detail_actions.addWidget(self.quality_prompt_button)
+        action_row.addWidget(self.quality_prompt_button)
         self.quality_regenerate_button = QPushButton('Перегенерировать')
         self.quality_regenerate_button.setProperty('v3Button', True)
         self.quality_regenerate_button.setProperty('variant', 'secondary')
@@ -720,10 +728,10 @@ class SetExportDialog(QDialog):
         self.quality_regenerate_button.clicked.connect(
             lambda: self.regenerate_requested.emit(self._current_quality_key()))
         self.quality_regenerate_button.hide()  # next to «Изменить промпт»: only for «Брак генерации»
-        detail_actions.addWidget(self.quality_regenerate_button)
-        detail_actions.addStretch(1)
-        detail_actions.addWidget(self.quality_fix_button)
-        detail_layout.addLayout(detail_actions)
+        action_row.addWidget(self.quality_regenerate_button)
+        action_row.addStretch(1)
+        action_row.addWidget(self.quality_fix_button)
+        detail_layout.addLayout(action_row)
         # The issue texts stay out of sight (owner 2026-10-27): problems are shown only as a mark on the picture.
         for hidden in (self.quality_issue_title, self.quality_issue_text, self.quality_action_text):
             hidden.hide()
