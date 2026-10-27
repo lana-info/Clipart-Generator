@@ -578,3 +578,35 @@ def test_editor_zoom_100_button_edge_rows_and_middle_button_pan(tmp_path):
     assert fits == [True]
     editor.deleteLater()
 
+
+
+def test_editor_has_separate_size_and_preview_panels_without_the_file_counter(tmp_path):
+    from PyQt6.QtGui import QColor
+    from v3_transparency_preview import ClipartTransparencyEditorPage
+    editor = ClipartTransparencyEditorPage()
+    paths = [png(tmp_path / f"p{index}_ready.png") for index in range(3)]
+    editor.set_files(paths, selected_index=0)
+    editor.show()
+    docks = editor.panel_docks
+    assert {"files", "tools", "size", "preview"} <= set(docks)
+    # the size panel holds the brush diameter, not the tools panel
+    assert editor.diameter_slider.parentWidget() is editor.size_frame or editor.size_frame.isAncestorOf(editor.diameter_slider)
+    assert not editor.tools_scroll.widget().isAncestorOf(editor.diameter_slider)
+    # the preview panel is independent of the files panel
+    docks["files"].hide()
+    docks["preview"].show()
+    assert docks["preview"].isVisible() and docks["preview"].widget() is editor.file_strip
+    docks["files"].show()
+    assert docks["preview"].isVisible()
+    docks["preview"].hide()
+    assert not docks["preview"].isVisible() and docks["files"].isVisible()
+    # no «N из M» counter and no arrows
+    assert editor.file_counter_label.isHidden() and editor.prev_file_button.isHidden() and editor.next_file_button.isHidden()
+    # marks appear as dots on the thumbnails
+    plain = editor.file_strip.item(1).icon().pixmap(56, 56).toImage()
+    editor.set_file_annotations([None, ("#a78bfa", "Брак вырезания", False, False), None])
+    marked = editor.file_strip.item(1).icon().pixmap(56, 56).toImage()
+    assert marked != plain
+    assert QColor(marked.pixelColor(56 - 10, 9)).name() == "#a78bfa"
+    assert "selected" in editor.file_strip.styleSheet()  # the current picture is lit
+    editor.deleteLater()

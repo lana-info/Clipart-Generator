@@ -2321,8 +2321,10 @@ class ClipartTransparencyEditorPage(QWidget):
         self.file_strip.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.file_strip.setAccessibleName("Миниатюры файлов")
         self.file_strip.currentRowChanged.connect(self._strip_row_changed)
-        self.file_strip.hide()
-        canvas_layout.addWidget(self.file_strip, 3, 0)
+        # The current picture is lit brightly; the strip lives in its own «Превью» panel (see _build_panels).
+        self.file_strip.setStyleSheet(
+            "QListWidget::item {border:2px solid transparent; border-radius:4px;} "
+            "QListWidget::item:selected {border:3px solid #2dd4bf; background:#1f3a44;}")
 
         files_frame = self.files_frame = QFrame()
         files_frame.setProperty("v3Card", True)
@@ -2514,7 +2516,12 @@ class ClipartTransparencyEditorPage(QWidget):
             button.setToolTip(label)
             button.setAccessibleName(label + ' область')
         brush_layout.addLayout(action_row)
-        brush_layout.addWidget(self._small_label("Диаметр кисти"))
+        self.size_frame = QFrame()
+        self.size_frame.setProperty("v3Card", True)
+        size_layout = QVBoxLayout(self.size_frame)
+        size_layout.setContentsMargins(10, 8, 10, 8)
+        size_layout.setSpacing(6)
+        size_layout.addWidget(self._small_label("Диаметр кисти"))
         diameter_row = QHBoxLayout()
         self.brush_diameter = DEFAULT_BRUSH_DIAMETER
         self.diameter_slider = QSlider(Qt.Orientation.Horizontal)
@@ -2531,7 +2538,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self.diameter_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         diameter_row.addWidget(self.diameter_slider, 1)
         diameter_row.addWidget(self.diameter_value)
-        brush_layout.addLayout(diameter_row)
+        size_layout.addLayout(diameter_row)
         style_row = QHBoxLayout()
         self.brush_style_buttons = {}
         self.brush_style_group = QButtonGroup(self)
@@ -2543,7 +2550,8 @@ class ClipartTransparencyEditorPage(QWidget):
             self.brush_style_group.addButton(button)
             self.brush_style_buttons[hardness] = button
             style_row.addWidget(button)
-        brush_layout.addLayout(style_row)
+        size_layout.addLayout(style_row)
+        size_layout.addStretch(1)
         brush_hint = self._small_label("Alt + колесо — размер\nShift + щелчок — прямая линия")
         brush_hint.setStyleSheet("color: #7f90a6; font-size: 9pt;")
         brush_layout.addWidget(brush_hint)
@@ -2827,7 +2835,9 @@ class ClipartTransparencyEditorPage(QWidget):
         self.file_strip.clear()
         for path in self._paths:
             self.file_list.addItem(QListWidgetItem(path.name))
-            strip_item = QListWidgetItem(self._strip_icon(path), "")
+            base_icon = self._strip_icon(path)
+            strip_item = QListWidgetItem(base_icon, "")
+            strip_item.setData(Qt.ItemDataRole.UserRole, base_icon)
             strip_item.setToolTip(path.name)
             self.file_strip.addItem(strip_item)
         self.file_strip.blockSignals(False)
@@ -2883,7 +2893,30 @@ class ClipartTransparencyEditorPage(QWidget):
             item.setIcon(QIcon(pixmap))
             item.setForeground(QColor("#74869a" if dimmed else "#e4edf6"))
             item.setHidden(bool(hidden) and index != self.file_list.currentRow())
+        self._mark_file_strip(rows)
         self._update_file_nav()
+
+    def _mark_file_strip(self, rows) -> None:
+        """Mark dots (Ок / брак / удалено) on the thumbnails of the «Превью» panel."""
+        for index, row in enumerate(rows):
+            strip_item = self.file_strip.item(index)
+            base = strip_item.data(Qt.ItemDataRole.UserRole) if strip_item is not None else None
+            if strip_item is None or base is None:
+                continue
+            if row is None:
+                strip_item.setIcon(base)
+                continue
+            colour, _text, dimmed, _hidden = row
+            pixmap = base.pixmap(56, 56)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            if dimmed:
+                painter.setOpacity(0.45)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(colour))
+            painter.drawEllipse(pixmap.width() - 17, 2, 14, 14)
+            painter.end()
+            strip_item.setIcon(QIcon(pixmap))
 
     def set_canvas_notice(self, title: str | None, text: str = "") -> None:
         notice = getattr(self, "_canvas_notice", None)
@@ -2923,7 +2956,9 @@ class ClipartTransparencyEditorPage(QWidget):
                 item.setText(Path(new_path).name)
             strip_item = self.file_strip.item(index)
             if strip_item is not None:
-                strip_item.setIcon(self._strip_icon(Path(new_path)))
+                base_icon = self._strip_icon(Path(new_path))
+                strip_item.setIcon(base_icon)
+                strip_item.setData(Qt.ItemDataRole.UserRole, base_icon)
                 strip_item.setToolTip(Path(new_path).name)
         if self.current_path in (old, Path(new_path) if new_path is not None else old):
             self._select_file(self.file_list.currentRow())
@@ -2943,16 +2978,14 @@ class ClipartTransparencyEditorPage(QWidget):
         rows = self._visible_file_rows()
         current = self.file_list.currentRow()
         show = len(rows) > 1 and current in rows
+        # No «6 из 53» counter and no ‹ › arrows (owner 2026-10-27): the «Превью» panel and the file list are the way along.
         for widget in (self.prev_file_button, self.file_counter_label, self.next_file_button, self.file_nav_separator):
-            widget.setVisible(show)
+            widget.setVisible(False)
         if show:
             self.file_counter_label.setText(f"{rows.index(current) + 1} из {len(rows)}")
         self._sync_file_strip(rows, current, show)
 
     def _sync_file_strip(self, rows: list[int], current: int, show: bool) -> None:
-        dock = getattr(self, "panel_docks", {}).get("files")
-        files_panel_shown = dock is not None and not dock.isHidden()
-        self.file_strip.setVisible(bool(show and not files_panel_shown))
         if self.file_strip.count() != self.file_list.count():
             return
         self.file_strip.blockSignals(True)
@@ -3082,20 +3115,26 @@ class ClipartTransparencyEditorPage(QWidget):
 
     def _build_panels(self, files_frame) -> None:
         self.panel_docks: dict[str, QDockWidget] = {}
-        for key, title, widget in (("files", "Файлы", files_frame), ("tools", "Инструменты", self.tools_scroll)):
+        for key, title, widget in (("files", "Файлы", files_frame), ("tools", "Инструменты", self.tools_scroll),
+                                   ("size", "Размеры", self.size_frame), ("preview", "Превью", self.file_strip)):
             dock = QDockWidget(title, self.panel_host)
             dock.setObjectName(f"transparency-{key}")
             dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable
                              | QDockWidget.DockWidgetFeature.DockWidgetFloatable
                              | QDockWidget.DockWidgetFeature.DockWidgetClosable)
-            dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+            strip_panel = key == "preview"  # a row of thumbnails: it lives above or below the picture
+            dock.setAllowedAreas(Qt.DockWidgetArea.TopDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea
+                                 if strip_panel else
+                                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
             dock.setTitleBarWidget(self._panel_title_bar(title, dock))
             dock.setWidget(widget)
-            dock.setMinimumWidth(240)
-            self.panel_host.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+            if not strip_panel:
+                dock.setMinimumWidth(240)
+            self.panel_host.addDockWidget(
+                Qt.DockWidgetArea.BottomDockWidgetArea if strip_panel else Qt.DockWidgetArea.RightDockWidgetArea, dock)
             self.panel_docks[key] = dock
-        self.panel_host.resizeDocks([self.panel_docks["files"], self.panel_docks["tools"]], [2, 3],
-                                    Qt.Orientation.Vertical)
+        self.panel_host.resizeDocks([self.panel_docks["files"], self.panel_docks["size"], self.panel_docks["tools"]],
+                                    [2, 1, 3], Qt.Orientation.Vertical)
         self.panel_host.resizeDocks([self.panel_docks["tools"]], [276], Qt.Orientation.Horizontal)
         # Moving along the files is done with ‹ › under the picture, so the list is out of the way until asked for
         # («Панели ▾»); the review window, which filters and annotates that list, shows it again.
