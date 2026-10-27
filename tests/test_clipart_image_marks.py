@@ -652,3 +652,16 @@ def test_prompt_can_be_edited_from_the_png_check_for_a_generation_defect(tmp_pat
     assert dialog.quality_prompt_button.isHidden()
     dialog.reject()
     editor.deleteLater()
+
+
+def test_strip_marks_are_mutually_exclusive_for_every_pair(tmp_path):
+    review, editor, session, flow = open_review(tmp_path)
+    strip = review.strip
+    for first in strip.mark_buttons:
+        for second in strip.mark_buttons:
+            strip.mark_buttons[first].click()
+            strip.mark_buttons[second].click()
+            lit = [key for key, button in strip.mark_buttons.items() if button.isChecked()]
+            assert lit == [second]
+            assert session.items[0].review_mark == second
+    editor.deleteLater()
