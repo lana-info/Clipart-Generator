@@ -562,6 +562,9 @@ class RunQueueSession(QObject):
                 "run_failed": "Обработка пакета завершена с ошибкой.",
                 "run_cancelled": "Обработка пакета отменена.",
                 "retry_started": "Запущен повтор ошибочных файлов.",
+                "regenerate_started": "Запущена перегенерация выбранных файлов.",
+                "regenerate_blocked": "Перегенерация не запущена.",
+                "reprocess_blocked": "Повторное вырезание не запущено.",
                 "stop_after_current_requested": "Запрошена остановка после текущего файла.",
             }
             details = {"mode": self.mode.value}
@@ -588,7 +591,7 @@ class RunQueueSession(QObject):
             ):
                 if source in fields:
                     details[target] = fields[source]
-            severity = "error" if "failed" in name else "warning" if "cancel" in name or "stop" in name else "info"
+            severity = "error" if "failed" in name or "blocked" in name else "warning" if "cancel" in name or "stop" in name else "info"
             self._diagnostic_journal.record(
                 name,
                 summaries.get(name, "Изменилось состояние обработки."),
@@ -1224,9 +1227,10 @@ class RunQueueSession(QObject):
         self.changed.emit()
 
     def handle_fatal_error(self, message: Any) -> None:
-        if not self.running and self.finished_at is not None:
-            return
         technical_message, provider_details = _safe_technical_error_details(message)
+        if not self.running and self.finished_at is not None:
+            self._event("fatal_error_ignored", **provider_details)
+            return
         code, user_message = _failure_reason(technical_message)
         for item in self.items:
             if item.status in {RunItemStatus.PENDING, RunItemStatus.RUNNING}:
@@ -1931,6 +1935,8 @@ class RunResultsPage(QWidget):
         super().__init__()
         self.state = state
         self.results_extension = results_extension
+        # Buttons a module does not want in its toolbar; the refresh logic never shows these.
+        self.suppressed_buttons: set[str] = set()
         self.session: RunQueueSession | None = None
         self._completion_dialog: RunCompletionDialog | None = None
         self._completion_shown_at: float | None = None
@@ -2221,6 +2227,7 @@ class RunResultsPage(QWidget):
             else f'Повторить ошибки ({remaining})'
         )
         # Clipart: a new set starts from the project step / home, so "start again" is not offered.
+        retry_visible = retry_visible and 'retry' not in self.suppressed_buttons
         process_more_visible = not session.running and self.state.mode is not ProjectMode.CLIPART
         finish_visible = False
         self.stop_button.setVisible(stop_visible)
@@ -2482,6 +2489,7 @@ class RunResultsPage(QWidget):
             session is not None and self.regenerate_supported
             and self.state.mode is ProjectMode.CLIPART
             and session.regenerable_indices(self.queue.selected_rows()))
+        visible = visible and 'regenerate' not in self.suppressed_buttons
         self.regenerate_button.setVisible(visible)
         self.regenerate_button.setEnabled(visible)
         self.workflow_actions.setVisible(
@@ -2538,7 +2546,7 @@ class RunResultsPage(QWidget):
         )
         problems = problem_file_rows(self.session) if self.session is not None and not self.session.running else []
         self.problem_files_button.setText(f"Проблемные файлы ({len(problems)})")
-        self.problem_files_button.setVisible(bool(problems))
+        self.problem_files_button.setVisible(bool(problems) and 'problem_files' not in self.suppressed_buttons)
         # Transparency check is the key next step: it is the highlighted button while
         # shown; "Открыть папку" is then an ordinary one.
         # One main button by situation: unfinished work first, then the transparency check.
@@ -3045,25 +3053,25 @@ class RunQueueSupport:
             return None
         busy = getattr(self.controller, "is_busy", None)
         if callable(busy) and busy():
-            return None
+            return self._blocked("regenerate", "busy")
         worker = getattr(self.controller, "worker", None)
         if worker is not None and bool(worker.isRunning()):
-            return None
+            return self._blocked("regenerate", "worker_running")
         preview = self.session.preview_regenerate(indices)
         if preview is None:
-            return None
+            return self._blocked("regenerate", "nothing_to_regenerate")
         confirm = getattr(self.controller, "confirm_retry_request", None)
         approved = (confirm(preview, regenerate=True, summary=summary) if summary is not None and callable(confirm)
                     else callable(confirm) and confirm(preview, regenerate=True))
         if not approved:
-            return None
+            return self._blocked("regenerate", "not_confirmed")
         if self.session.preview_regenerate(indices) != preview:
-            return None
+            return self._blocked("regenerate", "request_changed")
         if not self._keep_previous_outputs(self.session.regenerable_indices(indices), "regenerate"):
             return None
         request = self.session.prepare_regenerate(indices)
         if request is None:
-            return None
+            return self._blocked("regenerate", "not_prepared")
         return self._start_prepared(request)
 
     def reprocess_selected(self, indices, overrides=None, *, confirm=None) -> Any | None:
@@ -3078,11 +3086,11 @@ class RunQueueSupport:
             return None
         preview = self.session.preview_reprocess(indices, overrides)
         if preview is None:
-            return None
+            return self._blocked("reprocess", "nothing_to_reprocess")
         if callable(confirm) and not confirm(preview):
-            return None
+            return self._blocked("reprocess", "not_confirmed")
         if self.session.preview_reprocess(indices, overrides) != preview:
-            return None
+            return self._blocked("reprocess", "request_changed")
         if not self._keep_previous_outputs(self.session.reprocessable_indices(indices), "reprocess"):
             return None
         request = self.session.prepare_reprocess(indices, overrides)
@@ -3098,9 +3106,16 @@ class RunQueueSupport:
         try:
             keep(list(indices), kind)
         except (OSError, ValueError) as error:
+            self._blocked(kind, "keep_versions_failed", error)
             self.controller._error(str(error))
             return False
         return True
+
+    def _blocked(self, kind, reason, error=None) -> None:
+        """Journal why a re-creation did not start: nothing else records a refusal before the run."""
+        if self.session is not None:
+            self.session._event(f"{kind}_blocked", reason=reason,
+                                **({"error_message": _safe_technical_error_details(error)[0]} if error is not None else {}))
 
     def _start_prepared(self, request) -> Any | None:
         try:
@@ -3109,6 +3124,7 @@ class RunQueueSupport:
                 raise RunQueueError("Core retry service is unavailable")
             worker = create_worker(request)
         except Exception as error:
+            self._blocked("regenerate", "worker_start_failed", error)
             self.controller._error(str(error))
             return None
         self.controller.worker = worker
@@ -3149,6 +3165,7 @@ class RunQueueSupport:
                 raise RunQueueError("Core retry service is unavailable")
             worker = create_worker(request)
         except Exception as error:
+            self._blocked("regenerate", "worker_start_failed", error)
             self.controller._error(str(error))
             return None
         self.controller.worker = worker
