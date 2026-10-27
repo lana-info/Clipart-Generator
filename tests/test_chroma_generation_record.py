@@ -174,6 +174,26 @@ class GenerationRecordTests(unittest.TestCase):
         ensure_record_paths_available(self.source, final)
 
 
+    def test_regeneration_may_replace_the_record_of_the_picture_it_overwrites(self):
+        final = self.source.with_name("final.png")
+        first = write_generation_intent(self.source, color="green", prompt="old")
+        Image.new("RGB", (8, 8), (0, 255, 0)).save(final)
+        bind_generation_record(final, first)
+        record_path(self.source, pending=True).unlink()
+        with self.assertRaises(FileExistsError):
+            ensure_record_paths_available(self.source, final)
+        ensure_record_paths_available(self.source, final, replaceable=(final,))
+        record_path(final, pending=True).write_text("occupied")
+        with self.assertRaises(FileExistsError):
+            ensure_record_paths_available(self.source, final, replaceable=(final,))
+        record_path(final, pending=True).unlink()
+        second = write_generation_intent(self.source, color="green", prompt="new")
+        Image.new("RGB", (8, 8), (0, 250, 0)).save(final)
+        with self.assertRaises(FileExistsError):
+            bind_generation_record(final, second)
+        bind_generation_record(final, second, replace=True)
+        self.assertEqual(load_generation_color(final), "green")
+
     def test_recover_generation_copy_removes_matching_partial_publish_after_crash(self):
         from unittest.mock import patch
         import chroma_generation_record as records
