@@ -2428,7 +2428,7 @@ class ClipartTransparencyEditorPage(QWidget):
         zoom_fit.clicked.connect(lambda: self.zoom_buttons["fit"].click())
         zoom_actual = QToolButton()
         zoom_actual.setText("100%")
-        zoom_actual.setToolTip("Масштаб 100 %")
+        zoom_actual.setToolTip("Реальный размер")
         zoom_actual.setAccessibleName("Масштаб 100%")
         zoom_actual.clicked.connect(lambda: self.zoom_buttons[100].click())
         for widget in (zoom_out, self.zoom_menu_button, zoom_in, zoom_fit, zoom_actual):
