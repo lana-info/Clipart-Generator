@@ -532,19 +532,67 @@ def test_clicks_share_one_delayed_save_and_close_flushes_it(tmp_path):
     editor.deleteLater()
 
 
-def test_escape_keeps_the_transparency_window_open_while_edits_are_unsaved(tmp_path):
+def _unsaved_dialog(answer):
+    from PyQt6.QtWidgets import QMessageBox
     from types import SimpleNamespace
     from studio_auto_clipart_flow import _TransparencyDialog
-    shown = []
-    editor = SimpleNamespace(_has_unsaved_changes=lambda: True, _show_contour_status=shown.append)
+    state = SimpleNamespace(dirty=True, saved=0, discarded=0, asked=0)
+
+    def save():
+        state.saved += 1
+        state.dirty = False
+
+    def discard():
+        state.discarded += 1
+        state.dirty = False
+
+    editor = SimpleNamespace(_has_unsaved_changes=lambda: state.dirty, _save_clicked=save, discard_unsaved=discard)
     dialog = _TransparencyDialog()
     dialog.editor = editor
+
+    def ask():
+        state.asked += 1
+        return getattr(QMessageBox.StandardButton, answer)
+
+    dialog.ask_unsaved = ask
     dialog.show()
+    return dialog, state
+
+
+def test_close_with_unsaved_edits_asks_and_save_closes_the_window(tmp_path):
+    dialog, state = _unsaved_dialog("Save")
     dialog.reject()  # what Esc and the window cross do
-    assert dialog.isVisible() and shown
-    editor._has_unsaved_changes = lambda: False
+    assert state.asked == 1 and state.saved == 1 and not dialog.isVisible()
+
+
+def test_close_with_unsaved_edits_discard_drops_them_and_closes(tmp_path):
+    dialog, state = _unsaved_dialog("Discard")
+    dialog.reject()
+    assert state.discarded == 1 and state.saved == 0 and not dialog.isVisible()
+
+
+def test_close_with_unsaved_edits_cancel_keeps_the_window_and_the_edits(tmp_path):
+    dialog, state = _unsaved_dialog("Cancel")
+    dialog.reject()
+    assert dialog.isVisible() and state.dirty and state.saved == 0 and state.discarded == 0
+    dialog.close()
+
+
+def test_failed_save_keeps_the_window_open(tmp_path):
+    dialog, state = _unsaved_dialog("Save")
+    dialog.editor._save_clicked = lambda: None  # still dirty afterwards
+    dialog.reject()
+    assert dialog.isVisible()
+    dialog.editor._has_unsaved_changes = lambda: False
     dialog.reject()
     assert not dialog.isVisible()
+
+
+def test_close_without_edits_does_not_ask(tmp_path):
+    dialog, state = _unsaved_dialog("Cancel")
+    state.dirty = False
+    dialog.reject()
+    assert state.asked == 0 and not dialog.isVisible()
 
 
 def test_editor_zoom_100_button_edge_rows_and_middle_button_pan(tmp_path):

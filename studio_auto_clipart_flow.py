@@ -88,15 +88,35 @@ def launch_confirmation_html(*, object_count, models, cost, references=(), refer
 
 
 class _TransparencyDialog(QDialog):
-    """Esc and the window cross never throw away mask edits: with unsaved edits the window stays open."""
+    """Esc and the window cross ask before unsaved mask edits are thrown away."""
 
     editor = None
+
+    def ask_unsaved(self):
+        box = QMessageBox(
+            QMessageBox.Icon.Warning, "Есть несохранённые изменения",
+            "Сохранить изменения маски перед закрытием окна?",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+            self,
+        )
+        box.button(QMessageBox.StandardButton.Save).setText("Сохранить")
+        box.button(QMessageBox.StandardButton.Discard).setText("Не сохранять")
+        box.button(QMessageBox.StandardButton.Cancel).setText("Отмена")
+        box.setDefaultButton(QMessageBox.StandardButton.Save)
+        return box.exec()
 
     def reject(self):
         editor = self.editor
         if editor is not None and editor._has_unsaved_changes():
-            editor._show_contour_status("Есть несохранённые изменения: сохраните PNG или выйдите кнопкой «К результатам».")
-            return
+            answer = self.ask_unsaved()
+            if answer == QMessageBox.StandardButton.Save:
+                editor._save_clicked()
+                if editor._has_unsaved_changes():  # the save failed or is still running: stay open
+                    return
+            elif answer == QMessageBox.StandardButton.Discard:
+                editor.discard_unsaved()
+            else:
+                return
         super().reject()
 
 class AutoClipartGenerationPage(ClipartGenerationPage):

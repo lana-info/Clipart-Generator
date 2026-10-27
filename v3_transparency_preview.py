@@ -3605,6 +3605,12 @@ class ClipartTransparencyEditorPage(QWidget):
         other_drafts = (c for path, c in self._draft_contours.items() if path != self._loaded_path)
         return current_dirty or bool(self._draft_masks) or self.canvas.contour.dirty or any(c.dirty for c in other_drafts)
 
+    def discard_unsaved(self) -> None:
+        self._draft_masks.clear()
+        self._draft_contours.clear()
+        self._document = None
+        self._loaded_path = None
+
     def _back_clicked(self) -> None:
         if self.canvas.contour_busy:
             self.canvas.cancel_contour()
@@ -3623,10 +3629,7 @@ class ClipartTransparencyEditorPage(QWidget):
             box.setDefaultButton(QMessageBox.StandardButton.Cancel)
             if box.exec() != QMessageBox.StandardButton.Discard:
                 return
-            self._draft_masks.clear()
-            self._draft_contours.clear()
-            self._document = None
-            self._loaded_path = None
+            self.discard_unsaved()
         self.back_requested.emit()
 
     def hideEvent(self, event):
