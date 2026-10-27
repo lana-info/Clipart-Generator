@@ -1,4 +1,6 @@
 """Automatic Clipart set summary with optional manual membership editing."""
+import hashlib
+import os
 from collections import OrderedDict
 from pathlib import Path
 from threading import Event
@@ -102,13 +104,76 @@ def _read_scaled_image(path, bound):
     return reader.read()
 
 
+THUMB_CACHE_DIRNAME = ".thumb-cache"
+THUMB_CACHE_MAX_FILES = 3000
+THUMB_CACHE_MAX_BYTES = 150 * 1024 * 1024
+
+
+def thumb_cache_dir(workspace):
+    """Disk cache of thumbnails inside the project's own work folder (gone with it); None without a workspace."""
+    return Path(workspace) / THUMB_CACHE_DIRNAME if workspace else None
+
+
+def _thumb_cache_file(cache_dir, path, bound):
+    """The key is path + size + modification time + bound, so a regenerated or edited picture never shows an old one."""
+    stamp = _file_stamp(path)
+    if stamp is None:
+        return None
+    key = hashlib.sha1(f"{stamp[0]}|{stamp[1]}|{stamp[2]}|{bound}".encode("utf-8")).hexdigest()
+    return Path(cache_dir) / f"{key}.png"
+
+
+def read_thumbnail(path, bound, cache_dir=None):
+    """Thread-safe: the thumbnail from the disk cache when it is there, else decoded and stored for next time."""
+    cached = _thumb_cache_file(cache_dir, path, bound) if cache_dir is not None else None
+    if cached is not None and cached.is_file():
+        image = QImage(str(cached))
+        if not image.isNull():
+            try:
+                os.utime(cached)  # recently used: pruned last
+            except OSError:
+                pass
+            return image
+    image = _read_scaled_image(path, bound)
+    if cached is not None and not image.isNull():
+        try:
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            temp = cached.with_name(f"{cached.stem}.{uuid4().hex}.tmp.png")
+            if image.save(str(temp), "PNG"):
+                os.replace(temp, cached)
+            else:
+                temp.unlink(missing_ok=True)
+        except OSError:
+            pass  # a cache that cannot be written only means a slower next start
+    return image
+
+
+def prune_thumb_cache(cache_dir, max_files=THUMB_CACHE_MAX_FILES, max_bytes=THUMB_CACHE_MAX_BYTES):
+    """Keep the cache bounded: drop the least recently used thumbnails first."""
+    try:
+        files = [(entry.stat().st_mtime, entry.stat().st_size, entry) for entry in Path(cache_dir).iterdir()
+                 if entry.is_file() and entry.suffix == ".png" and not entry.is_symlink()]
+    except OSError:
+        return
+    files.sort(key=lambda item: item[0])
+    total = sum(size for _, size, _ in files)
+    while files and (len(files) > max_files or total > max_bytes):
+        _, size, entry = files.pop(0)
+        try:
+            entry.unlink()
+            total -= size
+        except OSError:
+            pass
+
+
 class _PngCheckWorker(QThread):
     """Loads thumbnails and the transparency check one PNG at a time, off the UI thread."""
     item_ready = pyqtSignal(str, QImage, object)  # path, thumbnail, report or None
 
-    def __init__(self, paths, loader, parent=None):
+    def __init__(self, paths, loader, parent=None, cache_dir=None):
         super().__init__(parent)
         self.paths, self.loader = list(paths), loader
+        self.cache_dir = cache_dir
         self._stop = Event()
 
     def stop(self):
@@ -118,7 +183,7 @@ class _PngCheckWorker(QThread):
         for path in self.paths:
             if self._stop.is_set():
                 return
-            image = _read_scaled_image(path, PRIME_BOUND)
+            image = read_thumbnail(path, PRIME_BOUND, self.cache_dir)
             try:
                 report = self.loader(path)
             except Exception:
@@ -126,6 +191,8 @@ class _PngCheckWorker(QThread):
             if self._stop.is_set():
                 return
             self.item_ready.emit(str(path), image, report)
+        if self.cache_dir is not None:
+            prune_thumb_cache(self.cache_dir)
 
 
 class _CheckerPreview(QLabel):
@@ -435,7 +502,7 @@ class SetExportDialog(QDialog):
     def _start_png_check(self):
         if not self._qc_pending:
             return
-        self._check_worker = _PngCheckWorker(self.paths, self._quality_loader, self)
+        self._check_worker = _PngCheckWorker(self.paths, self._quality_loader, self, thumb_cache_dir(self.workspace))
         self._check_worker.item_ready.connect(self._png_checked)
         self._check_worker.finished.connect(self._png_check_finished)
         self._check_worker.start()
@@ -447,7 +514,7 @@ class SetExportDialog(QDialog):
         if report is not None and str(getattr(report, 'status', '')) in {'ok', 'review', 'block'}:
             self.quality_reports[str(Path(path).resolve())] = report
         done = self._qc_total - self._qc_pending
-        if not self._qc_pending or done % 5 == 0:
+        if not self._qc_pending or done <= 1 or done % 5 == 0:
             self._refresh_summary(rebuild=not self._qc_pending)
             if self.stack.currentWidget() is self.quality_page:
                 self._refresh_quality_page()
@@ -896,6 +963,15 @@ class SetExportDialog(QDialog):
         for path in self.paths:
             key = str(path)
             report = self.quality_reports.get(key)
+            if report is None and self._qc_pending and not only_problems:
+                # Not checked yet: the square and the name are there at once, the picture follows.
+                row = QListWidgetItem(path.name)
+                row.setData(Qt.ItemDataRole.UserRole, '')
+                row.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                row.setToolTip(f'{path.name} — проверяется…')
+                row.setIcon(self._placeholder_icon())
+                self.quality_list.addItem(row)
+                continue
             if report is None or (only_problems and report.status == 'ok'):
                 continue
             active = self._path_is_active(key)
@@ -916,10 +992,26 @@ class SetExportDialog(QDialog):
             if key == selected_path:
                 selected_row = self.quality_list.count() - 1
         self.quality_list.blockSignals(False)
-        if self.quality_list.count():
-            self.quality_list.setCurrentRow(selected_row if selected_row >= 0 else 0)
+        if selected_row < 0:
+            selected_row = next((row for row in range(self.quality_list.count())
+                                 if self.quality_list.item(row).data(Qt.ItemDataRole.UserRole)), -1)
+        if selected_row >= 0:
+            self.quality_list.setCurrentRow(selected_row)
         else:
             self._quality_selected(-1)
+
+    def _placeholder_icon(self):
+        icon = getattr(self, '_placeholder', None)
+        if icon is None:
+            size = self.QUALITY_THUMB
+            pixmap = QPixmap(size, size)
+            pixmap.fill(QColor('#223045'))
+            painter = QPainter(pixmap)
+            painter.setPen(QPen(QColor('#34465d'), 2))
+            painter.drawRect(1, 1, size - 2, size - 2)
+            painter.end()
+            icon = self._placeholder = QIcon(pixmap)
+        return icon
 
     def _set_quality_filter(self, only_problems):
         self._quality_only_problems = only_problems
