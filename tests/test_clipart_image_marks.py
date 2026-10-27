@@ -911,3 +911,81 @@ def test_edited_prompt_badge_is_drawn_on_the_png_check_and_the_preview_strip(tmp
     assert editor.file_strip.item(0).icon().pixmap(56, 56).toImage() != before
     assert editor.file_strip.item(1).icon().pixmap(56, 56).toImage() == \
         editor.file_strip.item(1).icon().pixmap(56, 56).toImage()
+
+
+GUIDED = ("A goose.\nReference image 1: use only for colors.\nReference image 2: use only for pose.\n"
+          "Reference image 3: use only for mood.")
+
+
+def test_dropping_a_reference_removes_its_guidance_line_and_renumbers_the_rest():
+    from studio_clipart_review_ui import drop_reference_guidance
+    result = drop_reference_guidance(GUIDED, 2)
+    assert "use only for pose" not in result
+    assert "Reference image 2: use only for mood." in result and "Reference image 3" not in result
+    assert drop_reference_guidance("plain text", 1) == "plain text"
+
+
+def test_prompt_dialog_replaces_and_removes_references_for_this_picture(tmp_path):
+    from studio_clipart_review_ui import PromptDialog
+    first, second, other = (png(tmp_path / name) for name in ("r1.png", "r2.png", "new.png"))
+    dialog = PromptDialog(None, path="", title="t", note="", prompt=GUIDED, original=GUIDED,
+                          references=[str(first), str(second)])
+    dialog.choose_reference = lambda: str(other)
+    dialog.replace_reference(0)
+    assert dialog.references() == [str(other), str(second)]
+    assert dialog.prompt() == GUIDED  # replacing keeps the guidance: the reference is used for the same purpose
+    dialog.remove_reference(0)
+    assert dialog.references() == [str(second)]
+    assert "use only for colors" not in dialog.prompt() and "Reference image 1: use only for pose." in dialog.prompt()
+    dialog.choose_reference = lambda: str(tmp_path / "missing.png")
+    shown = []
+    from PyQt6.QtWidgets import QMessageBox
+    QMessageBox.warning = lambda *args, **kwargs: shown.append(args[2])
+    dialog.replace_reference(0)
+    assert shown and dialog.references() == [str(second)]  # a broken file is refused and nothing changes
+
+
+def test_changed_references_reach_only_this_picture_and_its_request(tmp_path, monkeypatch):
+    import studio_clipart_review_ui as ui
+    from PyQt6.QtWidgets import QDialog
+    from types import SimpleNamespace
+    review, editor, session, flow = open_review(tmp_path)
+    keep = png(tmp_path / "keep.png")
+    swap = png(tmp_path / "swap.png")
+    for item in session.items:
+        item.payload["references"] = [str(keep)]
+    entries = [SimpleNamespace(object_id=item.payload.get("object_id", ""), references=[str(keep)], prompt="p")
+               for item in session.items]
+    set_references = [{"path": str(keep), "roles": [], "notes": ""}]
+    flow.shell.state = SimpleNamespace(data=SimpleNamespace(prompts=entries, references=set_references))
+
+    class FakePrompt:
+        def __init__(self, parent, **kwargs):
+            self.start = list(kwargs["references"])
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+        def prompt(self):
+            return "object 0"
+        def references(self):
+            return [str(swap)]
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr(ui, "PromptDialog", FakePrompt)
+    review.edit_prompt_for(Path(session.items[0].output_path), None)
+    assert session.items[0].payload["references"] == [str(swap)]
+    assert session.items[1].payload["references"] == [str(keep)]  # the other picture is untouched
+    assert set_references == [{"path": str(keep), "roles": [], "notes": ""}]  # so is the set
+    request = session.preview_regenerate([0, 1])
+    assert [entry["references"] for entry in request.generated_prompts] == [[str(swap)], [str(keep)]]
+    editor.deleteLater()
+
+
+def test_prompt_dialog_reset_brings_back_text_and_references(tmp_path):
+    from studio_clipart_review_ui import PromptDialog
+    first, second = png(tmp_path / "r1.png"), png(tmp_path / "r2.png")
+    dialog = PromptDialog(None, path="", title="t", note="", prompt=GUIDED, original=GUIDED,
+                          references=[str(first), str(second)])
+    dialog.remove_reference(0)
+    dialog.reset_to_original()
+    assert dialog.references() == [str(first), str(second)] and dialog.prompt() == GUIDED

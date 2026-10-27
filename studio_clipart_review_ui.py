@@ -13,7 +13,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
-    QButtonGroup, QComboBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QButtonGroup, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -235,11 +235,31 @@ class ReviewStrip(QFrame):
         self.note.blockSignals(False)
 
 
+GUIDANCE_LINE = re.compile(r"^Reference image (\d+):")
+
+
+def drop_reference_guidance(prompt, removed):
+    """Remove the «Reference image N:» line of a removed reference and renumber the later ones."""
+    lines = []
+    for line in prompt.split("\n"):
+        match = GUIDANCE_LINE.match(line)
+        if match:
+            number = int(match.group(1))
+            if number == removed:
+                continue
+            if number > removed:
+                line = f"Reference image {number - 1}:" + line[match.end():]
+        lines.append(line)
+    return "\n".join(lines)
+
+
 class PromptDialog(QDialog):
-    def __init__(self, parent, *, path, title, note, prompt, original):
+    def __init__(self, parent, *, path, title, note, prompt, original, references=()):
         super().__init__(parent)
         self.setWindowTitle("Изменить промпт")
         self.original = original
+        self._references = [str(item) for item in references]
+        self._original_references = list(self._references)
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(12)
@@ -266,13 +286,17 @@ class PromptDialog(QDialog):
         side.addWidget(self.editor)
         top.addLayout(side, 1)
         root.addLayout(top)
+        self.references_box = QVBoxLayout()
+        self.references_box.setSpacing(6)
+        root.addLayout(self.references_box)
+        self._show_references()
         root.addWidget(_small("Промпт сохранится в объекте набора. Генерация не запускается здесь: картинка будет "
                               "создана заново по кнопке «Пересоздать помеченные», с ценой и подтверждением."))
         root.addStretch(1)
         row = QHBoxLayout()
         row.addStretch(1)
         reset = V3Button("Вернуть исходный", ButtonVariant.GHOST)
-        reset.clicked.connect(lambda: self.editor.setPlainText(self.original))
+        reset.clicked.connect(self.reset_to_original)
         cancel = V3Button("Отмена", ButtonVariant.SECONDARY)
         cancel.clicked.connect(self.reject)
         save = V3Button("Сохранить промпт", ButtonVariant.PRIMARY)
@@ -281,6 +305,67 @@ class PromptDialog(QDialog):
             row.addWidget(button)
         root.addLayout(row)
         self.resize(760, 520)
+
+    def reset_to_original(self):
+        self.editor.setPlainText(self.original)
+        self._references = list(self._original_references)
+        self._show_references()
+
+    def references(self):
+        """Reference files for this picture only; the set and the other pictures keep theirs."""
+        return list(self._references)
+
+    def choose_reference(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Заменить референс", "", "Изображения (*.png *.jpg *.jpeg *.webp)")
+        return path
+
+    def _show_references(self):
+        while self.references_box.count():
+            item = self.references_box.takeAt(0)
+            if item.layout() is not None:
+                while item.layout().count():
+                    child = item.layout().takeAt(0)
+                    if child.widget() is not None:
+                        child.widget().deleteLater()
+            elif item.widget() is not None:
+                item.widget().deleteLater()
+        if not self._references:
+            return
+        self.references_box.addWidget(_small("Референсы этой картинки", "#e4edf6", bold=True))
+        for index, reference in enumerate(self._references):
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addWidget(_thumb(reference, 44))
+            name = _small(Path(reference).name)
+            name.setToolTip(reference)
+            row.addWidget(name, 1)
+            replace = V3Button("Заменить…", ButtonVariant.SECONDARY)
+            replace.setAccessibleName(f"Заменить референс {index + 1}")
+            replace.clicked.connect(lambda _=False, at=index: self.replace_reference(at))
+            remove = V3Button("Убрать", ButtonVariant.SECONDARY)
+            remove.setAccessibleName(f"Убрать референс {index + 1}")
+            remove.clicked.connect(lambda _=False, at=index: self.remove_reference(at))
+            row.addWidget(replace)
+            row.addWidget(remove)
+            self.references_box.addLayout(row)
+
+    def replace_reference(self, index):
+        path = self.choose_reference()
+        if not path:
+            return
+        from studio_clipart_references import reference_file_info
+        try:
+            reference_file_info(path)
+        except ValueError as error:
+            QMessageBox.warning(self, "Референс", str(error))
+            return
+        self._references[index] = str(path)
+        self._show_references()
+
+    def remove_reference(self, index):
+        del self._references[index]
+        self.editor.setPlainText(drop_reference_guidance(self.editor.toPlainText(), index + 1))
+        self._show_references()
 
     def _lost_background_sentences(self):
         """Sentences of the original that name a chroma-key colour, when the new text no longer names it.
@@ -969,13 +1054,26 @@ class ImageReview:
         item = self.session.items[index]
         current = self._prompt(item)
         original = self._origin_prompts.get(index, current)
+        current_references = ([str(path) for path in (item.payload or {}).get("references") or []]
+                              if isinstance(item.payload, dict) else [])
         dialog = PromptDialog(parent, path=item.output_path,
                               title=f"{Path(item.output_path or '').name} · Брак генерации",
-                              note=item.review_note, prompt=current, original=original)
+                              note=item.review_note, prompt=current, original=original,
+                              references=current_references)
         accepted = dialog.exec() == QDialog.DialogCode.Accepted
         prompt = dialog.prompt()
+        references = dialog.references() if hasattr(dialog, "references") else current_references
         dialog.deleteLater()
-        if not accepted or prompt == current:
+        if not accepted or (prompt == current and references == current_references):
+            return
+        if references != current_references:
+            # Only this picture: its own request entry and prompt record, never the set's reference list.
+            item.payload["references"] = list(references)
+            entry = self._prompt_entry(item)
+            if entry is not None:
+                entry.references = list(references)
+        if prompt == current:
+            self._save()
             return
         self._origin_prompts.setdefault(index, current)
         item.payload["prompt"] = prompt
