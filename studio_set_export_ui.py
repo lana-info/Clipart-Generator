@@ -277,6 +277,7 @@ class SetExportDialog(QDialog):
     fix_requested = pyqtSignal(str)
     mark_requested = pyqtSignal(str, str)  # (png path, review mark) — same marks as on the results step
     prompt_requested = pyqtSignal(str)  # «Изменить промпт» for a picture marked as a generation defect
+    regenerate_requested = pyqtSignal(str)  # «Перегенерировать» for the same picture (paid, confirmed by the module)
     review_requested = pyqtSignal()
     QUALITY_THUMB = 120
     export_availability_changed = pyqtSignal(bool)
@@ -645,6 +646,14 @@ class SetExportDialog(QDialog):
         self.quality_prompt_button.clicked.connect(lambda: self.prompt_requested.emit(self._current_quality_key()))
         self.quality_prompt_button.hide()  # shown only for «Брак генерации»
         detail_actions.addWidget(self.quality_prompt_button)
+        self.quality_regenerate_button = QPushButton('Перегенерировать')
+        self.quality_regenerate_button.setProperty('v3Button', True)
+        self.quality_regenerate_button.setProperty('variant', 'secondary')
+        self.quality_regenerate_button.setToolTip('Новая платная генерация этой картинки; цена и модель — в подтверждении')
+        self.quality_regenerate_button.clicked.connect(
+            lambda: self.regenerate_requested.emit(self._current_quality_key()))
+        self.quality_regenerate_button.hide()  # next to «Изменить промпт»: only for «Брак генерации»
+        detail_actions.addWidget(self.quality_regenerate_button)
         detail_actions.addStretch(1)
         detail_actions.addWidget(self.quality_fix_button)
         detail_layout.addLayout(detail_actions)
@@ -1027,6 +1036,7 @@ class SetExportDialog(QDialog):
         known = self._marks_enabled and key in self._marks
         self.quality_marks_row.setVisible(known)
         self.quality_prompt_button.setVisible(known and self._marks.get(key) == 'bad_generation')
+        self.quality_regenerate_button.setVisible(known and self._marks.get(key) == 'bad_generation')
         for mark, button in self.quality_mark_buttons.items():
             button.setChecked(known and self._marks.get(key) == mark)
             button.setEnabled(known and self.worker is None)
