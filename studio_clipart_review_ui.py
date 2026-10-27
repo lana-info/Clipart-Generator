@@ -214,6 +214,8 @@ class ReviewStrip(QFrame):
         for widget in self.actions:
             widget.setVisible(widget in actions)
         self.status.setText(status)
+        self.status.setVisible(False)  # no caption under the panel (owner 2026-10-27); the text stays as a tooltip
+        self.setToolTip(status)
         self.note.setEnabled(enabled)
         self.history.setText(f"История версий ({history})")
         self.history.setEnabled(enabled and history > 0)
@@ -799,7 +801,7 @@ class ImageReview:
                                  status="Вырезать заново из исходной картинки, без новой генерации.")
             else:
                 strip.show_state(mark, history=history,
-                                 actions=(strip.brush_button, strip.to_generation_button),
+                                 actions=(),
                                  status="⚠ Исходная картинка до вырезания уже удалена очисткой рабочих файлов. "
                                         "Вырезать заново не из чего: исправьте край кистью или пересоздайте "
                                         "картинку.")

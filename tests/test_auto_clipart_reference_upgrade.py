@@ -153,12 +153,12 @@ def test_removed_reference_after_legacy_reopen_cannot_be_sent(workspace):
     factory.assert_not_called()
 
 
-def test_skip_references_keeps_files_but_excludes_them_from_generation(workspace):
+def test_references_step_has_no_skip_button_and_next_goes_on_without_references(workspace):
     view, controller, factory, _, reference = workspace
     controller._select_step(StepId.PROMPT_REVIEW)
-    assert not controller.brief.reference_editor.style_from_reference.isHidden()
-    assert not controller.brief.reference_editor.palette_from_reference.isHidden()
-    controller.brief.skip_references_button.click()
+    assert not hasattr(controller.brief, 'skip_references_button')
+    controller.brief.reference_editor.disable_all()  # the owner can still switch the references off one by one
+    controller.navigate(1)
     assert view.project_state.current_step is StepId.GENERATION
     assert reference.exists()
     assert controller.brief.reference_editor.active_generation_paths() == ()

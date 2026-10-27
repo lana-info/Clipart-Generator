@@ -1099,6 +1099,7 @@ class TransparencyCanvas(QGraphicsView):
     tool_requested = pyqtSignal(str)
     diameter_requested = pyqtSignal(int)
     zoom_requested = pyqtSignal(int)
+    fit_requested = pyqtSignal()
     history_requested = pyqtSignal(bool)
     status_changed = pyqtSignal(str)
     contour_finished = pyqtSignal(str, bool)
@@ -1297,8 +1298,8 @@ class TransparencyCanvas(QGraphicsView):
 
     def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         self.setFocus(Qt.FocusReason.MouseFocusReason)
-        if event.button() == Qt.MouseButton.LeftButton and self._space_pressed:
-            self._panning = True
+        if (event.button() == Qt.MouseButton.LeftButton and self._space_pressed) or event.button() == Qt.MouseButton.MiddleButton:
+            self._panning = True  # space+drag or the middle button (owner 2026-10-27; not Alt, which is the eraser swap)
             self._last_view_point = event.position().toPoint()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
@@ -1539,7 +1540,7 @@ class TransparencyCanvas(QGraphicsView):
         if dragged:
             self.refresh_local_preview()
 
-        if event.button() == Qt.MouseButton.LeftButton and self._panning:
+        if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton) and self._panning:
             self._panning = False
             self.setCursor(
                 Qt.CursorShape.OpenHandCursor
@@ -1571,6 +1572,11 @@ class TransparencyCanvas(QGraphicsView):
             return
         if event.button() == Qt.MouseButton.RightButton:
             self.mousePressEvent(event)      # a quick second right click is one more curve point
+            return
+        if event.button() == Qt.MouseButton.MiddleButton or (
+                event.button() == Qt.MouseButton.LeftButton and self._space_pressed):
+            self.fit_requested.emit()        # a double click on the hand tool: fit the picture to the window
+            event.accept()
             return
         if self.tool == "pen" and self.document is not None and event.button() == Qt.MouseButton.LeftButton:
             point = self._image_point(event.position().toPoint())
@@ -2420,15 +2426,30 @@ class ClipartTransparencyEditorPage(QWidget):
         zoom_fit = QToolButton()
         zoom_fit.setText("По размеру")
         zoom_fit.clicked.connect(lambda: self.zoom_buttons["fit"].click())
-        for widget in (zoom_out, self.zoom_menu_button, zoom_in, zoom_fit):
+        zoom_actual = QToolButton()
+        zoom_actual.setText("100%")
+        zoom_actual.setToolTip("Масштаб 100 %")
+        zoom_actual.setAccessibleName("Масштаб 100%")
+        zoom_actual.clicked.connect(lambda: self.zoom_buttons[100].click())
+        for widget in (zoom_out, self.zoom_menu_button, zoom_in, zoom_fit, zoom_actual):
             zoom_row.addWidget(widget)
         zoom_row.addWidget(QLabel("Ctrl + колесо"))
         canvas_layout.addWidget(self.zoom_bar, 0, 0, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
         self._update_zoom_label("fit")
 
         tools_layout.addWidget(self._small_label('Край'))
-        edge_grid = QGridLayout()
-        edge_grid.setSpacing(4)
+        # Two rows with room between them and a thin line (owner 2026-10-27): the first row softens the edge, the second moves it.
+        edge_rows = QVBoxLayout()
+        edge_rows.setSpacing(8)
+        edge_grids = (QGridLayout(), QGridLayout())
+        for grid in edge_grids:
+            grid.setSpacing(4)
+        edge_line = QFrame()
+        edge_line.setFixedHeight(1)
+        edge_line.setStyleSheet("background: #2b3a4e; border: none;")
+        edge_rows.addLayout(edge_grids[0])
+        edge_rows.addWidget(edge_line)
+        edge_rows.addLayout(edge_grids[1])
         self.edge_buttons = {}
         for index, (operation, text, tip, accessible) in enumerate((
                 ('harder', 'Жёстче', 'Края жёстче', 'Сделать переход края уже'),
@@ -2442,9 +2463,9 @@ class ClipartTransparencyEditorPage(QWidget):
             button.setAccessibleName(accessible)
             button.clicked.connect(lambda checked=False, value=operation: self._edge_operation(value))
             self.edge_buttons[operation] = button
-            edge_grid.addWidget(button, index // 3, index % 3)
+            edge_grids[index // 3].addWidget(button, 0, index % 3)
         self.smooth_edge_button = self.edge_buttons['smooth']
-        tools_layout.addLayout(edge_grid)
+        tools_layout.addLayout(edge_rows)
         self.edge_scope_label = self._small_label('Всё изображение')
         tools_layout.addWidget(self.edge_scope_label)
         tools_layout.addWidget(self._small_label('Инструмент'))
@@ -2699,6 +2720,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self.canvas.tool_requested.connect(self._set_tool)
         self.canvas.diameter_requested.connect(self._cycle_diameter)
         self.canvas.zoom_requested.connect(self._cycle_zoom)
+        self.canvas.fit_requested.connect(lambda: self.zoom_buttons["fit"].click())
         self.canvas.history_requested.connect(lambda redo: self.redo() if redo else self.undo())
         self.undo_button.setToolTip("Отменить (Ctrl+Z)")
         self.redo_button.setToolTip("Повторить (Ctrl+Shift+Z)")

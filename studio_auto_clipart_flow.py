@@ -178,12 +178,9 @@ class CollectionBrief(ClipartBuilderDialog):
         self.planning.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         # With the ideas list hidden ("Модель текста" tab) a bounded panel would be centred in the free height.
         page_layout.setAlignment(self.planning, Qt.AlignmentFlag.AlignTop)
-        skip_references = QPushButton("Пропустить референсы")
-        skip_references.clicked.connect(self._skip_references)
+        # No «Пропустить референсы» button (owner 2026-10-26): «Далее» moves on without references.
         reference_layout = self.pages.widget(2).widget().layout()
         reference_layout.insertWidget(0, QLabel("Референсы необязательны. Выбранные стиль и палитра сохраняются."))
-        reference_layout.insertWidget(1, skip_references)
-        self.skip_references_button = skip_references
         form = QFormLayout()
         self.project_name = QLineEdit(state.common.project_name)
         self.project_name.setMaxLength(200)
@@ -247,10 +244,6 @@ class CollectionBrief(ClipartBuilderDialog):
 
     def _go_to_references(self):
         self.navigate_to(StepId.PROMPT_REVIEW)
-
-    def _skip_references(self):
-        self.reference_editor.disable_all()
-        self.navigate_to(StepId.GENERATION)
 
     def refresh_from_state(self):
         if self.workflow_state.current_step in BRIEF_STEPS:

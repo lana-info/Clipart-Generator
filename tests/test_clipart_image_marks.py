@@ -360,8 +360,11 @@ def test_bad_cutout_without_raw_source_offers_brush_or_generation(tmp_path):
     review, editor, session, flow = open_review(tmp_path)
     review.strip.mark_buttons["bad_cutout"].click()
     strip = review.strip
-    assert strip.to_generation_button.isVisibleTo(strip) and not strip.try_button.isVisibleTo(strip)
-    strip.to_generation_button.click()
+    # «Исправить кистью» and «Отметить как брак генерации» are gone from the strip (owner 2026-10-27).
+    assert not strip.to_generation_button.isVisibleTo(strip) and not strip.brush_button.isVisibleTo(strip)
+    assert not strip.try_button.isVisibleTo(strip)
+    assert not strip.status.isVisibleTo(strip) and "Исходная картинка" in strip.toolTip()
+    strip.mark_buttons["bad_generation"].click()
     assert session.items[0].review_mark == "bad_generation"
     editor.deleteLater()
 
@@ -542,3 +545,35 @@ def test_escape_keeps_the_transparency_window_open_while_edits_are_unsaved(tmp_p
     editor._has_unsaved_changes = lambda: False
     dialog.reject()
     assert not dialog.isVisible()
+
+
+def test_editor_zoom_100_button_edge_rows_and_middle_button_pan(tmp_path):
+    from PyQt6.QtCore import QPointF, Qt
+    from PyQt6.QtGui import QMouseEvent
+    from PyQt6.QtWidgets import QToolButton
+    from v3_transparency_preview import ClipartTransparencyEditorPage
+    editor = ClipartTransparencyEditorPage()
+    editor.set_files([png(tmp_path / "a_ready.png")], selected_index=0)
+    texts = [button.text() for button in editor.findChildren(QToolButton)]
+    assert "100%" in texts and "По размеру" in texts
+    next(button for button in editor.findChildren(QToolButton) if button.text() == "100%").click()
+    assert editor.zoom_buttons[100].isChecked()
+    # the edge buttons sit in two rows with a line between them
+    harder, shrink = editor.edge_buttons["harder"], editor.edge_buttons["shrink"]
+    assert shrink.geometry().isValid() and harder.parentWidget() is shrink.parentWidget()
+    canvas = editor.canvas
+    fits = []
+    canvas.fit_requested.connect(lambda: fits.append(True))
+    press = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(10, 10), Qt.MouseButton.MiddleButton,
+                        Qt.MouseButton.MiddleButton, Qt.KeyboardModifier.NoModifier)
+    release = QMouseEvent(QMouseEvent.Type.MouseButtonRelease, QPointF(10, 10), Qt.MouseButton.MiddleButton,
+                          Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier)
+    canvas.mousePressEvent(press)
+    assert canvas._panning  # the middle button pans without Space
+    canvas.mouseReleaseEvent(release)
+    assert not canvas._panning
+    canvas.mouseDoubleClickEvent(QMouseEvent(QMouseEvent.Type.MouseButtonDblClick, QPointF(10, 10),
+                                             Qt.MouseButton.MiddleButton, Qt.MouseButton.MiddleButton,
+                                             Qt.KeyboardModifier.NoModifier))
+    assert fits == [True]
+    editor.deleteLater()
