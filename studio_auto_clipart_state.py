@@ -52,7 +52,7 @@ class AutoClipartStateExtension:
                 if (not isinstance(row, dict)
                         or not {"status", "output_path", "attempts"} <= set(row)
                         or set(row) - {"status", "output_path", "attempts", "editor_output_path", "stage_statuses", "source_path", "paid_completed_stages",
-                                       "review_mark", "review_note", "versions", "review_checked"}):
+                                       "review_mark", "review_note", "versions", "review_checked", "prompt_edited"}):
                     raise ValueError("Неверная запись результата")
                 from studio_clipart_versions import validate_review_row
                 validate_review_row(row)

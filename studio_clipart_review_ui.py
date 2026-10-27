@@ -99,6 +99,8 @@ def annotation(item):
     text = LIST_LABEL[state]
     if item.review_note:
         text += f" · ✎ {item.review_note[:60]}"
+    if getattr(item, "prompt_edited", False):
+        text += " · промпт исправлен"
     return MARK_COLOR[state], text, item.review_mark == "deleted"
 
 
@@ -454,6 +456,8 @@ class ImageReview:
         if session is not None and self._installed:
             page.queue.refresh_items(session.items)
             self.refresh_results()
+        if session is not None and self._editor is not None:
+            self.refresh_editor()
         for listener in self.marks_listeners:
             listener()
 
@@ -808,9 +812,11 @@ class ImageReview:
                 continue
             item = items[index]
             state = mark_state(item)
-            text = LIST_LABEL[state] + (" · ✎ заметка" if item.review_note else "")
+            edited = bool(getattr(item, "prompt_edited", False))
+            text = (LIST_LABEL[state] + (" · ✎ заметка" if item.review_note else "")
+                    + (" · промпт исправлен" if edited else ""))
             rows.append((MARK_COLOR[state], text, item.review_mark == "deleted",
-                         not visible(item, self.filter_mode)))
+                         not visible(item, self.filter_mode), edited))
         editor.set_file_annotations(rows)
         self._refresh_strip()
 
@@ -865,6 +871,13 @@ class ImageReview:
         else:
             strip.show_state(mark, history=history, status=(
                 "Картинка в порядке. Поставьте метку, если что-то не так — менять ничего не нужно."))
+
+    def edited_paths(self):
+        """Resolved output paths of pictures whose prompt the owner corrected."""
+        if self.session is None:
+            return set()
+        return {str(Path(item.output_path).resolve()) for item in self.session.items
+                if item.output_path and getattr(item, "prompt_edited", False)}
 
     def marks_by_path(self):
         """{resolved output path: review mark} for the PNG-check screen of the export step."""
@@ -966,6 +979,8 @@ class ImageReview:
             return
         self._origin_prompts.setdefault(index, current)
         item.payload["prompt"] = prompt
+        # Back to the very first text clears the badge; any other change sets it.
+        item.prompt_edited = prompt != self._origin_prompts[index]
         entry = self._prompt_entry(item)
         if entry is not None:
             entry.prompt = prompt

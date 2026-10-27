@@ -29,6 +29,8 @@ def validate_review_row(row: dict) -> None:
         raise ValueError("Неверная метка картинки")
     if not isinstance(row.get("review_checked", False), bool):
         raise ValueError("Неверная отметка проверки картинки")
+    if not isinstance(row.get("prompt_edited", False), bool):
+        raise ValueError("Неверная отметка исправленного промпта")
     note = row.get("review_note", "")
     if not isinstance(note, str) or len(note) > MAX_NOTE:
         raise ValueError("Неверная заметка картинки")
@@ -59,6 +61,8 @@ def review_fields(item) -> dict:
         fields["review_checked"] = True
     if getattr(item, "review_note", ""):
         fields["review_note"] = item.review_note
+    if getattr(item, "prompt_edited", False):
+        fields["prompt_edited"] = True
     if getattr(item, "versions", None):
         fields["versions"] = [dict(entry) for entry in item.versions]
     return fields
@@ -68,6 +72,7 @@ def restore_review(item, row: dict) -> None:
     item.review_mark = row.get("review_mark", "ok")
     item.review_checked = bool(row.get("review_checked", False))
     item.review_note = row.get("review_note", "")
+    item.prompt_edited = bool(row.get("prompt_edited", False))
     item.versions = [dict(entry) for entry in row.get("versions", [])]
 
 

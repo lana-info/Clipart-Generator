@@ -145,6 +145,8 @@ class RunItem:
     # «Ок» counts only after the owner looked at the picture; a new or regenerated one is «Не проверено».
     review_checked: bool = field(default=False, repr=False)
     review_note: str = field(default="", repr=False)
+    # The owner saved a corrected prompt for this picture (shown as a pencil badge, not a mark).
+    prompt_edited: bool = field(default=False, repr=False)
     versions: list[dict[str, str]] = field(default_factory=list, repr=False)
 
     def paid_history_stages(self) -> tuple[str, ...]:

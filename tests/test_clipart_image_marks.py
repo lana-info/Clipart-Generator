@@ -842,3 +842,72 @@ def test_prompt_that_keeps_the_phrase_or_never_had_one_does_not_ask(tmp_path):
     plain.ask_background = lambda sentences: pytest.fail("must not ask")
     plain._save()
     assert plain.result() == plain.DialogCode.Accepted
+
+
+def test_edited_prompt_flag_is_set_cleared_saved_and_shown(tmp_path, monkeypatch):
+    import studio_clipart_review_ui as ui
+    from PyQt6.QtWidgets import QDialog
+    from studio_clipart_versions import restore_review, review_fields, validate_review_row
+    from types import SimpleNamespace
+    review, editor, session, flow = open_review(tmp_path)
+    flow.shell.state = SimpleNamespace(data=SimpleNamespace(prompts=[]))
+    answers = ["a goose, softer outline"]
+
+    class FakePrompt:
+        def __init__(self, parent, **kwargs):
+            pass
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+        def prompt(self):
+            return answers[0]
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr(ui, "PromptDialog", FakePrompt)
+    path = Path(session.items[0].output_path)
+    review.edit_prompt_for(path, None)
+    item = session.items[0]
+    assert item.prompt_edited and review.edited_paths() == {str(path.resolve())}
+    assert "промпт исправлен" in flow.run_queue.page.queue.item(0).text()
+    assert "промпт исправлен" in editor.file_list.item(0).text()
+    fields = review_fields(item)
+    assert fields["prompt_edited"] is True
+    validate_review_row({"status": "succeeded", "output_path": "", "attempts": 1, **fields})
+    with pytest.raises(ValueError):
+        validate_review_row({"prompt_edited": "yes"})
+    restored = SimpleNamespace()
+    restore_review(restored, fields)
+    assert restored.prompt_edited is True
+    answers[0] = "object 0"  # back to the very first text
+    review.edit_prompt_for(path, None)
+    assert not item.prompt_edited and not review.edited_paths()
+    assert "prompt_edited" not in review_fields(item)
+    editor.deleteLater()
+
+
+def test_edited_prompt_badge_is_drawn_on_the_png_check_and_the_preview_strip(tmp_path):
+    from studio_alpha_qc import AlphaQcReport
+    from studio_set_export_ui import SetExportDialog
+    from v3_transparency_preview import ClipartTransparencyEditorPage
+    paths = [png(tmp_path / f"b{index}_ready.png") for index in range(2)]
+    marks = {str(path.resolve()): "ok" for path in paths}
+    reports = [AlphaQcReport(str(path.resolve()), "ok", (), width=8, height=8) for path in paths]
+    dialog = SetExportDialog(paths, quality_reports=reports)
+    dialog.enable_marks(marks)
+    dialog._show_quality_review()
+    plain = dialog.quality_list.item(0).icon().pixmap(120, 120).toImage()
+    dialog.enable_marks(marks, edited={str(paths[0].resolve())})
+    assert dialog.quality_list.item(0).icon().pixmap(120, 120).toImage() != plain
+    assert "промпт исправлен" in dialog.quality_list.item(0).toolTip()
+    assert "промпт исправлен" not in dialog.quality_list.item(1).toolTip()
+    dialog.reject()
+    editor = ClipartTransparencyEditorPage()
+    editor.set_files(paths, selected_index=0)
+    editor._thumb_pool.waitForDone()
+    QApplication.processEvents()
+    editor.set_file_annotations([("#24cabb", "Ок", False, False), ("#24cabb", "Ок", False, False)])
+    before = editor.file_strip.item(0).icon().pixmap(56, 56).toImage()
+    editor.set_file_annotations([("#24cabb", "Ок", False, False, True), ("#24cabb", "Ок", False, False)])
+    assert editor.file_strip.item(0).icon().pixmap(56, 56).toImage() != before
+    assert editor.file_strip.item(1).icon().pixmap(56, 56).toImage() == \
+        editor.file_strip.item(1).icon().pixmap(56, 56).toImage()
