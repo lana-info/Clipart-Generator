@@ -326,6 +326,10 @@ class MaskEditDocument:
                 if copy_source is None or error.errno != errno.ENAMETOOLONG:
                     raise
                 generation_record = None
+            except ValueError:
+                # The sidecar is damaged or describes another file (owner 2026-10-27: «Не удалось сохранить PNG»).
+                # It is only optional provenance: the owner's edit must still be saved, without carrying it over.
+                generation_record = None
             output_temporary = self._stage_png(
                 self.corrected_image(),
                 destination,

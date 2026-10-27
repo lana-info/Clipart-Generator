@@ -527,3 +527,18 @@ def test_clicks_share_one_delayed_save_and_close_flushes_it(tmp_path):
     review.detach_editor()  # closing the window flushes
     assert flow.saved == 2
     editor.deleteLater()
+
+
+def test_escape_keeps_the_transparency_window_open_while_edits_are_unsaved(tmp_path):
+    from types import SimpleNamespace
+    from studio_auto_clipart_flow import _TransparencyDialog
+    shown = []
+    editor = SimpleNamespace(_has_unsaved_changes=lambda: True, _show_contour_status=shown.append)
+    dialog = _TransparencyDialog()
+    dialog.editor = editor
+    dialog.show()
+    dialog.reject()  # what Esc and the window cross do
+    assert dialog.isVisible() and shown
+    editor._has_unsaved_changes = lambda: False
+    dialog.reject()
+    assert not dialog.isVisible()

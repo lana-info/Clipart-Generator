@@ -225,3 +225,22 @@ def test_direct_copy_keeps_metadata_and_hash_bound_generation_intent(tmp_path,ap
     assert record['requested_color']=='blue' and record['source_sha256']==digest(output)
     assert digest(source)==before and record_path(source).read_bytes()==sidecar_before
     shell.close()
+
+
+def test_save_copy_still_works_when_the_source_generation_record_no_longer_matches(tmp_path,app):
+    """Owner 2026-10-27: «Не удалось сохранить PNG — Сведения генерации повреждены или относятся к другому файлу»."""
+    from chroma_generation_record import write_generation_intent,bind_generation_record,capture_generation_record,record_path
+    source=tmp_path/'inputs'/'sample.png';source.parent.mkdir()
+    intent=write_generation_intent(source,color='blue',prompt='safe synthetic test')
+    Image.new('RGBA',(24,24),(220,180,90,255)).save(source)
+    bind_generation_record(source,intent)
+    Image.new('RGBA',(24,24),(10,20,30,255)).save(source)  # the picture changed after the record was bound
+    before=digest(source)
+    with pytest.raises(ValueError):
+        capture_generation_record(source)
+    shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+    output,_=c.pages[StepId.TRANSPARENCY].save_current()
+    assert output.is_file() and digest(source)==before
+    assert capture_generation_record(output) is None  # the stale record is not carried over to the copy
+    assert record_path(source).is_file()
+    shell.close()

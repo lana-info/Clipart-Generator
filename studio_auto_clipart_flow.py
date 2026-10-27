@@ -86,6 +86,19 @@ def launch_confirmation_html(*, object_count, models, cost, references=(), refer
                      "Успешные изображения заново не создаются.")
     return "<br>".join(lines)
 
+
+class _TransparencyDialog(QDialog):
+    """Esc and the window cross never throw away mask edits: with unsaved edits the window stays open."""
+
+    editor = None
+
+    def reject(self):
+        editor = self.editor
+        if editor is not None and editor._has_unsaved_changes():
+            editor._show_contour_status("Есть несохранённые изменения: сохраните PNG или выйдите кнопкой «К результатам».")
+            return
+        super().reject()
+
 class AutoClipartGenerationPage(ClipartGenerationPage):
     """Show only model controls that affect the current collection prompts."""
     show_primary_scope = True
@@ -776,7 +789,7 @@ class AutoClipartFlowController(ClipartFlowController):
         paths = transparency_candidate_paths(session)
         if not paths:
             return
-        dialog = QDialog(self.run_queue.page)
+        dialog = _TransparencyDialog(self.run_queue.page)
         dialog.setWindowTitle("Проверка PNG")
         dialog.setWindowFlags(
             dialog.windowFlags()
@@ -786,6 +799,7 @@ class AutoClipartFlowController(ClipartFlowController):
         dialog.resize(1080, 720)
         layout = QVBoxLayout(dialog)
         editor = ClipartTransparencyEditorPage()
+        dialog.editor = editor
         layout.addWidget(editor)
         selected = 0
         if 0 <= item_index < len(session.items):
