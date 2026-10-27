@@ -3537,3 +3537,8 @@ test_build_retains_shared_imports_used_by_signed_workflows — ожидает `g
 - Причина: проверка заменяемого референса в диалоге промпта (`studio_clipart_review_ui`, ядро) вызывала `studio_clipart_references` (модуль clipart); тест `test_legacy_dependency_edges_match_exact_allowlist` в полном прогоне перед релизом 3.2.45 показал неодобренное ребро зависимости.
 - Решение: локальная проверка файла референса (PNG/JPEG/WebP, до 25 МБ, до 40 Мп) внутри ядра без импорта модуля.
 - Проверка: тест зависимостей и 77 тестов меток проходят; полный прогон перед релизом: 3894 прошли, остальное — это исправление.
+
+
+## Публикация 3.2.46: у контейнера лицензий пропал том артефактов {#license-artifact-volume-20261027}
+
+Симптом: attach падал с PermissionError на /var/lib/license-service. Причина: развёртывание club-vip-20261027 пересоздало контейнер без тома /opt/bots-stack/license-artifacts и без LICENSE_SERVICE_ARTIFACT_ROOT. Решение: docker compose -p license-service -f deploy.yml -f artifacts-override.yml up -d в каталоге club-vip-20261027; проверены health, запись и публикация. Неверная попытка: отзыв пустого черновика (withdraw) — запись version+платформа+канал уникальна и учитывает отозванные; статус draft вернуть нельзя ("unsupported release status"), но attach к отозванной записи и перевод в published сработали. Правило: пустой черновик не отзывать, а использовать повторно. Любое новое развёртывание сервиса должно включать том и переменную артефактов.
