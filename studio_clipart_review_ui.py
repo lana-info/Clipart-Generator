@@ -151,7 +151,6 @@ class ReviewStrip(QFrame):
         box.setSpacing(8)
         row = QHBoxLayout()
         row.setSpacing(6)
-        row.addWidget(_small("Оценка", "#e4edf6", bold=True))
         self.mark_group = QButtonGroup(self)
         self.mark_group.setExclusive(True)
         self.mark_buttons = {}

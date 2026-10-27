@@ -2899,7 +2899,29 @@ class ClipartTransparencyEditorPage(QWidget):
     # --- optional module hooks (Auto Clipart review); unused elsewhere ---------
 
     def add_canvas_footer(self, widget: QWidget) -> None:
-        self.canvas.parentWidget().layout().addWidget(widget, 2, 0)
+        """The module's rating strip is the «Оценка» panel: movable and switched in «Панели ▾» like the others."""
+        dock = QDockWidget("Оценка", self.panel_host)
+        dock.setObjectName("transparency-rating")
+        dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable
+                         | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+                         | QDockWidget.DockWidgetFeature.DockWidgetClosable)
+        dock.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
+        dock.setTitleBarWidget(self._panel_title_bar("Оценка", dock))
+        dock.setWidget(widget)
+        # Stacked above the thumbnails, where the strip used to sit under the picture.
+        preview = self.panel_docks["preview"]
+        self.panel_host.removeDockWidget(preview)
+        self.panel_host.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
+        self.panel_host.splitDockWidget(dock, preview, Qt.Orientation.Vertical)
+        preview.show()
+        dock.show()
+        self.panel_docks["rating"] = dock
+        menu = self.panels_button.menu()
+        actions = menu.actions()
+        before = next((action for action in actions if action.isSeparator()), None)
+        action = dock.toggleViewAction()
+        menu.insertAction(before, action) if before is not None else menu.addAction(action)
+        self._default_panel_state = self.panel_host.saveState()
 
     def insert_file_filter(self, widget: QWidget) -> None:
         self.files_frame.layout().insertWidget(1, widget)
