@@ -1300,3 +1300,47 @@ def test_results_png_check_button_opens_png_check_before_export(workspace):
     wait_png_check(panel)
     assert panel.stack.currentWidget() is panel.quality_page
     assert panel.quality_list.count() == 1
+
+
+def test_reopened_project_journals_refused_regeneration_and_keeps_pictures(workspace, monkeypatch):
+    """Owner 2026-10-27 (UP-14): after reopening a project «Пересоздать помеченные» failed every
+    picture with the generic stub, and the diagnostics had no run events at all."""
+    import studio_image_run_services
+    view, controller, _gate, factory = workspace
+    controller.brief.total.setValue(2)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    for index, item in enumerate(session.items):
+        output = session.output_dir / f'picture{index}_ready.png'
+        Image.new('RGBA', (64, 64), (200, 0, 0, 255)).save(output)
+        item.status, item.output_path, item.attempts = RunItemStatus.SUCCEEDED, str(output), 1
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    controller.save_timer.stop()
+    journal = Mock()
+    view._diagnostic_journal = journal
+    assert view.continue_saved_project(view._active_project_id)
+    resumed = view.shell.workflow_controller('auto-clipart')
+    resumed.save_timer.stop()
+    restored = resumed.run_queue.session
+    before = [item.output_path for item in restored.items]
+    for item in restored.items:
+        item.review_mark = 'bad_generation'
+    monkeypatch.setattr(studio_image_run_services, 'missing_runtime_requirements',
+                        lambda _request: ('KIE API Key',))
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+    resumed.review.recreate_marked()
+    factory.assert_not_called()
+    events = {call.args[0]: call.kwargs for call in journal.record.call_args_list}
+    assert 'regenerate_blocked' in events
+    assert events['regenerate_blocked']['details']['reason'] == 'worker_start_failed'
+    assert 'KIE API Key' in events['regenerate_blocked']['details']['error_message']
+    # A refused launch changes nothing: the pictures stay current, marked and not versioned.
+    assert [item.status for item in restored.items] == [RunItemStatus.SUCCEEDED] * 2
+    assert [item.output_path for item in restored.items] == before
+    assert all(item.review_mark == 'bad_generation' and not item.versions for item in restored.items)
+    assert not restored.running
+    assert 'KIE API Key' in resumed.run_queue.page.summary_label.text()

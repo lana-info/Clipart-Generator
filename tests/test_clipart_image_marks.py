@@ -251,7 +251,7 @@ def test_recreation_keeps_versions_through_controller_hook(tmp_path):
     support.controller = controller
     support.session = session
     started = []
-    support._start_prepared = lambda request: started.append(request) or request
+    support._start_worker = lambda _worker, request: started.append(request) or request
     support.reprocess_selected([0], {"remove_bg_provider": "local_chroma_key"})
     controller.before_replace_outputs.assert_called_once_with([0], "reprocess")
     assert started and started[0].mode == "mode2_process"

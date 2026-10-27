@@ -212,7 +212,11 @@ def _failure_reason(message: str) -> tuple[str, str]:
         return "invalid_image", "Файл не удалось прочитать как изображение."
     if "http" in lowered or "provider" in lowered or "сервис" in lowered:
         return "provider_error", "Внешний сервис завершил операцию с ошибкой."
-    return "processing_error", "Не удалось завершить обработку файла."
+    # An unrecognised error still names its cause: the bare stub hid it from the user (UP-14).
+    reason = _safe_technical_log_text(message).strip()[:200]
+    if not reason:
+        return "processing_error", "Не удалось завершить обработку файла."
+    return "processing_error", f"Не удалось завершить обработку файла: {reason}"
 
 
 def _provider_error_details(message: Any) -> dict[str, str]:
@@ -565,6 +569,7 @@ class RunQueueSession(QObject):
                 "regenerate_started": "Запущена перегенерация выбранных файлов.",
                 "regenerate_blocked": "Перегенерация не запущена.",
                 "reprocess_blocked": "Повторное вырезание не запущено.",
+                "retry_blocked": "Повтор не запущен.",
                 "stop_after_current_requested": "Запрошена остановка после текущего файла.",
             }
             details = {"mode": self.mode.value}
@@ -2795,7 +2800,7 @@ class RunQueueSupport:
     ) -> None:
         self.controller = controller
         self.mode = mode
-        self.session: RunQueueSession | None = None
+        self.session = None
         self._worker_generation = 0
         self._active_worker: Any | None = None
         self._structured_progress_generation: int | None = None
@@ -2812,6 +2817,21 @@ class RunQueueSupport:
         self.page.regenerate_requested.connect(self.regenerate_selected)
         self.page.finish_requested.connect(self.finish_workflow)
         self.page.membership_changed.connect(controller.shell.state_changed.emit)
+
+    @property
+    def session(self) -> RunQueueSession | None:
+        return self._session
+
+    @session.setter
+    def session(self, session: RunQueueSession | None) -> None:
+        # Modules rebuild a reopened project's run without the journal; every later
+        # re-creation in it then left no diagnostic events at all (UP-14).
+        if session is not None and getattr(session, "_diagnostic_journal", None) is None:
+            session._diagnostic_journal = self._diagnostic_journal()
+        self._session = session
+
+    def _diagnostic_journal(self) -> Any | None:
+        return getattr(getattr(self.controller, "shell", None), "diagnostic_journal", None)
 
     def finish_workflow(self) -> None:
         if self.session is None or self.session.running:
@@ -2837,11 +2857,7 @@ class RunQueueSupport:
         session = RunQueueSession(
             request,
             self.mode,
-            diagnostic_journal=getattr(
-                self.controller.shell,
-                "diagnostic_journal",
-                None,
-            ),
+            diagnostic_journal=self._diagnostic_journal(),
         )
         self.session = session
         self.page.set_session(session)
@@ -3067,12 +3083,8 @@ class RunQueueSupport:
             return self._blocked("regenerate", "not_confirmed")
         if self.session.preview_regenerate(indices) != preview:
             return self._blocked("regenerate", "request_changed")
-        if not self._keep_previous_outputs(self.session.regenerable_indices(indices), "regenerate"):
-            return None
-        request = self.session.prepare_regenerate(indices)
-        if request is None:
-            return self._blocked("regenerate", "not_prepared")
-        return self._start_prepared(request)
+        return self._launch("regenerate", preview, self.session.regenerable_indices(indices),
+                            lambda: self.session.prepare_regenerate(indices))
 
     def reprocess_selected(self, indices, overrides=None, *, confirm=None) -> Any | None:
         """Cut out again from saved raw pictures; confirm only when a stage is paid."""
@@ -3091,12 +3103,8 @@ class RunQueueSupport:
             return self._blocked("reprocess", "not_confirmed")
         if self.session.preview_reprocess(indices, overrides) != preview:
             return self._blocked("reprocess", "request_changed")
-        if not self._keep_previous_outputs(self.session.reprocessable_indices(indices), "reprocess"):
-            return None
-        request = self.session.prepare_reprocess(indices, overrides)
-        if request is None:
-            return None
-        return self._start_prepared(request)
+        return self._launch("reprocess", preview, self.session.reprocessable_indices(indices),
+                            lambda: self.session.prepare_reprocess(indices, overrides))
 
     def _keep_previous_outputs(self, indices, kind) -> bool:
         """Let the module keep the current pictures as versions before they are replaced."""
@@ -3107,9 +3115,20 @@ class RunQueueSupport:
             keep(list(indices), kind)
         except (OSError, ValueError) as error:
             self._blocked(kind, "keep_versions_failed", error)
+            self._show_refusal(kind, error)
             self.controller._error(str(error))
             return False
         return True
+
+    def _show_refusal(self, kind, error) -> None:
+        """Name the cause on the results page: the run never started, so no file shows it."""
+        page = getattr(self, "page", None)
+        if page is None:
+            return
+        titles = {"regenerate": "Перегенерация не начата", "reprocess": "Повторное вырезание не начато",
+                  "retry": "Повтор не начат"}
+        reason = _safe_technical_log_text(str(error).strip() or type(error).__name__)[:300]
+        page.summary_label.setText(f"{titles[kind]}: {reason}")
 
     def _blocked(self, kind, reason, error=None) -> None:
         """Journal why a re-creation did not start: nothing else records a refusal before the run."""
@@ -3117,16 +3136,46 @@ class RunQueueSupport:
             self.session._event(f"{kind}_blocked", reason=reason,
                                 **({"error_message": _safe_technical_error_details(error)[0]} if error is not None else {}))
 
-    def _start_prepared(self, request) -> Any | None:
+    def _launch(self, kind, request, indices, prepare) -> Any | None:
+        """Create the worker before the pictures change: a refused launch leaves them as they were.
+
+        Preparing first cleared the chosen results, so any refusal (settings, licence,
+        project save) turned every one of them into a failed file with a stub (UP-14).
+        """
+        worker = self._create_worker(kind, request)
+        if worker is None:
+            return None
+        if indices and not self._keep_previous_outputs(indices, kind):
+            self._discard_worker(worker)
+            return None
+        prepared = prepare()
+        if prepared != request:
+            self._discard_worker(worker)
+            # prepare() already reset the items when it returned a request
+            if prepared is not None:
+                self.session.handle_fatal_error("Запрос изменился во время запуска")
+            return self._blocked(kind, "not_prepared")
+        return self._start_worker(worker, prepared)
+
+    def _create_worker(self, kind, request) -> Any | None:
         try:
             create_worker = getattr(self.controller, "create_worker_for_request", None)
             if not callable(create_worker):
                 raise RunQueueError("Core retry service is unavailable")
-            worker = create_worker(request)
+            return create_worker(request)
         except Exception as error:
-            self._blocked("regenerate", "worker_start_failed", error)
-            self.controller._error(str(error))
+            self._blocked(kind, "worker_start_failed", error)
+            self._show_refusal(kind, error)
             return None
+
+    @staticmethod
+    def _discard_worker(worker) -> None:
+        # Destroying the never-started handle releases its registration and engine lease.
+        delete = getattr(worker, "deleteLater", None)
+        if callable(delete):
+            delete()
+
+    def _start_worker(self, worker, request) -> Any | None:
         self.controller.worker = worker
         self.connect_worker(worker)
         worker.start()
@@ -3156,20 +3205,7 @@ class RunQueueSupport:
                 return None
             if self.session.preview_retry() != preview:
                 return None
-        request = self.session.prepare_retry()
+        request = self.session.preview_retry()
         if request is None:
             return None
-        try:
-            create_worker = getattr(self.controller, "create_worker_for_request", None)
-            if not callable(create_worker):
-                raise RunQueueError("Core retry service is unavailable")
-            worker = create_worker(request)
-        except Exception as error:
-            self._blocked("regenerate", "worker_start_failed", error)
-            self.controller._error(str(error))
-            return None
-        self.controller.worker = worker
-        self.connect_worker(worker)
-        worker.start()
-        self.controller.started.emit(request)
-        return request
+        return self._launch("retry", request, (), self.session.prepare_retry)

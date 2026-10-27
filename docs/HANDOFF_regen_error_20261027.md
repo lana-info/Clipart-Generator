@@ -1,5 +1,7 @@
 # Поиск бага: ошибка при перегенерации и обработке (Auto Clipart), 2026-10-27
 
+> Статус 2026-10-27: причина найдена и исправлена в ветке `fix/regen-processing-error-journal` — см. `docs/ERRORS.md` {#regen-restored-session-journal-20261027}. Документ устарел, оставлен как след поиска.
+
 Рабочий каталог: `ui-release-polish-20261024-worktree`, ветка `fix/regen-blocked-journal-buttons` (от develop/3.2, версия 3.2.45). Русский язык ответов; правила проекта — `AGENTS.md`, ошибки пишутся только в `docs/ERRORS.md`.
 
 ## Симптом (владелец, Windows 11, Studio 3.2.45)
