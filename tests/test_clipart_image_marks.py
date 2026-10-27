@@ -803,3 +803,42 @@ def test_rating_strip_is_a_panel_in_the_panels_menu(tmp_path):
     assert dock.isVisible()
     assert dock.geometry().bottom() < editor.panel_docks["preview"].geometry().bottom()  # above the thumbnails
     editor.deleteLater()
+
+
+ORIGINAL_WITH_KEY = ("A cute bear. Their open gaps show the same solid #00FF00 background as outside the subject. "
+                     "Clean edges.")
+
+
+def _prompt_dialog(prompt, answer):
+    from studio_clipart_review_ui import PromptDialog
+    dialog = PromptDialog(None, path="", title="t", note="", prompt=prompt, original=ORIGINAL_WITH_KEY)
+    asked = []
+    dialog.ask_background = lambda sentences: asked.append(list(sentences)) or answer
+    return dialog, asked
+
+
+def test_prompt_without_the_key_colour_phrase_asks_and_can_restore_it(tmp_path):
+    dialog, asked = _prompt_dialog("A cute bear in a hat. Clean edges.", "add")
+    dialog._save()
+    assert asked and "#00FF00" in asked[0][0]
+    assert "#00FF00" in dialog.prompt() and dialog.result() == dialog.DialogCode.Accepted
+
+
+def test_prompt_can_be_saved_without_the_phrase_or_sent_back_to_editing(tmp_path):
+    dialog, _ = _prompt_dialog("A cute bear in a hat.", "keep")
+    dialog._save()
+    assert "#00FF00" not in dialog.prompt() and dialog.result() == dialog.DialogCode.Accepted
+    dialog, _ = _prompt_dialog("A cute bear in a hat.", "back")
+    dialog._save()
+    assert dialog.result() != dialog.DialogCode.Accepted
+
+
+def test_prompt_that_keeps_the_phrase_or_never_had_one_does_not_ask(tmp_path):
+    dialog, asked = _prompt_dialog(ORIGINAL_WITH_KEY + " More leaves.", "back")
+    dialog._save()
+    assert not asked and dialog.result() == dialog.DialogCode.Accepted
+    from studio_clipart_review_ui import PromptDialog
+    plain = PromptDialog(None, path="", title="t", note="", prompt="new", original="no colour here")
+    plain.ask_background = lambda sentences: pytest.fail("must not ask")
+    plain._save()
+    assert plain.result() == plain.DialogCode.Accepted
