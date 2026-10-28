@@ -50,6 +50,7 @@ ensure_gui_standard_streams()
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from background_mask import has_usable_alpha
 from alpha_cleanup import DELIVERY_EDGE_GAIN, HARD_EDGE_MAX_WIDTH, clean_alpha, remove_key_residue
+from chroma_matting import matte_edges
 from chroma_key import (
     KEY_COLORS,
     ChromaKeyAmbiguousError,
@@ -2711,6 +2712,15 @@ class WorkerThread(QThread):
     def _uses_local_white_background_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "local_white_background"
 
+    def _matte_chroma_edges(self, source_image, result, key_color):
+        """Re-matte the cut-out edges (soft alpha, key-free colour); the engine result stays on any failure."""
+        try:
+            matted = matte_edges(source_image, result, key_color)
+        except Exception:
+            self.progress.emit("  Матирование края пропущено.")
+            return result, False
+        return matted, matted is not result
+
     def _chroma_engine(self):
         if getattr(self, "_processing_engine", None) is None:
             from chroma_profile import PROFILE_VERSION
@@ -2837,6 +2847,7 @@ class WorkerThread(QThread):
         self._item_context.preserve_surface = preserve_surface
         self._ensure_running()
         self._item_context.chroma_receipt = None
+        self._item_context.edge_matted = False
         self._item_context.metadata_cleaned = False
         self._item_context.manual_transparency_required = False
         selected_chroma_key_color = str(chroma_key_color or "").strip().lower()
@@ -3117,7 +3128,15 @@ class WorkerThread(QThread):
                                     **({"subject_profile": self.chroma_subject_profile}
                                        if self.chroma_subject_profile != "opaque_clipart" else {}),
                                 )
+                                result, edge_matted = self._matte_chroma_edges(
+                                    source_image, result, selected_chroma_key_color
+                                )
                                 working_alpha = result.info.pop("vibix:precleanup_alpha", None)
+                                if edge_matted:
+                                    # Matted edges carry their own soft alpha and key-free colour; the
+                                    # working-matte contract and the haze clean-up would only cut them again.
+                                    working_alpha = None
+                                    self._item_context.edge_matted = True
                                 if (working_alpha is not None and self.upscale_after
                                         and self.upscale_after_provider == "local_realesrgan"):
                                     if (not isinstance(working_alpha, Image.Image)
@@ -3148,7 +3167,8 @@ class WorkerThread(QThread):
                                         chroma_delivery_alpha = cleaned.getchannel("A")
                                     except Exception:
                                         self.progress.emit("  Зачистка прозрачности пропущена.")
-                                if chroma_working_alpha is None and not self._uses_local_upscale_after():
+                                if (chroma_working_alpha is None and not edge_matted
+                                        and not self._uses_local_upscale_after()):
                                     # Local Real-ESRGAN after the cut-out takes this exact alpha as its
                                     # input (byte-exact contract), so it is left alone. Otherwise drop
                                     # faint haze and debris and tighten smooth edges; never fail the cut-out.
@@ -3418,6 +3438,7 @@ class WorkerThread(QThread):
                         raise ValueError("Очистка края после апскейла вернула пустое изображение")
                 self._ensure_running()
             if (preserve_alpha and self._uses_local_upscale_after()
+                    and not getattr(self._item_context, "edge_matted", False)
                     and not self._item_context.manual_transparency_required):
                 # The upscale stretches a smooth alpha edge by its factor; tighten it again (owner 2026-10-28).
                 # Fur and other wide soft bands stay as they are; never fails the stage.
@@ -4301,8 +4322,10 @@ class WorkerThread(QThread):
             model_path = os.path.join(models_dir, model_name + suffix)
             if not os.path.isfile(model_path):
                 raise ValueError(f"Не найдена модель Real-ESRGAN: {model_path}")
+        edge_matted = bool(getattr(self._item_context, "edge_matted", False))
         actual_input_path = input_path
         alpha_channel = None
+        upscaled_alpha = None
         temp_dir = None
         try:
             with Image.open(input_path) as source_img:
@@ -4311,27 +4334,39 @@ class WorkerThread(QThread):
                     alpha_channel = source_rgba.getchannel("A")
                     temp_dir = tempfile.TemporaryDirectory()
                     actual_input_path = os.path.join(temp_dir.name, "realesrgan_rgb_input.png")
-                    self._prepare_upscale_rgb(source_rgba).save(actual_input_path, format="PNG")
-            command = [
-                exe_path,
-                "-i",
-                actual_input_path,
-                "-o",
-                output_path,
-                "-n",
-                model_name,
-                "-s",
-                str(scale),
-            ]
-            process = subprocess.Popen(
-                command,
-                cwd=os.path.dirname(exe_path),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                creationflags=hidden_window_creation_flags(),
-            )
-            deadline = time.monotonic() + LOCAL_REALESRGAN_TIMEOUT_SECONDS
+                    # Matted edges already carry the subject colour under the rim and transparency.
+                    rgb_input = (source_rgba.convert("RGB") if edge_matted
+                                 else self._prepare_upscale_rgb(source_rgba))
+                    rgb_input.save(actual_input_path, format="PNG")
+            self._execute_realesrgan(exe_path, actual_input_path, output_path, model_name, scale)
+            if edge_matted and alpha_channel is not None and any(alpha_channel.histogram()[1:255]):
+                # A soft matte stretched bilinearly copies the source pixel grid; the same network that
+                # sharpens the colour draws the hair and leaf edges of the matte just as sharply.
+                mask_input = os.path.join(temp_dir.name, "realesrgan_alpha_input.png")
+                mask_output = os.path.join(temp_dir.name, "realesrgan_alpha_output.png")
+                Image.merge("RGB", (alpha_channel,) * 3).save(mask_input, format="PNG")
+                self._execute_realesrgan(exe_path, mask_input, mask_output, model_name, scale)
+                with Image.open(mask_output) as mask_result:
+                    upscaled_alpha = mask_result.convert("L")
+        finally:
+            if temp_dir is not None:
+                temp_dir.cleanup()
+        if alpha_channel is not None:
+            self._restore_upscaled_alpha(output_path, alpha_channel, upscaled_alpha)
+        return output_path
+
+    def _execute_realesrgan(self, exe_path, input_path, output_path, model_name, scale):
+        command = [exe_path, "-i", input_path, "-o", output_path, "-n", model_name, "-s", str(scale)]
+        process = subprocess.Popen(
+            command,
+            cwd=os.path.dirname(exe_path),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            creationflags=hidden_window_creation_flags(),
+        )
+        deadline = time.monotonic() + LOCAL_REALESRGAN_TIMEOUT_SECONDS
+        try:
             while True:
                 self._ensure_running()
                 remaining = deadline - time.monotonic()
@@ -4345,7 +4380,7 @@ class WorkerThread(QThread):
                 except subprocess.TimeoutExpired:
                     continue
         except (ProcessingCancelled, TimeoutError):
-            if "process" in locals() and process.poll() is None:
+            if process.poll() is None:
                 process.terminate()
                 try:
                     process.communicate(timeout=2)
@@ -4353,9 +4388,6 @@ class WorkerThread(QThread):
                     process.kill()
                     process.communicate()
             raise
-        finally:
-            if temp_dir is not None:
-                temp_dir.cleanup()
         if process.returncode != 0:
             stderr = (stderr or "").strip()
             stdout = (stdout or "").strip()
@@ -4363,9 +4395,6 @@ class WorkerThread(QThread):
             raise RuntimeError(f"Local Real-ESRGAN failed: {details}")
         if not os.path.isfile(output_path):
             raise RuntimeError(f"Local Real-ESRGAN did not create output file: {output_path}")
-        if alpha_channel is not None:
-            self._restore_upscaled_alpha(output_path, alpha_channel)
-        return output_path
 
     @staticmethod
     def _prepare_upscale_rgb(source_rgba):
@@ -4404,7 +4433,7 @@ class WorkerThread(QThread):
         rgb[refill] = palette[labels[refill]]
         return Image.fromarray(rgb, mode="RGB")
 
-    def _restore_upscaled_alpha(self, output_path, alpha_channel):
+    def _restore_upscaled_alpha(self, output_path, alpha_channel, model_alpha=None):
         with Image.open(output_path) as result_img:
             result = result_img.convert("RGBA")
             alpha_histogram = alpha_channel.histogram()
@@ -4412,8 +4441,23 @@ class WorkerThread(QThread):
             # A nonnegative interpolation kernel cannot create detached alpha rings.
             resample = Image.Resampling.BILINEAR if has_soft_alpha else Image.Resampling.NEAREST
             upscaled_alpha = alpha_channel.resize(result.size, resample)
+            if model_alpha is not None and model_alpha.size == result.size:
+                upscaled_alpha = self._bound_model_alpha(model_alpha, upscaled_alpha, result.width // alpha_channel.width)
             result.putalpha(upscaled_alpha)
             self._save_image_object_as_png(result, output_path)
+
+    @staticmethod
+    def _bound_model_alpha(model_alpha, plain_alpha, scale):
+        """Network-drawn matte, kept inside the bilinear matte's reach: no detached rings, solid stays solid."""
+        import cv2
+        import numpy as np
+
+        plain = np.asarray(plain_alpha)
+        drawn = np.asarray(model_alpha).copy()
+        reach = cv2.dilate((plain > 0).astype(np.uint8), np.ones((2 * scale + 1,) * 2, np.uint8)) > 0
+        drawn[~reach] = 0
+        drawn[cv2.erode((plain == 255).astype(np.uint8), np.ones((2 * scale + 1,) * 2, np.uint8)) > 0] = 255
+        return Image.fromarray(drawn, mode="L")
 
     def _apply_unsharp_mask_file(self, input_path, output_path):
         with Image.open(input_path) as img:

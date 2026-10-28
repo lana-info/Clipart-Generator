@@ -8,6 +8,12 @@ from alpha_cleanup import DELIVERY_EDGE_GAIN, HARD_EDGE_MAX_WIDTH, clean_alpha
 from studio_processing_api import ProcessingEngine
 
 
+@pytest.fixture(autouse=True)
+def without_edge_matting(monkeypatch):
+    """These tests pin the engine-cutout contract that applies when edge matting does not."""
+    monkeypatch.setattr(main, 'matte_edges', lambda _source, cutout, _key, **_kwargs: cutout)
+
+
 def forbid_providers(worker):
     def reject(*_args, **_kwargs):
         raise AssertionError('Network/provider call forbidden in this offline test')
