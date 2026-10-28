@@ -77,3 +77,37 @@ def test_hidden_rgb_is_cleared_only_when_asked():
     source = Image.fromarray(pixels, "RGBA")
     assert tuple(np.array(clean_alpha(source))[2, 2]) == (80, 60, 190, 0)
     assert tuple(np.array(clean_alpha(source, clear_hidden_rgb=True))[2, 2]) == (0, 0, 0, 0)
+
+
+def test_remove_key_residue_drops_blue_slivers_and_keeps_subject():
+    from alpha_cleanup import remove_key_residue
+    image = Image.new("RGBA", (20, 20), (200, 160, 90, 255))
+    for y in range(5, 15):
+        image.putpixel((10, y), (10, 20, 150, 255))
+        image.putpixel((11, y), (0, 0, 0, 0))     # the sliver lines the cleared gap
+    result = remove_key_residue(image, "blue")
+    assert result.getpixel((10, 8))[3] == 0
+    assert result.getpixel((2, 2)) == (200, 160, 90, 255)
+    assert remove_key_residue(image, "") is image
+
+
+def test_remove_key_residue_keeps_wide_key_like_subject_areas():
+    from alpha_cleanup import remove_key_residue
+    for key, color in (("blue", (20, 30, 120, 255)), ("green", (34, 139, 34, 255)), ("red", (200, 20, 20, 255))):
+        image = Image.new("RGBA", (30, 30), (0, 0, 0, 0))
+        for y in range(8, 17):
+            for x in range(8, 17):
+                image.putpixel((x, y), color)
+        result = remove_key_residue(image, key)
+        assert result.getpixel((12, 12))[3] == 255, key
+        assert result.getpixel((8, 8))[3] == 255, key
+
+
+def test_delivery_gain_keeps_the_soft_transition_but_still_clears_haze():
+    from alpha_cleanup import DELIVERY_EDGE_GAIN
+    alpha = _disc(ramp=6.0)
+    soft = clean_alpha_array(alpha, gain=DELIVERY_EDGE_GAIN)
+    steep = clean_alpha_array(alpha)
+    band = lambda a: int(((a > 0.1) & (a < 0.9)).sum())
+    assert band(soft) > band(steep) * 1.5
+    assert band(soft) >= band(alpha) * 0.9

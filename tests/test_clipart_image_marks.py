@@ -8,7 +8,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PIL import Image
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QSizePolicy
 
 from studio_auto_clipart_state import AutoClipartStateExtension
 from studio_clipart_versions import (
@@ -1091,3 +1091,16 @@ def test_png_check_cutout_button_is_only_for_cutout_defects_and_starts_one_pictu
     assert flow.run_queue.reprocess_selected.call_args.args[0] == [1]
     assert review.cutout_path(tmp_path / "unknown.png") is None
     editor.deleteLater()
+
+
+def test_size_and_rating_panels_keep_minimal_height(tmp_path):
+    review, editor, _session, _flow = open_review(tmp_path)
+    editor.resize(1400, 1000)
+    editor.show()
+    QApplication.processEvents()
+    for key in ("size", "rating"):
+        dock = editor.panel_docks[key]
+        content = dock.widget()
+        assert content.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Fixed
+        assert dock.height() <= content.sizeHint().height() + dock.titleBarWidget().sizeHint().height() + 12
+    editor.close()

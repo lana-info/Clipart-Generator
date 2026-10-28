@@ -49,7 +49,7 @@ ensure_gui_standard_streams()
 
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from background_mask import has_usable_alpha
-from alpha_cleanup import HARD_EDGE_MAX_WIDTH, clean_alpha
+from alpha_cleanup import DELIVERY_EDGE_GAIN, HARD_EDGE_MAX_WIDTH, clean_alpha, remove_key_residue
 from chroma_key import (
     KEY_COLORS,
     ChromaKeyAmbiguousError,
@@ -2587,12 +2587,54 @@ class WorkerThread(QThread):
             owned_run = Path(str(self._run_raw_dir or "")).resolve()
             if (not retain_generated_sources
                     and Path(raw_dir).resolve() == owned_run and owned_run.is_dir()):
-                shutil.rmtree(owned_run)
-                if transient.is_dir():
-                    transient.rmdir()
+                # The raw generated picture (with its sidecar) stays: «Убрать фон» and
+                # re-cutting need it after a finished or regenerated run.
+                raw_kept = re.compile(
+                    rf"^gen_\d{{3,}}_{re.escape(self.run_stamp)}\.png(\.generation\.json)?$",
+                    re.IGNORECASE,
+                )
+                kept = [entry for entry in owned_run.iterdir()
+                        if raw_kept.fullmatch(entry.name) and entry.is_file()]
+                if kept:
+                    for entry in owned_run.iterdir():
+                        if entry in kept:
+                            continue
+                        if entry.is_dir() and not entry.is_symlink():
+                            shutil.rmtree(entry)
+                        else:
+                            entry.unlink()
+                else:
+                    shutil.rmtree(owned_run)
+                    if transient.is_dir():
+                        transient.rmdir()
+            self._prune_stale_raw_sources(transient, owned_run)
         except OSError:
             # Results are already published; stale transient data can be retried
             # on the next terminal run without affecting user files.
+            pass
+
+    RAW_SOURCE_MAX_AGE_SECONDS = 14 * 24 * 3600
+
+    @classmethod
+    def _prune_stale_raw_sources(cls, transient, current_run):
+        """Delete old runs under .run that hold nothing but kept raw generations."""
+        if not transient.is_dir():
+            return
+        cutoff = time.time() - cls.RAW_SOURCE_MAX_AGE_SECONDS
+        raw_only = re.compile(r"^gen_\d{3,}_.+\.png(\.generation\.json)?$", re.IGNORECASE)
+        for run_dir in transient.iterdir():
+            try:
+                if (run_dir.resolve() == current_run or run_dir.is_symlink() or not run_dir.is_dir()
+                        or run_dir.stat().st_mtime > cutoff):
+                    continue
+                entries = list(run_dir.iterdir())
+                if all(e.is_file() and not e.is_symlink() and raw_only.fullmatch(e.name) for e in entries):
+                    shutil.rmtree(run_dir)
+            except OSError:
+                continue
+        try:
+            transient.rmdir()
+        except OSError:
             pass
 
     def _uses_local_upscale(self):
@@ -3015,7 +3057,7 @@ class WorkerThread(QThread):
                         # The model's own matte carries faint haze and debris; drop them and
                         # tighten smooth edges. Never fails the stage.
                         try:
-                            cleaned = clean_alpha(preserved, clear_hidden_rgb=True)
+                            cleaned = clean_alpha(preserved, clear_hidden_rgb=True, gain=DELIVERY_EDGE_GAIN)
                             if cleaned.getchannel("A").getextrema()[1] > 0:
                                 cleaned.info.update(preserved.info)
                                 preserved = cleaned
@@ -3100,7 +3142,7 @@ class WorkerThread(QThread):
                                     # The delivery alpha is published after the upscale, so its haze is dropped here
                                     # (owner 2026-10-28); the working matte for the upscaler stays as it is.
                                     try:
-                                        cleaned = clean_alpha(result)
+                                        cleaned = clean_alpha(remove_key_residue(result, selected_chroma_key_color), gain=DELIVERY_EDGE_GAIN)
                                         cleaned.info.update(result.info)
                                         result = cleaned
                                         chroma_delivery_alpha = cleaned.getchannel("A")
@@ -3111,7 +3153,7 @@ class WorkerThread(QThread):
                                     # input (byte-exact contract), so it is left alone. Otherwise drop
                                     # faint haze and debris and tighten smooth edges; never fail the cut-out.
                                     try:
-                                        cleaned = clean_alpha(result)
+                                        cleaned = clean_alpha(remove_key_residue(result, selected_chroma_key_color), gain=DELIVERY_EDGE_GAIN)
                                         cleaned.info.update(result.info)
                                         result = cleaned
                                     except Exception:

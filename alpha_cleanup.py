@@ -5,8 +5,9 @@ Three independent steps, applied only to the alpha channel (RGB is never touched
 1. Haze: weak alpha (below ``haze_floor``) farther than ``haze_distance`` px from
    the solid subject is set to zero, together with tiny weak specks.
 2. Smooth edges: where the transition band is narrow (hard-edged objects such as
-   leaves, ribbons, feet) it is steepened around 50 % so it spans about 1-2 px.
-   Wide bands (fur, down, soft pom-poms) are left exactly as they are.
+   leaves, ribbons, feet) it is steepened around 50 % so it spans about 1-2 px
+   (``gain`` 2.0; ``gain`` 1.0 switches this off and keeps the soft transition, which the
+   delivery cut uses). Wide bands (fur, down, soft pom-poms) are left exactly as they are.
 3. Opaque ceiling: alpha that is practically opaque becomes 255.
 """
 from __future__ import annotations
@@ -22,6 +23,7 @@ MIN_ISLAND_PIXELS = 64     # detached solid islands smaller than this (or the fr
 MIN_ISLAND_FRACTION = 1e-4 # of the canvas area
 HARD_EDGE_MAX_WIDTH = 9.0  # px, 2 %-98 % band width up to which an edge is "smooth"
 EDGE_GAIN = 2.0            # steepening around 50 % alpha
+DELIVERY_EDGE_GAIN = 1.0   # the pipeline keeps the soft transition of fur and edges (owner 2026-10-28)
 OPAQUE_CEILING = 0.985
 
 
@@ -98,3 +100,47 @@ def clean_alpha(image: Image.Image, *, clear_hidden_rgb: bool = False, **options
     if clear_hidden_rgb:
         pixels[pixels[..., 3] == 0] = 0
     return Image.fromarray(pixels, mode="RGBA")
+
+
+KEY_CHANNEL = {"red": 0, "green": 1, "blue": 2}
+KEY_RESIDUE_DOMINANCE = 40   # how far the key channel must lead the others to count as leftover background
+KEY_RESIDUE_PURITY = 0.4     # strongest other channel / key channel at most this for leftover background
+KEY_RESIDUE_MAX_HALF_WIDTH = 2.5  # leftover slivers are thin; a wider patch of key-like colour is subject
+
+
+def remove_key_residue(image: Image.Image, key_color: str) -> Image.Image:
+    """Drop thin slivers of leftover chroma-key background (e.g. dark-blue lines between ribbon strands).
+
+    Only thin runs (at most ~5 px wide) of nearly pure key hue that touch transparency are removed.
+    Wider key-like areas (a blue flower, green leaves under a green key) are subject and stay. Only
+    alpha changes.
+    """
+    channel = KEY_CHANNEL.get(str(key_color or "").strip().lower())
+    if channel is None:
+        return image
+    rgba = image.convert("RGBA")
+    pixels = np.array(rgba)
+    rgb = pixels[..., :3].astype(np.int16)
+    others = np.delete(rgb, channel, axis=2).max(axis=2)
+    lead = rgb[..., channel] - others
+    visible = pixels[..., 3] > 0
+    candidate = visible & (lead >= KEY_RESIDUE_DOMINANCE) & (others <= KEY_RESIDUE_PURITY * rgb[..., channel])
+    if not candidate.any():
+        return image
+    mask = candidate.astype(np.uint8)
+    thickness = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
+    count, labels = cv2.connectedComponents(mask, connectivity=8)
+    widest = np.zeros(count, np.float32)
+    np.maximum.at(widest, labels.ravel(), thickness.ravel())
+    near_clear = cv2.dilate((~visible).astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+    touches = np.zeros(count, bool)
+    touches[np.unique(labels[candidate & near_clear])] = True
+    thin = (widest <= KEY_RESIDUE_MAX_HALF_WIDTH) & touches
+    thin[0] = False
+    drop = candidate & thin[labels]
+    if not drop.any():
+        return image
+    pixels[drop, 3] = 0
+    result = Image.fromarray(pixels, mode="RGBA")
+    result.info.update(image.info)
+    return result

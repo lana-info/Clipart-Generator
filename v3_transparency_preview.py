@@ -2556,7 +2556,6 @@ class ClipartTransparencyEditorPage(QWidget):
         size_layout.setSpacing(6)
         # «Размеры» is the zoom panel (owner 2026-10-27); the brush diameter lives under «Кисть» again.
         size_layout.addWidget(self.zoom_bar)
-        size_layout.addStretch(1)
         brush_layout.addWidget(self._small_label("Диаметр кисти"))
         diameter_row = QHBoxLayout()
         self.brush_diameter = DEFAULT_BRUSH_DIAMETER
@@ -2907,6 +2906,8 @@ class ClipartTransparencyEditorPage(QWidget):
                          | QDockWidget.DockWidgetFeature.DockWidgetClosable)
         dock.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
         dock.setTitleBarWidget(self._panel_title_bar("Оценка", dock))
+        # Minimal height (owner 2026-10-28): the panel never grows taller than its content.
+        widget.setSizePolicy(widget.sizePolicy().horizontalPolicy(), QSizePolicy.Policy.Fixed)
         dock.setWidget(widget)
         # Stacked above the thumbnails, where the strip used to sit under the picture.
         preview = self.panel_docks["preview"]
@@ -3225,6 +3226,8 @@ class ClipartTransparencyEditorPage(QWidget):
                                  if strip_panel else
                                  Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
             dock.setTitleBarWidget(self._panel_title_bar(title, dock))
+            if key == "size":  # minimal height: the panel never grows taller than its content
+                widget.setSizePolicy(widget.sizePolicy().horizontalPolicy(), QSizePolicy.Policy.Fixed)
             dock.setWidget(widget)
             if not strip_panel:
                 dock.setMinimumWidth(240)

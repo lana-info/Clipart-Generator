@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from chroma_key import KEY_COLORS
+from chroma_key import KEY_COLORS, chroma_key_prompt_block
 from studio_project_documents import PreparedProjectDocument
 from studio_workflow_identity import AUTO_CLIPART_MODULE_ID, workflow_state_scope
 from studio_project_state_extensions import (
@@ -38,6 +38,19 @@ MAX_TEXT_LENGTH = 20000
 
 _KEY_HEX = {"blue": "#0000FF", "green": "#00FF00", "red": "#FF0000"}
 BACKGROUND_RULE = "Background rule:"
+
+
+def with_chroma_block(prompt: str, chroma_key_color: str, result_kind: str = "") -> str:
+    """Restore the chroma-key block on a prompt that lost it (a text pasted or typed over the original).
+
+    The block is part of the stored prompt, so an edited prompt without it was generated without the flat-colour,
+    opaque-subject and edge rules (owner 2026-10-28). Auto Clipart pictures also get the silhouette standard.
+    """
+    key = str(chroma_key_color or "").lower()
+    if key not in _KEY_HEX or "chroma-key background" in prompt:
+        return prompt
+    block = chroma_key_prompt_block(key, edge_quality=str(result_kind or "").lower() == "clipart")
+    return prompt.rstrip() + "\n" + block
 
 
 def with_background_rule(prompt: str, chroma_key_color: str) -> str:

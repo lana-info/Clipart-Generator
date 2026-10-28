@@ -45,7 +45,7 @@ from provider_diagnostics import build_provider_event
 from provider_error_messages import friendly_provider_error
 from fal_model_catalog import is_fal_generation_model
 from v3_provider_registry import normalize_fal_upscale_factor
-from v3_project_state import ProjectMode, ProjectState, with_background_rule
+from v3_project_state import ProjectMode, ProjectState, with_background_rule, with_chroma_block
 from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
 from run_lifecycle import RunLifecycle
 from v3_transparency_preview import ClipartTransparencyPreview
@@ -1331,7 +1331,11 @@ class RunQueueSession(QObject):
                 self.request,
                 generated_prompts=[
                     {
-                        "prompt": str(self.items[index].payload.get("prompt") or ""),
+                        "prompt": with_chroma_block(
+                            str(self.items[index].payload.get("prompt") or ""),
+                            str(self.items[index].payload.get("chroma_key_color") or ""),
+                            str(self.items[index].payload.get("result_kind") or ""),
+                        ),
                         "references": list(
                             self.items[index].payload.get("references") or []
                         ),
@@ -1382,8 +1386,10 @@ class RunQueueSession(QObject):
         for index in chosen:
             payload = self.items[index].payload
             entries.append({
-                "prompt": with_background_rule(str(payload.get("prompt") or ""),
-                                               str(payload.get("chroma_key_color") or "")),
+                "prompt": with_background_rule(
+                    with_chroma_block(str(payload.get("prompt") or ""), str(payload.get("chroma_key_color") or ""),
+                                      str(payload.get("result_kind") or "")),
+                    str(payload.get("chroma_key_color") or "")),
                 "references": list(payload.get("references") or []),
                 "chroma_key_color": str(payload.get("chroma_key_color") or ""),
                 "result_kind": payload.get("result_kind", "legacy"),
