@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QProgressBar,
     QScrollArea,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -1942,6 +1943,7 @@ class RunResultsPage(QWidget):
         self.results_extension = results_extension
         # Buttons a module does not want in its toolbar; the refresh logic never shows these.
         self.suppressed_buttons: set[str] = set()
+        self.force_check_primary = False  # the check button is always the main one (the Studio clipart flow)
         self.primary_elsewhere = None  # callable: another button of the page is the main action right now
         self.session: RunQueueSession | None = None
         self._completion_dialog: RunCompletionDialog | None = None
@@ -2158,6 +2160,11 @@ class RunResultsPage(QWidget):
             self.technical_note,
         ):
             self.card.add_widget(widget)
+        # Owner 2026-10-28: the list takes all the height up to the buttons (no empty band under it on a big window).
+        self.card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.card.content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.card._layout.setStretchFactor(self.card.content, 1)
+        self.card.content_layout.setStretchFactor(self.queue, 1)
         self.action_bar = actions
         page_layout.addWidget(self.action_bar, 0)
         self.refresh_from_state()
@@ -2557,13 +2564,15 @@ class RunResultsPage(QWidget):
         # shown; "Открыть папку" is then an ordinary one.
         # One main button by situation: unfinished work first, then the transparency check.
         elsewhere = bool(self.primary_elsewhere and self.primary_elsewhere())
-        retry_main = self.retry_button.isVisibleTo(self) and not elsewhere
-        check_main = self.check_transparency_button.isVisibleTo(self) and not retry_main and not elsewhere
+        retry_main = self.retry_button.isVisibleTo(self) and not elsewhere and not self.force_check_primary
+        check_main = self.check_transparency_button.isVisibleTo(self) and (
+            self.force_check_primary or (not retry_main and not elsewhere))
         self.retry_button.set_variant(ButtonVariant.PRIMARY if retry_main else ButtonVariant.SECONDARY)
         self.check_transparency_button.set_variant(
             ButtonVariant.PRIMARY if check_main else ButtonVariant.SECONDARY)
         self.open_folder_button.set_variant(
-            ButtonVariant.SECONDARY if retry_main or check_main or elsewhere else ButtonVariant.PRIMARY)
+            ButtonVariant.SECONDARY if retry_main or check_main or elsewhere or self.force_check_primary
+            else ButtonVariant.PRIMARY)
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),

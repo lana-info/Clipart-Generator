@@ -88,7 +88,7 @@ def test_actual_editor_save_rechecks_blocked_and_accepted_export(tmp_path, monke
         QApplication.processEvents()
     refresh()
     state.clipart.export_membership = controller.export_panel.saved_membership
-    assert not controller.export_panel.export_button.isEnabled()
+    assert controller.export_panel.export_button.isEnabled()  # a blocking automatic finding no longer disables export (owner 2026-10-28)
 
     def save_edit(dialog):
         editor = dialog.findChild(ClipartTransparencyEditorPage)
@@ -116,7 +116,7 @@ def test_actual_editor_save_rechecks_blocked_and_accepted_export(tmp_path, monke
     refresh()
     assert inspect_alpha_png(output).status == "block"
     assert controller.export_panel.quality_reports[str(output)].status == "block"
-    assert not controller.export_panel.export_button.isEnabled()
+    assert controller.export_panel.export_button.isEnabled()  # the report is "block", the export stays open
     export_page.close()
     page.close()
 

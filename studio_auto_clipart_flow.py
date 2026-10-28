@@ -369,11 +369,8 @@ class AutoClipartFlowController(ClipartFlowController):
         self.run_queue.page.results_extension.export_action_label = ""
         # Redo of chosen pictures goes through «Пересоздать помеченные» and the PNG check; the problem list only crowds the row.
         self.run_queue.page.suppressed_buttons = {'regenerate', 'problem_files'}
-        # One main button: «Пересоздать помеченные» while something is marked; the retry button then steps back.
-        from studio_clipart_review_ui import mark_counts
-        self.run_queue.page.primary_elsewhere = lambda: bool(
-            self.run_queue.session is not None and (lambda c: c['bad_generation'] + c['bad_cutout'])(
-                mark_counts(self.run_queue.session.items)))
+        # Owner 2026-10-28: the PNG check is always the main button; redo buttons are in the first row.
+        self.run_queue.page.force_check_primary = True
         # Here the toolbar button opens the PNG check before export (from it a file can be opened in
         # the transparency editor); the shared button keeps its editor-only meaning in other modules.
         check_button = self.run_queue.page.check_transparency_button
@@ -816,9 +813,15 @@ class AutoClipartFlowController(ClipartFlowController):
 
     def _cutout_from_png_check(self, path):
         """Free local re-cutout of one picture; its progress is shown on the results step, then back to the picture."""
-        if self.review is not None and self.review.cutout_path(path) is not None:
+        if self.review is None:
+            return
+        if self.review.cutout_path(path) is not None:
             self._regen_return = [str(path), False]
             self._select_step(StepId.RESULTS)
+            return
+        # Owner 2026-10-28: a refusal used to be silent («ничего не произошло»); say why.
+        reason = self.review.cutout_unavailable_reason(path) or "Запуск не начался. Повторите позже."
+        QMessageBox.information(self.brief, "Убрать фон", reason)
 
     def _return_to_regenerated_png(self):
         """Owner 2026-10-27: after «Перегенерировать» on the PNG check the new picture is shown there at once
@@ -1152,8 +1155,6 @@ class AutoClipartFlowController(ClipartFlowController):
         page = self.run_queue.page
         self.more_button = V3Button("Ещё", ButtonVariant.SECONDARY)
         menu = QMenu(self.more_button)
-        self.more_open_action = menu.addAction("Открыть папку с результатами")
-        self.more_open_action.triggered.connect(page.open_folder_button.click)
         self.more_recover_action = menu.addAction("Вернуть готовые файлы")
         self.more_recover_action.triggered.connect(self.recover_results)
         self.more_trash_action = menu.addAction("Корзина")
@@ -1162,13 +1163,13 @@ class AutoClipartFlowController(ClipartFlowController):
         self.more_button.setMenu(menu)
         layout = page.open_folder_button.parentWidget().layout()
         layout.insertWidget(max(layout.count() - 1, 0), self.more_button)
-        page.open_folder_button.hide()
+        # Owner 2026-10-28: «Открыть папку с результатами» stays on the second row, after the PNG check.
+        layout.insertWidget(0, page.check_transparency_button)
         if self.review is not None:
             self.review.trash_button.hide()
 
     def _refresh_more_menu(self):
         page = self.run_queue.page
-        self.more_open_action.setEnabled(page.open_folder_button.isEnabled())
         found = self._recoverable_outputs()
         self.more_recover_action.setVisible(bool(found))
         if found:

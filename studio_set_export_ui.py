@@ -82,6 +82,11 @@ class ExportWorker(QThread):
 
 _THUMB_CACHE = OrderedDict()
 _THUMB_CACHE_LIMIT = 600
+# Big previews (the picture on the right, zoom, resizing the window) are scaled from one decoded copy per file
+# instead of reading the PNG again for every size; a few copies are enough (owner 2026-10-28: previews were slow).
+_FULL_CACHE = OrderedDict()
+_FULL_CACHE_LIMIT = 4
+FULL_BOUND = 2048
 PRIME_BOUND = 120
 
 
@@ -380,8 +385,21 @@ class SetExportDialog(QDialog):
             picture = primed.scaled(
                 QSize(bound, bound), Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation)
-        else:
+        elif bound <= 256:
             picture = QPixmap.fromImage(_read_scaled_image(path, bound))
+        else:
+            full = _FULL_CACHE.get(stamp) if stamp is not None else None
+            if full is None:
+                full = QPixmap.fromImage(_read_scaled_image(path, max(bound, FULL_BOUND)))
+                if stamp is not None and not full.isNull():
+                    _FULL_CACHE[stamp] = full
+                    while len(_FULL_CACHE) > _FULL_CACHE_LIMIT:
+                        _FULL_CACHE.popitem(last=False)
+            elif stamp is not None:
+                _FULL_CACHE.move_to_end(stamp)
+            picture = full if full.isNull() or max(full.width(), full.height()) <= bound else full.scaled(
+                QSize(bound, bound), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            return picture  # large previews are not kept per size; the decoded copy above is
         if stamp is not None and not picture.isNull():
             _THUMB_CACHE[key] = picture
             while len(_THUMB_CACHE) > _THUMB_CACHE_LIMIT:
@@ -465,6 +483,10 @@ class SetExportDialog(QDialog):
             action = QWidgetAction(options_menu)
             action.setDefaultWidget(checkbox)
             options_menu.addAction(action)
+        # «Только готовые PNG» lives in the options menu (owner 2026-10-28).
+        ready_action = QWidgetAction(options_menu)
+        ready_action.setDefaultWidget(self.ready_only)
+        options_menu.addAction(ready_action)
         self.export_options_button = QPushButton('Параметры экспорта')
         self.export_options_button.setProperty('v3Button', True)
         self.export_options_button.setProperty('variant', 'ghost')
@@ -475,7 +497,10 @@ class SetExportDialog(QDialog):
         self.status.setWordWrap(True)
         bottom = QHBoxLayout()
         bottom.addWidget(self.export_options_button)
-        bottom.addWidget(self.status, 1)
+        bottom.addWidget(self.status, 2)
+        bottom.addWidget(self.quality_bottom_row, 3)
+        self.stack.currentChanged.connect(
+            lambda _index: self.quality_bottom_row.setVisible(self.stack.currentWidget() is self.quality_page))
         root.addLayout(bottom)
         # Large, obvious progress for long exports (owner request 2026-10-19).
         self.export_progress = QProgressBar()
@@ -730,7 +755,6 @@ class SetExportDialog(QDialog):
             lambda: self.regenerate_requested.emit(self._current_quality_key()))
         self.quality_regenerate_button.hide()  # next to «Изменить промпт»: only for «Брак генерации»
         action_row.addWidget(self.quality_regenerate_button)
-        action_row.addWidget(self.quality_fix_button)
         self.quality_cutout_button = QPushButton('Убрать фон')
         self.quality_cutout_button.setProperty('v3Button', True)
         self.quality_cutout_button.setProperty('variant', 'secondary')
@@ -741,6 +765,17 @@ class SetExportDialog(QDialog):
         action_row.addWidget(self.quality_cutout_button)
         action_row.addStretch(1)
         detail_layout.addLayout(action_row)
+        # Owner 2026-10-28: «Редактировать прозрачность» and the background swatches sit in the bottom row of the
+        # window (level with «Параметры экспорта»), under the picture column, the swatches to the right of the button.
+        self.quality_bottom_row = QWidget()
+        bottom_extras = QHBoxLayout(self.quality_bottom_row)
+        bottom_extras.setContentsMargins(0, 0, 0, 0)
+        bottom_extras.addWidget(self.quality_fix_button)
+        bottom_extras.addSpacing(16)
+        bottom_extras.addWidget(QLabel('Фон'))
+        bottom_extras.addLayout(swatch_row)
+        bottom_extras.addStretch(1)
+        self.quality_bottom_row.hide()
         # The issue texts stay out of sight (owner 2026-10-27): problems are shown only as a mark on the picture.
         for hidden in (self.quality_issue_title, self.quality_issue_text, self.quality_action_text):
             hidden.hide()
@@ -753,9 +788,6 @@ class SetExportDialog(QDialog):
         self.quality_back_button.setProperty('variant', 'secondary')
         self.quality_back_button.clicked.connect(self._show_summary)
         footer.addWidget(self.quality_back_button)
-        footer.addSpacing(16)
-        footer.addWidget(QLabel('Фон'))
-        footer.addLayout(swatch_row)
         footer.addStretch(1)
         self.quality_export_button = QPushButton('Создать ZIP-наборы')
         self.quality_export_button.setProperty('v3Button', True)
@@ -1157,6 +1189,8 @@ class SetExportDialog(QDialog):
         key = self._current_quality_key()
         if not key or key not in self._marks:
             return
+        if self._marks.get(key) == mark:
+            mark = 'unchecked'  # the same button again takes the mark off (owner 2026-10-28)
         self._marks[key] = mark
         # Show the new mark before the (slow) save runs, so two buttons are never lit while it works.
         self._sync_mark_buttons(key)
@@ -1319,8 +1353,9 @@ class SetExportDialog(QDialog):
             button.setEnabled(self._editing_set_id is not None and self.worker is None)
         issue_count = len(self.review_issues)
         missing_count = sum(issue.get('kind') == 'missing' for issue in self.review_issues)
-        self.issue_panel.setVisible(issue_count > 0)
-        self.ready_only.setVisible(missing_count > 0)
+        # Owner 2026-10-28: one message only (how many pictures are not marked «Ок»); no «Готово/Не завершено» panel
+        # and no «только готовые» tick on this screen.
+        self.issue_panel.setVisible(False)
         self.ready_only.setEnabled(missing_count > 0 and self.worker is None)
         if issue_count:
             parts = [f'Готово: {count} PNG']
@@ -1344,26 +1379,19 @@ class SetExportDialog(QDialog):
             self.quality_panel.style().unpolish(self.quality_panel)
             self.quality_panel.style().polish(self.quality_panel)
         elif quality_issue_count:
-            parts = []
-            if review_count:
-                parts.append(f'{review_count} нужно проверить')
-            if block_count:
-                parts.append(f'{block_count} блокирует экспорт')
-            quality_text = (
-                'Автопроверка PNG: ' + ' · '.join(parts) + '. '
-                'Файлы не изменялись.'
-            )
+            unmarked = sum(self._needs_attention(str(path)) for path in self.paths) or quality_issue_count
+            quality_text = f'Не помечено «Ок»: {unmarked}'
             self.quality_summary_label.setText(quality_text)
             total = sum(str(path) in self.quality_reports for path in self.paths)
-            page_text = f'Блокирует экспорт: {block_count}' if block_count else ''
-            self._set_quality_page_text(page_text)
-            self.quality_panel.setProperty('state', 'error' if block_count else 'warning')
+            self._set_quality_page_text('')
+            self.quality_panel.setProperty('state', 'warning')
             self.quality_panel.style().unpolish(self.quality_panel)
             self.quality_panel.style().polish(self.quality_panel)
         else:
             self.quality_summary_label.clear()
             self._set_quality_page_text('')
-        export_enabled = (bool(groups) and not self._blocking_review_issues() and not block_count
+        # Owner 2026-10-28: what the automatic check dislikes never blocks the export.
+        export_enabled = (bool(groups) and not self._blocking_review_issues()
                           and not self._qc_pending and self.worker is None)
         self.export_button.setEnabled(export_enabled)
         self.quality_export_button.setEnabled(export_enabled)
@@ -1542,8 +1570,6 @@ class SetExportDialog(QDialog):
             groups = self.groups()
             if self._blocking_review_issues():
                 raise ValueError('Сначала проверьте отмеченные изображения')
-            if self._active_quality_blockers():
-                raise ValueError('Исправьте или исключите PNG, которые блокируют экспорт')
         except ValueError as exc:
             self.status.setText(str(exc))
             return
