@@ -1245,6 +1245,19 @@ class SetExportDialog(QDialog):
                 self.quality_list.setCurrentRow(row)
                 break
 
+    def set_background_job(self, text):
+        """Show that a regeneration or re-cutout started from this screen is running (empty text: it is over).
+        The picture stays on screen; only the status line and a moving bar tell that work is going on."""
+        if self.worker is not None:
+            return  # an export owns the bar
+        if text:
+            self.export_progress.setRange(0, 0)
+            self.export_progress.show()
+            self.status.setText(text)
+        elif self.export_progress.isVisible() or not self.export_progress.isHidden():
+            self.export_progress.hide()
+            self.status.clear()
+
     def focus_quality_path(self, path):
         """Open the PNG check on one picture (after its regeneration): fresh preview, no old «viewed» state."""
         key = str(Path(path).resolve())

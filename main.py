@@ -49,7 +49,7 @@ ensure_gui_standard_streams()
 
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from background_mask import has_usable_alpha
-from alpha_cleanup import clean_alpha
+from alpha_cleanup import HARD_EDGE_MAX_WIDTH, clean_alpha
 from chroma_key import (
     KEY_COLORS,
     ChromaKeyAmbiguousError,
@@ -3097,6 +3097,15 @@ class WorkerThread(QThread):
                                         raise ValueError("Очистка края вернула пустое изображение")
                                     chroma_working_alpha = working_alpha.copy()
                                     chroma_delivery_alpha = delivery_alpha
+                                    # The delivery alpha is published after the upscale, so its haze is dropped here
+                                    # (owner 2026-10-28); the working matte for the upscaler stays as it is.
+                                    try:
+                                        cleaned = clean_alpha(result)
+                                        cleaned.info.update(result.info)
+                                        result = cleaned
+                                        chroma_delivery_alpha = cleaned.getchannel("A")
+                                    except Exception:
+                                        self.progress.emit("  Зачистка прозрачности пропущена.")
                                 if chroma_working_alpha is None and not self._uses_local_upscale_after():
                                     # Local Real-ESRGAN after the cut-out takes this exact alpha as its
                                     # input (byte-exact contract), so it is left alone. Otherwise drop
@@ -3366,6 +3375,21 @@ class WorkerThread(QThread):
                     if not delivered.convert("RGBA").getchannel("A").getbbox():
                         raise ValueError("Очистка края после апскейла вернула пустое изображение")
                 self._ensure_running()
+            if (preserve_alpha and self._uses_local_upscale_after()
+                    and not self._item_context.manual_transparency_required):
+                # The upscale stretches a smooth alpha edge by its factor; tighten it again (owner 2026-10-28).
+                # Fur and other wide soft bands stay as they are; never fails the stage.
+                try:
+                    with Image.open(current_path) as upscaled:
+                        tightened = clean_alpha(upscaled, hard_max_width=HARD_EDGE_MAX_WIDTH * scale)
+                    if tightened.getchannel("A").getbbox():
+                        tight_path = os.path.join(
+                            raw_dir, f"{prefix}_edge_tightened_{idx:03d}_{self.run_stamp}.png"
+                        )
+                        self._save_image_object_as_png(tightened, tight_path)
+                        current_path = tight_path
+                except Exception:
+                    self.progress.emit("  Сужение края после апскейла пропущено.")
 
         if (self.edge_shrink_enabled and not preserve_surface
                 and not self._item_context.manual_transparency_required):

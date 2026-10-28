@@ -1024,6 +1024,24 @@ def test_png_check_screen_marks_are_mutually_exclusive_for_every_pair(images):
     dialog.reject()
 
 
+def test_png_check_shows_a_running_redo_and_clears_it(images):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images, ['Мини'])
+    reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
+    dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
+    dialog._show_quality_review()
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.export_progress.isHidden()
+    dialog.set_background_job('Вырезание фона: удаляется фон…')
+    assert not dialog.export_progress.isHidden()
+    assert dialog.export_progress.maximum() == 0  # moving bar: the length is not known
+    assert dialog.status.text() == 'Вырезание фона: удаляется фон…'
+    dialog.set_background_job('')
+    assert dialog.export_progress.isHidden() and dialog.status.text() == ''
+    dialog.reject()
+
+
 def test_png_check_same_mark_button_again_takes_the_mark_off(images):
     from studio_alpha_qc import AlphaQcReport
     membership = _membership_for_sets(images, ['Мини'])
