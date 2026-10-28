@@ -199,10 +199,16 @@ class ReviewStrip(QFrame):
         self.keep_button = V3Button("Оставить новый вариант", ButtonVariant.PRIMARY)
         self.restore_button = V3Button("Восстановить", ButtonVariant.PRIMARY)
         self.restore_button.setMinimumWidth(180)
+        # Owner 2026-10-28: redoing this very picture is possible whatever its mark (the buttons stay on screen).
+        self.regenerate_button = V3Button("Перегенерировать", ButtonVariant.SECONDARY)
+        self.regenerate_button.setToolTip("Новая платная генерация этой картинки; цена и модель — в подтверждении")
+        self.autocut_button = V3Button("Убрать фон", ButtonVariant.SECONDARY)
+        self.autocut_button.setToolTip("Заново вырезать фон автоматически: бесплатно, прежняя картинка сохранится как версия")
+        self.persistent_actions = (self.regenerate_button, self.autocut_button)
         self.actions = (self.method_label, self.method, self.try_button, self.prompt_button,
                         self.brush_button, self.to_generation_button, self.cancel_button,
                         self.compare_button, self.keep_button, self.restore_button)
-        for widget in self.actions:
+        for widget in self.actions + self.persistent_actions:
             bottom.addWidget(widget)
         box.addLayout(bottom)
 
@@ -222,6 +228,8 @@ class ReviewStrip(QFrame):
         self.mark_group.setExclusive(True)
         for widget in self.actions:
             widget.setVisible(widget in actions)
+        for widget in self.persistent_actions:
+            widget.setVisible(enabled)
         self.status.setText(status)
         self.status.setVisible(False)  # no caption under the panel (owner 2026-10-27); the text stays as a tooltip
         self.setToolTip(status)
@@ -920,6 +928,8 @@ class ImageReview:
         strip.try_button.clicked.connect(self._try_cutout)
         strip.brush_button.clicked.connect(self._use_brush)
         strip.to_generation_button.clicked.connect(lambda: self._set_mark("bad_generation"))
+        strip.regenerate_button.clicked.connect(lambda: self._redo_from_editor("regenerate"))
+        strip.autocut_button.clicked.connect(lambda: self._redo_from_editor("cutout"))
         strip.cancel_button.clicked.connect(self._cancel_preview)
         strip.compare_button.clicked.connect(self._compare)
         strip.keep_button.clicked.connect(self._keep_preview)
@@ -931,6 +941,22 @@ class ImageReview:
         self.flush_save()
         self._editor = None
         self._preview_row = None
+
+    def _redo_from_editor(self, kind):
+        """«Перегенерировать» / «Убрать фон» for the open picture; progress is on the results step, so the editor closes."""
+        row, index = self._current()
+        if index is None or self._job is not None or self._preview_row is not None:
+            return
+        path = self.session.items[index].output_path
+        if not path:
+            return
+        editor = self._editor
+        if kind == "regenerate":
+            self.flow._regenerate_from_png_check(path)
+        else:
+            self.flow._cutout_from_png_check(path)
+        if self.flow.is_busy() and editor is not None:
+            editor.back_requested.emit()
 
     def _current(self):
         editor = self._editor
