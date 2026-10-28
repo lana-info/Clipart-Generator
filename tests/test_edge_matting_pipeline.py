@@ -138,3 +138,61 @@ def test_network_matte_cannot_leave_rings_around_the_subject(tmp_path):
 
     assert bounded[0, 0] == 0 and bounded[12, 4] == 0
     assert bounded[12, 30] == 255
+
+
+def test_matted_cutout_loses_haze_and_far_debris_but_keeps_hair_fragments(tmp_path, monkeypatch):
+    worker, path, raw, _, _ = make_worker(tmp_path)
+
+    def matted(_source, cutout, _key, **_kwargs):
+        result = Image.new('RGBA', cutout.size, (0, 0, 0, 0))
+        result.paste((200, 150, 80, 255), (30, 30, 70, 70))
+        result.paste((200, 150, 80, 20), (2, 2, 20, 20))        # haze far from the subject
+        result.paste((200, 150, 80, 255), (73, 40, 76, 43))     # a detached hair fragment 3 px from the body
+        result.paste((200, 150, 80, 255), (90, 85, 93, 88))     # a stray dot, 20 px away
+        return result
+
+    monkeypatch.setattr(main, 'matte_edges', matted)
+
+    with Image.open(cut(worker, path, raw)) as opened:
+        alpha = np.asarray(opened.convert('RGBA').getchannel('A'))
+
+    assert alpha[2:20, 2:20].max() == 0
+    assert alpha[40:43, 73:76].min() == 255
+    assert alpha[85:88, 90:93].max() == 0
+    assert alpha[50, 50] == 255
+
+
+def test_matted_cutout_narrows_a_smooth_edge(tmp_path, monkeypatch):
+    worker, path, raw, _, _ = make_worker(tmp_path)
+
+    def matted(_source, cutout, _key, **_kwargs):
+        result = Image.new('RGBA', cutout.size, (0, 0, 0, 0))
+        result.paste((200, 150, 80, 255), (40, 20, 80, 76))
+        for step, alpha in enumerate([32, 80, 128, 176, 224]):  # a smooth edge about 5 px wide
+            result.paste((200, 150, 80, alpha), (35 + step, 20, 36 + step, 76))
+        return result
+
+    monkeypatch.setattr(main, 'matte_edges', matted)
+
+    with Image.open(cut(worker, path, raw)) as opened:
+        row = np.asarray(opened.convert('RGBA').getchannel('A'))[48]
+
+    assert int(((row > 0) & (row < 255)).sum()) <= 3
+
+
+def test_matted_cutout_pulls_a_lilac_hair_tip_back_to_the_fur_hue(tmp_path, monkeypatch):
+    worker, path, raw, _, _ = make_worker(tmp_path)
+    cream = (230, 200, 160)
+
+    def matted(_source, cutout, _key, **_kwargs):
+        result = Image.new('RGBA', cutout.size, (0, 0, 0, 0))
+        result.paste(cream + (255,), (20, 20, 76, 76))
+        result.paste((150, 120, 170, 128), (76, 40, 79, 44))     # a tip: cream mixed with the blue key
+        return result
+
+    monkeypatch.setattr(main, 'matte_edges', matted)
+
+    with Image.open(cut(worker, path, raw)) as opened:
+        tip = opened.convert('RGBA').getpixel((77, 42))
+
+    assert tip[2] < tip[1], tip   # fur is never bluer than green; the lilac tip had blue above green
