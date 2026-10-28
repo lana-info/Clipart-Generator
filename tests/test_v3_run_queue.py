@@ -858,6 +858,14 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertEqual(session.items[1].status, RunItemStatus.SUCCEEDED)  # untouched
             self.assertEqual(session.items[0].attempts, 2)
 
+    def test_regenerated_prompt_gets_the_flat_background_rule_once(self):
+        from v3_project_state import with_background_rule
+        green = with_background_rule("A duck.", "green")
+        self.assertIn("#00FF00", green)
+        self.assertIn("checkerboard", green)
+        self.assertEqual(with_background_rule(green, "green"), green)  # added only once
+        self.assertEqual(with_background_rule("A duck.", ""), "A duck.")  # no key colour, nothing to add
+
     def test_regenerate_is_not_offered_for_file_queues_or_running_sessions(self):
         with tempfile.TemporaryDirectory(prefix="v3-regenerate-off-") as temp:
             running = RunQueueSession(generation_request(temp, 2), ProjectMode.CLIPART)

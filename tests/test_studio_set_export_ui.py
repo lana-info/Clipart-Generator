@@ -998,7 +998,7 @@ def test_png_check_marks_a_flagged_picture_until_the_owner_says_ok(images):
     dialog.enable_marks({str(images[0].resolve()): 'unchecked', str(images[1].resolve()): 'unchecked'})
     dialog._show_quality_review()
     key = str(images[0].resolve())
-    assert dialog._needs_attention(key) and not dialog._needs_attention(str(images[1].resolve()))
+    assert dialog._needs_attention(key) and dialog._needs_attention(str(images[1].resolve()))  # every unmarked picture counts
     dialog.quality_list.setCurrentRow(0)
     dialog.quality_mark_buttons['ok'].click()
     assert not dialog._needs_attention(key)  # «Ок» removes the «!»

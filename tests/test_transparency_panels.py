@@ -97,6 +97,20 @@ def test_layout_is_remembered_for_the_next_window(page, app, tmp_path):
     second.close()
 
 
+def test_folded_panels_are_remembered_for_the_next_window(page, app, tmp_path):
+    # Owner 2026-10-28: the narrow «Размеры» (and «Оценка») panel stays folded the next time.
+    page.panel_docks["size"].set_collapsed(True)
+    assert page.panel_docks["size"].widget().isHidden()
+    page.hide()
+    second = ClipartTransparencyEditorPage()
+    second.set_files([tmp_path / "a.png"])
+    second.show()
+    app.processEvents()
+    assert second.panel_docks["size"].widget().isHidden()
+    assert not second.panel_docks["tools"].widget().isHidden()
+    second.close()
+
+
 def test_focus_mode_hides_panels_and_brings_back_only_the_shown_ones(page, app):
     page.panel_docks["files"].hide()
     page.toggle_focus_mode()
