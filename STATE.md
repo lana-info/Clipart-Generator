@@ -1,3 +1,12 @@
+## ОПУБЛИКОВАНО 2026-10-28 (вечер): Studio 3.2.50 + модули 1.6.12 (stable, windows-x64 и macos-arm64)
+
+- Studio 3.2.50 (PR 99 + 100, коммит 98dbb2f, Actions run 40727024333 — Windows; macOS переcобран run 40729619773, первый macOS был отменён раннером): Windows SHA 2e7fe490…8880, macOS SHA 5bd3bb7c…eaae; SHA на сервере совпали.
+- Модули 1.6.12 (7 × 2 платформы, Studio ≥ 3.2.50, <3.3.0), подпись vibix-publisher-v1 (ключ в /root/.local/share/vibix-studio-signing/, путь в docs/module-release-runbook.md); 16 релизов published, снимок до/после: added 16, removed 0, changed 0; health ok.
+- Резервная копия БД: clipart_license_service_auto_20261028T165814Z.dump. Доказательства: artifacts/studio-3.2.50-stable-20261028/ (publish-3.2.50.sh, логи, снимки, draft-ids.txt).
+- Входит: вырезание пуха с мягким переходом, «Убрать фон» после «Перегенерировать» (сырые gen_* остаются), хромакей-блок при «Перегенерировать» и «Повторить ошибки», панели «Размеры»/«Оценка» минимальной высоты (подробности — docs/ERRORS.md #cutout-fur-regen-20261028).
+- Не проверено владельцем на Windows. Открыто: сравнить локальный Real-ESRGAN до и после вырезания на её файлах; файл prompts_fixed_new.csv выдан отдельно.
+- Откат: ops/release-tool.sh withdraw <id> --yes (id в draft-ids.txt). Репозиторий можно вернуть в private.
+
 ## ОПУБЛИКОВАНО 2026-10-28: Studio 3.2.49 + модули 1.6.11 (stable, windows-x64 и macos-arm64)
 
 - Studio 3.2.49 (PR 97, сборка Actions run 40631663218): Windows SHA 5eabe29a…f73e, macOS SHA 11bacfac…d58a; SHA на сервере совпали.
