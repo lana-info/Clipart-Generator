@@ -81,7 +81,14 @@ class UpscalePositionTests(unittest.TestCase):
                     with patch.object(worker, "_run_upscale_pass", return_value=(str(output), None, True)) as upscale:
                         if defect in {"valid", "opaque", "wrong_size"}:
                             result = worker._run_processing_pipeline(str(source), None, folder, 1, "file")
-                            self.assertEqual(result, str(output))
+                            if provider == "local_realesrgan" and defect != "opaque":
+                                # The smooth alpha edge is tightened again after the local upscale (owner
+                                # 2026-10-28): the checked picture is published as a new file, colours unchanged.
+                                with Image.open(result) as published, Image.open(output) as checked:
+                                    self.assertEqual(published.size, checked.size)
+                                    self.assertEqual(published.convert("RGB").tobytes(), checked.convert("RGB").tobytes())
+                            else:
+                                self.assertEqual(result, str(output))
                             self.assertEqual(worker._item_context.manual_transparency_required, defect == "opaque")
                             if defect == "opaque":
                                 self.assertTrue(any("потерял прозрачность" in text for text in messages))

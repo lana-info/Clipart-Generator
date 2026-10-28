@@ -4,7 +4,7 @@ import pytest
 from PIL import Image
 
 import main
-from alpha_cleanup import clean_alpha
+from alpha_cleanup import HARD_EDGE_MAX_WIDTH, clean_alpha
 from studio_processing_api import ProcessingEngine
 
 
@@ -58,7 +58,9 @@ def test_local_nn_uses_working_alpha_then_publishes_delivery_alpha(tmp_path, tri
     expected_input = working if has_hint else delivery
     box = expected_input.getchannel('A').getbbox() if trim else (0, 0, *working.size)
     expected_input = expected_input.crop(box)
-    expected_delivery = delivery.crop(box).getchannel('A')
+    # With the matte hint the delivery alpha is published cleaned of haze (owner 2026-10-28); colours are untouched.
+    published = clean_alpha(delivery) if has_hint else delivery
+    expected_delivery = published.crop(box).getchannel('A')
     calls = []
 
     def upscale(input_path, output_path, scale):
@@ -84,13 +86,17 @@ def test_local_nn_uses_working_alpha_then_publishes_delivery_alpha(tmp_path, tri
         result = opened.convert('RGBA')
         histogram = expected_delivery.histogram()
         resample = Image.Resampling.BILINEAR if any(histogram[1:255]) else Image.Resampling.NEAREST
-        assert result.getchannel('A').tobytes() == expected_delivery.resize(result.size, resample).tobytes()
+        resized = expected_delivery.resize(result.size, resample)
+        # The smooth edge is tightened again after the upscale (owner 2026-10-28).
+        tightened = clean_alpha(Image.merge('RGBA', (*result.convert('RGB').split(), resized)),
+                                hard_max_width=HARD_EDGE_MAX_WIDTH * 2)
+        assert result.getchannel('A').tobytes() == tightened.getchannel('A').tobytes()
         np.testing.assert_array_equal(np.asarray(result)[..., :3],
                                       np.broadcast_to([101, 121, 141], (result.height, result.width, 3)))
         assert 'vibix:precleanup_alpha' not in result.info
     normal_cutout = next(raw.glob('*_chroma_key_nobg_*.png'))
     with Image.open(normal_cutout) as saved:
-        assert saved.convert('RGBA').tobytes() == delivery.tobytes()
+        assert saved.convert('RGBA').tobytes() == published.tobytes()
         assert 'vibix:precleanup_alpha' not in saved.info
     assert worker._item_context.chroma_receipt['profile'] == engine.profile
     assert not worker._item_context.manual_transparency_required
@@ -229,3 +235,87 @@ def test_empty_delivery_after_wrong_nn_size_is_rejected(tmp_path):
     Image.new('RGB', working.size, 'blue').save(source)
     with pytest.raises(ValueError, match='пустое изображение'):
         worker._run_processing_pipeline(str(source), None, str(tmp_path), 1, 'empty', result_kind='clipart')
+
+
+def test_faint_haze_is_removed_from_the_delivery_alpha_with_local_upscale(tmp_path):
+    """Owner 2026-10-28: «туман» around the cut-out. With the local upscale after the cut-out the delivery alpha
+    skipped the final alpha clean-up, so faint alpha far from the subject survived into the final PNG."""
+    size = (40, 24)
+    working = Image.new('RGBA', size, (0, 0, 255, 0))
+    working.paste((200, 150, 80, 255), (20, 6, 38, 20))
+    working.paste((200, 150, 80, 8), (1, 1, 9, 9))  # haze: weak alpha far from the subject
+    delivery = working.copy()
+    source = tmp_path / 'source.png'
+    Image.new('RGB', size, (0, 0, 255)).save(source)
+
+    def remove(_source, _color, *, subject_profile):
+        result = delivery.copy()
+        result.info['vibix:precleanup_alpha'] = working.getchannel('A')
+        return result
+
+    engine = ProcessingEngine('opaque-clipart-v15', remove, lambda _source: (0, 0, 255))
+    worker = main.WorkerThread('mode2_process', str(tmp_path), {
+        'upscale': False, 'remove_bg': True, 'remove_bg_provider': 'local_chroma_key', 'chroma_key_color': 'blue',
+        'upscale_after': True, 'upscale_after_provider': 'local_realesrgan',
+        'local_realesrgan_after_scale': 2, 'trim_enabled': False, 'trim_mode': 'alpha',
+    }, processing_engine=engine)
+    forbid_providers(worker)
+    raw = tmp_path / 'raw'
+    raw.mkdir()
+
+    def upscale(input_path, output_path, scale):
+        with Image.open(input_path) as opened:
+            actual_input = opened.convert('RGBA')
+        Image.new('RGB', (actual_input.width * scale, actual_input.height * scale), (101, 121, 141)).save(output_path)
+        worker._restore_upscaled_alpha(output_path, actual_input.getchannel('A'))
+
+    worker._run_local_realesrgan = upscale
+    result_path = worker._run_processing_pipeline(str(source), None, str(raw), 1, 'case',
+                                                  chroma_key_color='blue', result_kind='clipart')
+    with Image.open(result_path) as opened:
+        alpha = np.asarray(opened.convert('RGBA').getchannel('A'))
+    assert alpha[2:16, 2:16].max() == 0  # the haze patch is gone (the picture is 2x here)
+    assert alpha[24:36, 44:72].min() == 255  # the subject itself is untouched
+
+
+def test_smooth_edge_is_tightened_again_after_the_local_upscale(tmp_path):
+    """Owner 2026-10-28: the upscale stretches a smooth alpha edge by its factor; the edge clean-up runs again so
+    the published edge is as narrow as it was before the enlargement."""
+    size = (60, 24)
+    working = Image.new('RGBA', size, (0, 0, 255, 0))
+    working.paste((200, 150, 80, 255), (30, 4, 58, 20))
+    ramp = [32, 80, 128, 176, 224]  # a smooth edge about 5 px wide on the left side of the subject
+    for step, alpha in enumerate(ramp):
+        working.paste((200, 150, 80, alpha), (25 + step, 4, 26 + step, 20))
+    delivery = working.copy()
+    source = tmp_path / 'source.png'
+    Image.new('RGB', size, (0, 0, 255)).save(source)
+
+    def remove(_source, _color, *, subject_profile):
+        result = delivery.copy()
+        result.info['vibix:precleanup_alpha'] = working.getchannel('A')
+        return result
+
+    engine = ProcessingEngine('opaque-clipart-v15', remove, lambda _source: (0, 0, 255))
+    worker = main.WorkerThread('mode2_process', str(tmp_path), {
+        'upscale': False, 'remove_bg': True, 'remove_bg_provider': 'local_chroma_key', 'chroma_key_color': 'blue',
+        'upscale_after': True, 'upscale_after_provider': 'local_realesrgan',
+        'local_realesrgan_after_scale': 4, 'trim_enabled': False, 'trim_mode': 'alpha',
+    }, processing_engine=engine)
+    forbid_providers(worker)
+    raw = tmp_path / 'raw'
+    raw.mkdir()
+
+    def upscale(input_path, output_path, scale):
+        with Image.open(input_path) as opened:
+            actual_input = opened.convert('RGBA')
+        Image.new('RGB', (actual_input.width * scale, actual_input.height * scale), (101, 121, 141)).save(output_path)
+        worker._restore_upscaled_alpha(output_path, actual_input.getchannel('A'))
+
+    worker._run_local_realesrgan = upscale
+    result_path = worker._run_processing_pipeline(str(source), None, str(raw), 1, 'case',
+                                                  chroma_key_color='blue', result_kind='clipart')
+    with Image.open(result_path) as opened:
+        row = np.asarray(opened.convert('RGBA').getchannel('A'))[48]
+    partial = int(((row > 0) & (row < 255)).sum())
+    assert partial <= 12, f'the edge is {partial} px wide after a 4x upscale (20 without the second pass)'

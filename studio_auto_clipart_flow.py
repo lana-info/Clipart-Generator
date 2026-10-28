@@ -642,7 +642,11 @@ class AutoClipartFlowController(ClipartFlowController):
                 and getattr(existing, '_file_versions', None) == file_versions \
                 and getattr(existing, '_review_issues', None) == review_issues:
             return
+        keep_view = None
         if existing is not None:
+            # The PNG check keeps its page and the picture the owner is looking at when it is rebuilt.
+            if existing.stack.currentWidget() is existing.quality_page:
+                keep_view = existing._current_quality_key()
             existing._stop_png_check()
             existing.hide()
             self.export_page.layout().removeWidget(existing)
@@ -670,6 +674,7 @@ class AutoClipartFlowController(ClipartFlowController):
             return
         panel._file_versions = file_versions
         panel._review_issues = review_issues
+        panel._keep_view = keep_view
         self.export_page.layout().addWidget(panel, 1)
         self.export_panel = panel
         panel.busy_changed.connect(self.shell.refresh)
@@ -687,6 +692,9 @@ class AutoClipartFlowController(ClipartFlowController):
             panel.prompt_requested.connect(lambda path: self.review.edit_prompt_for(path, panel))
             panel.regenerate_requested.connect(self._regenerate_from_png_check)
             panel.cutout_requested.connect(self._cutout_from_png_check)
+        if keep_view is not None:
+            panel._select_path = keep_view
+            panel._show_quality_review()
 
     def navigate(self, direction):
         if self.is_busy():
@@ -809,23 +817,63 @@ class AutoClipartFlowController(ClipartFlowController):
         except (ValueError, OSError, RuntimeError) as error:
             QMessageBox.warning(self.brief, "Clipart", str(error)[:500])
 
+    def _queue_redo(self, kind, path):
+        """A redo asked while another one runs waits its turn (owner 2026-10-28: the second one was silently lost)."""
+        if self.review is None:
+            return False
+        session = self.run_queue.session
+        if not (session is not None and session.running):
+            return False
+        queue = self.__dict__.setdefault("_redo_queue", [])
+        if (kind, str(path)) not in queue:
+            queue.append((kind, str(path)))
+        self._show_redo_progress()
+        return True
+
+    def _start_queued_redo(self):
+        queue = self.__dict__.get("_redo_queue")
+        session = self.run_queue.session
+        if not queue or self.is_busy() or (session is not None and session.running):
+            return
+        kind, path = queue.pop(0)
+        (self._regenerate_from_png_check if kind == "regenerate" else self._cutout_from_png_check)(path)
+
     def _regenerate_from_png_check(self, path):
-        """Start the confirmed paid re-creation of one picture and show its progress on the results step."""
+        """Start the confirmed paid re-creation of one picture; the PNG check stays on screen with a progress line."""
+        if self._queue_redo("regenerate", path):
+            return
         if self.review is not None and self.review.regenerate_path(path) is not None:
             self._regen_return = [str(path), False]
-            self._select_step(StepId.RESULTS)
+            self._redo_kind = "Перегенерация"
+            self._show_redo_progress()
 
     def _cutout_from_png_check(self, path):
         """Free local re-cutout of one picture; its progress is shown on the results step, then back to the picture."""
-        if self.review is None:
+        if self.review is None or self._queue_redo("cutout", path):
             return
         if self.review.cutout_path(path) is not None:
             self._regen_return = [str(path), False]
-            self._select_step(StepId.RESULTS)
+            self._redo_kind = "Вырезание фона"
+            self._show_redo_progress()
             return
         # Owner 2026-10-28: a refusal used to be silent («ничего не произошло»); say why.
         reason = self.review.cutout_unavailable_reason(path) or "Запуск не начался. Повторите позже."
         QMessageBox.information(self.brief, "Убрать фон", reason)
+
+    def _show_redo_progress(self):
+        """Owner 2026-10-28: the PNG check stays on screen while a picture is redone; it only shows that work goes on."""
+        panel = getattr(self, "export_panel", None)  # the first refresh runs while the controller is still being built
+        session = self.run_queue.session
+        if panel is None:
+            return
+        running = session is not None and session.running
+        stage = self.run_queue.page._stage_label(session.current_stage) if running else ""
+        kind = getattr(self, "_redo_kind", "Обработка")
+        waiting = len(self.__dict__.get("_redo_queue", ()))
+        text = f"{kind}: {stage}…" if running else ""
+        if text and waiting:
+            text += f" Ждут очереди: {waiting}."
+        panel.set_background_job(text)
 
     def _return_to_regenerated_png(self):
         """Owner 2026-10-27: after «Перегенерировать» on the PNG check the new picture is shown there at once
@@ -846,9 +894,13 @@ class AutoClipartFlowController(ClipartFlowController):
         session = self.run_queue.session
         if session is None or session.running or self.is_busy():
             return
+        panel = self.export_panel
+        watching = panel._current_quality_key() if panel is not None and panel.stack.currentWidget() is panel.quality_page else ''
         self._select_step(StepId.TRANSPARENCY)
-        if self.export_panel is not None:
-            self.export_panel.focus_quality_path(path)
+        panel = self.export_panel
+        # The new picture is shown at once, unless the owner has meanwhile moved on to another one.
+        if panel is not None and (not watching or watching == str(Path(path).resolve())):
+            panel.focus_quality_path(path)
 
     def _open_png_check(self):
         if self.is_busy() or self.run_queue.session is None or self.run_queue.session.running:
@@ -1149,7 +1201,9 @@ class AutoClipartFlowController(ClipartFlowController):
                 previous()
             self._refresh_recovery()
             self._refresh_more_menu()
+            self._show_redo_progress()
             self._return_to_regenerated_png()
+            QTimer.singleShot(100, self._start_queued_redo)
         page.review_refresh = refresh
         self._install_more_menu()
 

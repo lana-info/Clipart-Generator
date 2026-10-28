@@ -1,4 +1,5 @@
 import os
+from dataclasses import replace
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
@@ -198,6 +199,34 @@ def test_reducing_existing_plan_uses_one_slot_and_restores_unused_ideas(workspac
     assert [dict(item, pinned=item.get('pinned', False)) for item in resumed.brief.object_editor.value()] == [dict(item, pinned=item.get('pinned', False)) for item in original]
     assert len(resumed.shell.state.data.prompts) == 20
     worker.assert_not_called()
+
+
+def test_edited_prompt_mark_survives_reopening_the_project(workspace):
+    view, controller, _, _ = workspace
+    controller.brief.total.setValue(20)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    output = session.output_dir / 'single_ready.png'
+    Image.new('RGBA', (64, 64), (120, 80, 40, 255)).save(output)
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    session.items[0].output_path = str(output)
+    session.items[0].prompt_edited = True
+    # What «Изменить промпт» does: the text changes in the project's prompt record and in the run payload.
+    controller.shell.state.data.prompts[0].prompt += ' Corrected by the owner.'
+    session.items[0].payload['prompt'] = controller.shell.state.data.prompts[0].prompt
+    for item in session.items[1:]:
+        item.status = RunItemStatus.CANCELLED
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    controller.save_timer.stop()
+    assert view.continue_saved_project(view._active_project_id)
+    resumed = view.shell.workflow_controller('auto-clipart')
+    resumed.save_timer.stop()
+    assert resumed.run_queue.session.items[0].prompt_edited is True
+    assert resumed.review.edited_paths() == {str(output.resolve())}
 
 
 def test_cancelled_slots_do_not_block_ready_export_after_reopen(workspace, monkeypatch, tmp_path):
@@ -621,6 +650,72 @@ def test_transparency_editor_has_native_maximize_and_keeps_tools(workspace, monk
         "tools_visible": True,
         "restored": True,
     }
+
+
+def test_png_check_keeps_its_page_and_selected_picture_when_a_file_changes(workspace):
+    import time
+    _, controller, _, _ = workspace
+    prepare_launch(controller)
+    request = build_clipart_run_request(controller.shell.state)
+    session = RunQueueSession(request, controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    outputs = []
+    while len(session.items) < 2:
+        session.items.append(replace(session.items[0], index=len(session.items) + 1))
+    for index in range(2):
+        output = session.output_dir / f'example_{index}_ready.png'
+        Image.new('RGBA', (64, 64), (120, 80, 40, 255)).save(output)
+        session.items[index].status = RunItemStatus.SUCCEEDED
+        session.items[index].output_path = str(output)
+        outputs.append(output)
+    session.running = False
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+
+    def wait_checked():
+        deadline = time.monotonic() + 10
+        while controller.export_panel._qc_pending and time.monotonic() < deadline:
+            QApplication.processEvents()
+            time.sleep(0.01)
+        QApplication.processEvents()
+
+    controller._refresh_export()
+    wait_checked()
+    controller.export_panel._show_quality_review()
+    controller.export_panel.quality_list.setCurrentRow(1)
+    selected = controller.export_panel._current_quality_key()
+    assert selected == str(outputs[1].resolve())
+    old_panel = controller.export_panel
+    Image.new('RGBA', (64, 64), (10, 20, 30, 255)).save(outputs[0])  # another picture was redone
+    controller._refresh_export()
+    assert controller.export_panel is not old_panel  # the panel is rebuilt for the new file
+    wait_checked()
+    panel = controller.export_panel
+    assert panel.stack.currentWidget() is panel.quality_page
+    assert panel._current_quality_key() == selected
+
+
+def test_second_redo_asked_while_one_runs_waits_in_a_queue_and_starts_after(workspace, monkeypatch):
+    _, controller, _, _ = workspace
+    prepare_launch(controller)
+    request = build_clipart_run_request(controller.shell.state)
+    session = RunQueueSession(request, controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    first, second = session.output_dir / 'a_ready.png', session.output_dir / 'b_ready.png'
+    controller.run_queue.session = session
+    started = []
+    monkeypatch.setattr(controller.review, 'regenerate_path', lambda path: started.append(('regenerate', path)) or object())
+    monkeypatch.setattr(controller.review, 'cutout_path', lambda path: started.append(('cutout', path)) or object())
+    session.running = True
+    controller._regenerate_from_png_check(str(second))
+    controller._cutout_from_png_check(str(first))
+    controller._cutout_from_png_check(str(first))  # asking twice does not queue it twice
+    assert started == [] and len(controller._redo_queue) == 2
+    session.running = False
+    controller._start_queued_redo()
+    assert started == [('regenerate', str(second))]  # one at a time, in the order asked
+    assert controller._redo_queue == [('cutout', str(first))]
+    controller._redo_queue.clear()  # no stray timer may start it in a later test
 
 
 def test_export_step_embeds_editable_sets_and_persists_new_set(workspace, monkeypatch):
