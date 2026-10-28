@@ -176,7 +176,7 @@ def test_repeated_fal_subset_retries_keep_each_accepted_task_and_cleanup_success
                      (1, "fixture-2"), (1, "fixture-3"), (2, "fixture-3")]
     assert all(item.status is RunItemStatus.SUCCEEDED for item in session.items)
     assert not final.fal_task_journal.pending()
-    assert not Path(final._run_raw_dir).exists()
+    assert not [e for e in Path(final._run_raw_dir).glob('*') if not e.name.startswith('gen_')]
 
 
 @pytest.mark.parametrize("sidecar_failure", [False, True])

@@ -4,7 +4,7 @@ import pytest
 from PIL import Image
 
 import main
-from alpha_cleanup import HARD_EDGE_MAX_WIDTH, clean_alpha
+from alpha_cleanup import DELIVERY_EDGE_GAIN, HARD_EDGE_MAX_WIDTH, clean_alpha
 from studio_processing_api import ProcessingEngine
 
 
@@ -59,7 +59,7 @@ def test_local_nn_uses_working_alpha_then_publishes_delivery_alpha(tmp_path, tri
     box = expected_input.getchannel('A').getbbox() if trim else (0, 0, *working.size)
     expected_input = expected_input.crop(box)
     # With the matte hint the delivery alpha is published cleaned of haze (owner 2026-10-28); colours are untouched.
-    published = clean_alpha(delivery) if has_hint else delivery
+    published = clean_alpha(delivery, gain=DELIVERY_EDGE_GAIN) if has_hint else delivery
     expected_delivery = published.crop(box).getchannel('A')
     calls = []
 
@@ -123,7 +123,7 @@ def test_chroma_hint_is_consumed_even_without_upscale(tmp_path):
                                                   result_kind='clipart')
     with Image.open(result_path) as saved:
         # The final alpha clean-up is applied to the engine's delivery mask; colours are untouched.
-        assert saved.convert('RGBA').tobytes() == clean_alpha(delivery).tobytes()
+        assert saved.convert('RGBA').tobytes() == clean_alpha(delivery, gain=DELIVERY_EDGE_GAIN).tobytes()
     assert 'vibix:precleanup_alpha' not in returned[0].info
 
 
@@ -318,4 +318,5 @@ def test_smooth_edge_is_tightened_again_after_the_local_upscale(tmp_path):
     with Image.open(result_path) as opened:
         row = np.asarray(opened.convert('RGBA').getchannel('A'))[48]
     partial = int(((row > 0) & (row < 255)).sum())
-    assert partial <= 12, f'the edge is {partial} px wide after a 4x upscale (20 without the second pass)'
+    # The delivery cut keeps its soft transition now, so only the pass after the upscale narrows the edge.
+    assert partial <= 14, f'the edge is {partial} px wide after a 4x upscale (20 without the second pass)'

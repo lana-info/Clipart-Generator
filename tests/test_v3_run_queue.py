@@ -2374,3 +2374,22 @@ class ProblemFilesListTests(unittest.TestCase):
             self.app.processEvents()
             self.assertFalse(page.problem_files_button.isVisible())
             page.close()
+
+
+def test_retry_restores_the_chroma_block_for_edited_prompts(tmp_path):
+    session = RunQueueSession(generation_request(tmp_path, count=1), ProjectMode.CLIPART)
+    session.items[0].status = RunItemStatus.FAILED
+    session.items[0].payload = {**dict(session.items[0].payload), "prompt": "A duck.",
+                                "chroma_key_color": "blue", "result_kind": "clipart"}
+    session.handle_finished()
+    preview = session.preview_retry()
+    assert "chroma-key background" in preview.generated_prompts[0]["prompt"].lower()
+
+
+def test_edited_prompt_without_the_chroma_block_gets_it_back():
+    from v3_project_state import with_chroma_block
+    plain = with_chroma_block("A duck.", "blue", "clipart")
+    assert "chroma-key background" in plain and "fluffy edge" in plain
+    assert with_chroma_block(plain, "blue", "clipart") == plain  # only once
+    assert "fluffy edge" not in with_chroma_block("A duck.", "blue", "legacy")
+    assert with_chroma_block("A duck.", "", "clipart") == "A duck."

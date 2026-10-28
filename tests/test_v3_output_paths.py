@@ -164,8 +164,8 @@ class V3OutputPathsTests(unittest.TestCase):
             Image.new("RGB", (4, 4), "red").save(
                 first_run / f"gen_001_{first.run_stamp}.png"
             )
-            # A completed item may discard its own transient raw; an unfinished
-            # generated item must keep it available for queue recovery.
+            # The raw generated picture stays for a later re-cutout; other
+            # transient files of the run are discarded.
             completed = output / "completed.png"
             Image.new("RGB", (4, 4), "red").save(completed)
             from chroma_provenance import image_digest
@@ -175,9 +175,11 @@ class V3OutputPathsTests(unittest.TestCase):
             second_marker = second_run / f"gen_001_{second.run_stamp}.png"
             Image.new("RGB", (4, 4), "blue").save(second_marker)
 
+            (first_run / "scratch_tmp.png").write_bytes(b"x")
             first._persist_rough_outputs(first_run)
 
-            self.assertFalse(first_run.exists())
+            self.assertTrue((first_run / f"gen_001_{first.run_stamp}.png").exists())
+            self.assertFalse((first_run / "scratch_tmp.png").exists())
             self.assertTrue(second_marker.exists())
             self.assertEqual(
                 len(list((workspace / "rough").glob("*.png"))),
@@ -234,6 +236,26 @@ class V3OutputPathsTests(unittest.TestCase):
             )
             self.assertEqual(Path(request.work_dir), output_dir)
             self.assertEqual(Path(request.settings["output_dir"]), output_dir / "output")
+
+
+class StaleRawSourcePruneTests(unittest.TestCase):
+    def test_only_old_runs_holding_nothing_but_raw_generations_are_removed(self):
+        import os, time
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as temp:
+            transient = Path(temp) / ".run"
+            old_raw, old_mixed, fresh, current = (transient / n for n in ("a", "b", "c", "d"))
+            for folder in (old_raw, old_mixed, fresh, current):
+                folder.mkdir(parents=True)
+                (folder / "gen_001_x.png").write_bytes(b"1")
+                (folder / "gen_001_x.png.generation.json").write_bytes(b"{}")
+            (old_mixed / "work.png").write_bytes(b"1")
+            old = time.time() - WorkerThread.RAW_SOURCE_MAX_AGE_SECONDS - 60
+            for folder in (old_raw, old_mixed, current):
+                os.utime(folder, (old, old))
+            WorkerThread._prune_stale_raw_sources(transient, current.resolve())
+            self.assertFalse(old_raw.exists())
+            self.assertTrue(old_mixed.exists() and fresh.exists() and current.exists())
 
 
 class RoughUpscaleClassificationTests(unittest.TestCase):

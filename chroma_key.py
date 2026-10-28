@@ -2225,16 +2225,18 @@ def remove_chroma_key_with_rim_cleanup(image: Image.Image, key_color: str, **kwa
     result = remove_chroma_key_automatic(image, key_color, **kwargs)
     return finish_rim_cleanup(result, kwargs.get("subject_profile", "opaque_clipart"))
 
+
 EDGE_SILHOUETTE_STANDARD = (
     "Crisply resolved forms: every element, including small secondary "
     "details and repeated motifs, stays individually recognisable and "
     "cleanly drawn, never merged into blotches or mush. The subject holds "
     "one continuous closed silhouette that separates cleanly from the "
-    "flat background: fur, down, feather tips and painterly texture stay "
-    "short, grouped and inside the silhouette, so the boundary itself is "
-    "a stable firm contour, not a saw-tooth fringe, with no watercolor "
-    "bleed, no soft transition band, no halo, glow or pale rim reaching "
-    "into the background, and no specks or dots detached from the subject. "
+    "flat background. Fur, down and feather tips keep their natural soft, "
+    "fluffy edge: fine individual hairs and wisps, each drawn sharply "
+    "against the flat background, with a gentle feathered outline and "
+    "no jagged saw-tooth steps, no watercolor bleed, no halo, glow or "
+    "pale rim reaching into the background, and no specks or dots "
+    "detached from the subject. "
 )
 
 

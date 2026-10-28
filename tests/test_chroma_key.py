@@ -185,7 +185,7 @@ class ChromaKeyTests(unittest.TestCase):
         self.assertIn("no stray fragments", plain)
         self.assertNotIn("Crisply resolved forms", plain)
         self.assertNotIn("one continuous closed silhouette", plain)
-        self.assertNotIn("saw-tooth fringe", plain)
+        self.assertNotIn("saw-tooth", plain)
         self.assertNotIn("Crisp hard edges", plain)
 
         # Only the Auto Clipart module opts in via edge_quality.
@@ -194,7 +194,9 @@ class ChromaKeyTests(unittest.TestCase):
         self.assertIn("individually recognisable", standard)
         self.assertIn("never merged into blotches or mush", standard)
         self.assertIn("one continuous closed silhouette", standard)
-        self.assertIn("not a saw-tooth fringe", standard)
+        self.assertIn("fluffy edge", standard)
+        self.assertNotIn("firm contour", standard)
+        self.assertNotIn("no soft transition band", standard)
         self.assertIn("pale rim reaching into the background", standard)
         self.assertIn("no specks or dots detached from the subject", standard)
 
