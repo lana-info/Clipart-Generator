@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QButtonGroup, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
+    QMenu, QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
 from chroma_provenance import receipt_path
@@ -665,13 +665,28 @@ class ImageReview:
         self.trash_button = V3Button("Корзина", ButtonVariant.SECONDARY)
         self.trash_button.setToolTip("Окончательно стереть удалённые картинки и старые версии")
         self.trash_button.clicked.connect(self.empty_trash)
+        # Owner 2026-10-28: first row = everything that redoes pictures (marked, selected, failed); the second row
+        # (the toolbar below) = the PNG check as the main button and «Ещё».
+        self.redo_selected_button = V3Button("Переделать выбранные", ButtonVariant.SECONDARY)
+        self.redo_selected_button.setToolTip("Выделите строки в списке (Ctrl или Shift для нескольких)")
+        redo_menu = QMenu(self.redo_selected_button)
+        self.redo_generate_action = redo_menu.addAction("Перегенерировать (платно, цена в подтверждении)")
+        self.redo_generate_action.triggered.connect(self.regenerate_selected_rows)
+        self.redo_cutout_action = redo_menu.addAction("Вырезать фон заново (бесплатно)")
+        self.redo_cutout_action.triggered.connect(self.cutout_selected_rows)
+        self.redo_selected_button.setMenu(redo_menu)
         buttons.addWidget(self.recreate_button)
+        buttons.addWidget(self.redo_selected_button)
+        buttons.addWidget(page.retry_button)
         buttons.addStretch(1)
         buttons.addWidget(self.trash_button)
         row.addLayout(buttons)
         page.action_bar.layout().insertWidget(0, actions)
         self.results_actions = actions
         page.review_refresh = self.refresh_results
+        page.queue.itemSelectionChanged.connect(
+            lambda: self.redo_selected_button.setEnabled(
+                bool(page.queue.selected_rows()) and not self.flow.is_busy()))
 
     def _row_visible(self, item):
         """While a run is going every row stays in the list: a regenerated picture loses its mark the moment it is
@@ -725,7 +740,9 @@ class ImageReview:
         self.recreate_button.setText(f"Пересоздать помеченные ({marked})")
         # Paid regeneration is the main action only when something is marked; otherwise it must not compete with
         # the transparency check.
-        self.recreate_button.set_variant(ButtonVariant.PRIMARY if marked else ButtonVariant.SECONDARY)
+        self.recreate_button.set_variant(ButtonVariant.SECONDARY)  # the PNG check is the main button
+        self.redo_selected_button.setEnabled(bool(self.flow.run_queue.page.queue.selected_rows())
+                                             and not self.flow.is_busy())
         self.recreate_button.setEnabled(bool(marked) and not self.flow.is_busy())
         deleted, versions = trash_paths(items, session.output_dir)
         self.trash_button.setText(f"Корзина ({len(deleted) + len(versions)})")
@@ -772,6 +789,45 @@ class ImageReview:
             self._pending_cutout = []
             return
         self._run_pending_cutout()
+
+    def regenerate_selected_rows(self):
+        session = self.session
+        page = self.flow.run_queue.page
+        if session is None or session.running or self.flow.is_busy():
+            return
+        rows = session.regenerable_indices(page.queue.selected_rows())
+        if not rows:
+            QMessageBox.information(page, "Перегенерировать", "Выделите готовые картинки в списке.")
+            return
+        self._pending_cutout = []
+        started = self.flow.run_queue.regenerate_selected(rows)
+        self._chain_started = False
+        return started
+
+    def cutout_selected_rows(self):
+        session = self.session
+        page = self.flow.run_queue.page
+        if session is None or session.running or self.flow.is_busy():
+            return
+        chosen = page.queue.selected_rows()
+        rows = session.reprocessable_indices(chosen)
+        if not rows:
+            QMessageBox.information(page, "Вырезать фон заново",
+                "Выделите картинки в списке. Для вырезания нужна сохранённая исходная картинка генерации: "
+                "у добавленных вручную файлов или после очистки рабочих файлов её нет.")
+            return
+        skipped = len(chosen) - len(rows)
+        message = f"Вырезать фон заново: {len(rows)}?" + (f"\nБез исходной картинки, пропущены: {skipped}." if skipped else "")
+        message += "\nТекущие картинки станут версиями и их можно вернуть."
+        if self._paid_upscale():
+            message += "\nАпскейл после вырезания платный; стоимость не рассчитана."
+        if QMessageBox.question(page, "Вырезать фон заново", message,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        self._pending_cutout = []
+        self._chain_started = False
+        self.flow.run_queue.reprocess_selected(rows, DEFAULT_CUTOUT[2])
 
     def _paid_upscale(self):
         settings = self.session.request.settings
@@ -988,13 +1044,16 @@ class ImageReview:
 
     def mark_output(self, path, mark):
         """Mark a picture by its file (used from the PNG-check screen); same data as the marks on the results step."""
-        if self.session is None or mark not in MARK_LABEL or self._job is not None:
+        if self.session is None or mark not in (*MARK_LABEL, "unchecked") or self._job is not None:
             return
         target = str(Path(path).resolve())
         for item in self.session.items:
             if item.output_path and str(Path(item.output_path).resolve()) == target:
-                item.review_mark = mark
-                item.review_checked = True
+                if mark == "unchecked":  # the mark was taken off: back to «не проверено»
+                    item.review_mark, item.review_checked = "ok", False
+                else:
+                    item.review_mark = mark
+                    item.review_checked = True
                 self._save()
                 return
 
@@ -1062,6 +1121,22 @@ class ImageReview:
                 self._chain_started = False
                 return started
         return None
+
+    def cutout_unavailable_reason(self, path):
+        """Why «Убрать фон» cannot start for this picture (empty when it can)."""
+        session = self.session
+        if session is None:
+            return "Нет открытого проекта."
+        if session.running or self._job is not None or self.flow.is_busy():
+            return "Дождитесь окончания текущей работы и повторите."
+        target = str(Path(path).resolve())
+        for index, item in enumerate(session.items):
+            if item.output_path and str(Path(item.output_path).resolve()) == target:
+                if not session.reprocessable_indices([index]):
+                    return ("Не найдена сохранённая исходная картинка генерации (например, файл был добавлен "
+                            "вручную или рабочие файлы удалены), поэтому вырезать фон заново нельзя.")
+                return ""
+        return "Картинка не найдена в проекте."
 
     def cutout_path(self, path):
         """«Убрать фон» from the PNG-check screen: one picture through the free local re-cutout (a white or

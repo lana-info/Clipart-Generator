@@ -593,7 +593,7 @@ def test_quality_review_warning_explains_problem_without_blocking_export(images)
     )
     dialog = SetExportDialog([images[0]], membership=membership, quality_reports=[report])
     assert dialog.quality_panel.isVisible() or not dialog.isVisible()
-    assert '1 нужно проверить' in dialog.quality_summary_label.text()
+    assert 'Не помечено «Ок»: 1' in dialog.quality_summary_label.text()
     dialog._refresh_quality_page()
     assert dialog.export_button.isEnabled()
     assert dialog.quality_export_button.isEnabled()
@@ -618,9 +618,8 @@ def test_quality_blocker_disables_export_until_explicit_exclusion_without_deleti
     dialog = SetExportDialog(images[:2], membership=membership, quality_reports=[blocked])
     saved = []
     dialog.membership_saved.connect(saved.append)
-    assert not dialog.export_button.isEnabled()
+    assert dialog.export_button.isEnabled()  # a blocking automatic finding no longer disables the export
     dialog._show_quality_review()
-    assert not dialog.quality_export_button.isEnabled()
     dialog.quality_list.setCurrentRow(0)
     assert dialog.quality_exclude_button.isEnabled()
     dialog.quality_exclude_button.click()
@@ -761,10 +760,7 @@ def test_partial_export_does_not_override_ambiguous_or_invalid_png(images):
         (AlphaQcIssue('opaque', 'block', 'PNG непрозрачен.', 'Проверьте фон.'),), width=32, height=32)
     dialog = SetExportDialog(images[:1], review_issues=[missing], quality_reports=[report])
     dialog.ready_only.setChecked(True)
-    assert not dialog.export_button.isEnabled()
-    dialog._export()
-    assert dialog.worker is None
-    assert 'блокируют экспорт' in dialog.status.text()
+    assert dialog.export_button.isEnabled()  # the automatic check never blocks the export (owner 2026-10-28)
     dialog.close()
 
 
@@ -1020,9 +1016,28 @@ def test_png_check_screen_marks_are_mutually_exclusive_for_every_pair(images):
     buttons = dialog.quality_mark_buttons
     for first in buttons:
         for second in buttons:
+            if first == second:
+                continue
             buttons[first].click()
             buttons[second].click()
             assert [key for key, button in buttons.items() if button.isChecked()] == [second]
+    dialog.reject()
+
+
+def test_png_check_same_mark_button_again_takes_the_mark_off(images):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images, ['Мини'])
+    reports = [AlphaQcReport(str(path.resolve()), 'review', (), width=32, height=32) for path in images]
+    dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
+    dialog.enable_marks({str(path.resolve()): 'unchecked' for path in images})
+    dialog._show_quality_review()
+    sent = []
+    dialog.mark_requested.connect(lambda key, mark: sent.append(mark))
+    for mark in ('ok', 'bad_generation'):
+        dialog.quality_mark_buttons[mark].click()
+        dialog.quality_mark_buttons[mark].click()
+        assert sent[-2:] == [mark, 'unchecked']
+        assert not any(button.isChecked() for button in dialog.quality_mark_buttons.values())
     dialog.reject()
 
 
@@ -1110,7 +1125,13 @@ def test_png_check_buttons_fit_a_1120_px_window_in_two_rows(images):
     assert dialog.minimumSizeHint().width() <= 1120
     # marks and «Исключить» above, the actions on this picture below
     assert dialog.quality_exclude_button.y() < dialog.quality_prompt_button.y()
-    assert dialog.quality_prompt_button.y() == dialog.quality_regenerate_button.y() == dialog.quality_fix_button.y()
+    assert dialog.quality_prompt_button.y() == dialog.quality_regenerate_button.y()
+    # «Редактировать прозрачность» is in the bottom row with «Параметры экспорта»; the swatches are right of it
+    assert dialog.quality_fix_button.mapTo(dialog, dialog.quality_fix_button.rect().topLeft()).y() > dialog.quality_prompt_button.y()
+    def top(widget):
+        return widget.mapTo(dialog, widget.rect().topLeft()).y()
+    assert abs(top(dialog.quality_fix_button) - top(dialog.export_options_button)) < 40
+    assert dialog.quality_background_buttons['checkerboard'].mapTo(dialog, dialog.rect().topLeft()).x() != 0
     for button in dialog.quality_mark_buttons.values():
         assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
     dialog.reject()
