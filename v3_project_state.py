@@ -35,6 +35,20 @@ MAX_PROMPT_SERIES_COUNT = 500
 MAX_CHROMA_KEY_MATERIALS = 3
 MAX_SELECTED_FILES = 10000
 MAX_TEXT_LENGTH = 20000
+
+_KEY_HEX = {"blue": "#0000FF", "green": "#00FF00", "red": "#FF0000"}
+BACKGROUND_RULE = "Background rule:"
+
+
+def with_background_rule(prompt: str, chroma_key_color: str) -> str:
+    """Add the flat-colour rule once (owner 2026-10-28: pictures came back with a drawn checkerboard or a beige
+    background, which the cut-out cannot remove because it is opaque and is not the key colour)."""
+    hex_color = _KEY_HEX.get(str(chroma_key_color or "").lower())
+    if not hex_color or BACKGROUND_RULE in prompt:
+        return prompt
+    return (prompt.rstrip() + f" {BACKGROUND_RULE} the whole background, including every gap inside and around the "
+            f"subject, is one flat uniform {hex_color} colour. Never draw a checkerboard or transparency grid, and "
+            "no beige, cream, white, grey or paper background, floor, shadow or gradient.")
 PINTEREST_CANVAS_WIDTH = 1000
 PINTEREST_CANVAS_HEIGHT = 1500
 PINTEREST_TEMPLATE_COUNT = 3

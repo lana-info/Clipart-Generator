@@ -1008,7 +1008,7 @@ class ImageReview:
         if index is None:
             editor.set_canvas_notice(None)
             strip.set_note("")
-            strip.show_state(None, status="Файл не из этого запуска: метки для него недоступны.",
+            strip.show_state(None, status="Файл не из этого запуска: метки недоступны. Нажмите «Ещё» → «Вернуть готовые файлы», чтобы подключить его.",
                              enabled=False)
             return
         item = self.session.items[index]

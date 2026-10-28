@@ -106,6 +106,8 @@ def compile_objects(recipe, generator):
                 f"their open gaps show the same solid {hex_color} background as outside the subject, "
                 "never white painted bridges."
             )
+            from v3_project_state import with_background_rule
+            entry.prompt = with_background_rule(entry.prompt, entry.chroma_key_color)
             if len(entry.prompt) > MAX_TEXT_LENGTH:
                 raise ValueError('Сократите описание объекта: итоговый промпт слишком длинный')
         entry.result_kind = 'clipart'

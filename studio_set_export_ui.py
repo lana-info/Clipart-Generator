@@ -1201,7 +1201,7 @@ class SetExportDialog(QDialog):
     def _needs_attention(self, key):
         """A PNG the owner still has to look at: the check flags it and no mark says she has seen it."""
         report = self.quality_reports.get(key)
-        if report is None or report.status == 'ok' or not self._path_is_active(key):
+        if report is None or not self._path_is_active(key):
             return False
         if self._marks_enabled:
             return self._marks.get(key, '') not in ('ok', 'bad_generation', 'bad_cutout')
@@ -1369,7 +1369,7 @@ class SetExportDialog(QDialog):
             for path, report in self.quality_reports.items()
         )
         block_count = len(self._active_quality_blockers())
-        quality_issue_count = review_count + block_count
+        quality_issue_count = sum(self._needs_attention(str(path)) for path in self.paths)
         self.quality_panel.setVisible(quality_issue_count > 0 or self._qc_pending > 0)
         self.review_quality_button.setVisible(not self._qc_pending)
         if self._qc_pending:
@@ -1379,8 +1379,7 @@ class SetExportDialog(QDialog):
             self.quality_panel.style().unpolish(self.quality_panel)
             self.quality_panel.style().polish(self.quality_panel)
         elif quality_issue_count:
-            unmarked = sum(self._needs_attention(str(path)) for path in self.paths) or quality_issue_count
-            quality_text = f'Не помечено «Ок»: {unmarked}'
+            quality_text = f'Не помечено «Ок»: {quality_issue_count}'
             self.quality_summary_label.setText(quality_text)
             total = sum(str(path) in self.quality_reports for path in self.paths)
             self._set_quality_page_text('')

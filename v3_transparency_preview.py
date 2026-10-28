@@ -3270,15 +3270,17 @@ class ClipartTransparencyEditorPage(QWidget):
         name.setStyleSheet("color:#e4edf6; font-weight:bold")
         row.addWidget(name, 1)
 
-        def collapse():
+        def collapse(*, collapsed=None):
             content = dock.widget()
-            content.setVisible(not content.isVisible())
+            content.setVisible(collapsed is False or (collapsed is None and not content.isVisible()))
             collapse_button.setText("▸" if not content.isVisible() else "▾")
+
+        dock.set_collapsed = lambda value: collapse(collapsed=value)  # restored with the saved layout
 
         collapse_button = QToolButton()
         collapse_button.setText("▾")
         collapse_button.setToolTip("Свернуть")
-        collapse_button.clicked.connect(collapse)
+        collapse_button.clicked.connect(lambda: collapse())
         float_button = QToolButton()
         float_button.setText("⧉")
         float_button.setToolTip("Открепить окном")
@@ -3306,10 +3308,19 @@ class ClipartTransparencyEditorPage(QWidget):
             saved = QSettings(*self.PANEL_SETTINGS).value("state")
             if saved:
                 self.panel_host.restoreState(saved)
+            # Folded panels (a narrow «Размеры» or «Оценка») are not part of Qt's saved state; restore them too.
+            folded = QSettings(*self.PANEL_SETTINGS).value("collapsed")
+            folded = [folded] if isinstance(folded, str) else list(folded or [])
+            for key, dock in self.panel_docks.items():
+                if key in folded and hasattr(dock, "set_collapsed"):
+                    dock.set_collapsed(True)
 
     def _remember_panels(self) -> None:
         if not self._focus_mode:
-            QSettings(*self.PANEL_SETTINGS).setValue("state", self.panel_host.saveState())
+            settings = QSettings(*self.PANEL_SETTINGS)
+            settings.setValue("state", self.panel_host.saveState())
+            settings.setValue("collapsed", [key for key, dock in self.panel_docks.items()
+                                            if dock.widget() is not None and dock.widget().isHidden()])
 
     def _set_action(self, action: str) -> None:
         self.canvas.brush_action = action

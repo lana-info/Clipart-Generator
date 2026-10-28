@@ -115,7 +115,7 @@ def test_actual_editor_save_rechecks_blocked_and_accepted_export(tmp_path, monke
     AutoClipartFlowController._open_transparency_editor(controller, 0)
     refresh()
     assert inspect_alpha_png(output).status == "block"
-    assert controller.export_panel.quality_reports[str(output)].status == "block"
+    assert controller.export_panel.quality_reports[str(output)].status == "ok"  # no automatic judgement (owner 2026-10-28)
     assert controller.export_panel.export_button.isEnabled()  # the report is "block", the export stays open
     export_page.close()
     page.close()

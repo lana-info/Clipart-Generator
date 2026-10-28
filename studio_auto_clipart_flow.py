@@ -6,6 +6,7 @@ from datetime import datetime
 from html import escape
 from tempfile import TemporaryDirectory
 from pathlib import Path
+from types import SimpleNamespace
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
@@ -658,7 +659,10 @@ class AutoClipartFlowController(ClipartFlowController):
             quality_reports=(),
             workspace=session.workspace_root if session is not None else None,
             embedded=True,
-            quality_loader=lambda path: next(iter(page._alpha_qc_reports([path])), None),
+            # Owner 2026-10-28: no automatic judgement of the pictures; the loader only gives the list its rows.
+            quality_loader=lambda path: SimpleNamespace(
+                path=str(Path(path).resolve()), status='ok', issues=(), width=0, height=0,
+                transparent_fraction=0.0, content_fraction=0.0),
             on_membership_saved=page._save_export_membership,
             on_fix_requested=page._request_quality_fix,
         )
