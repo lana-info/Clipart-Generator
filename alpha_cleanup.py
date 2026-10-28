@@ -25,6 +25,7 @@ HARD_EDGE_MAX_WIDTH = 9.0  # px, 2 %-98 % band width up to which an edge is "smo
 EDGE_GAIN = 2.0            # steepening around 50 % alpha
 DELIVERY_EDGE_GAIN = 1.0   # the pipeline keeps the soft transition of fur and edges (owner 2026-10-28)
 OPAQUE_CEILING = 0.985
+DEBRIS_MIN_GAP = 8.0       # px; a small solid island this far from the subject is debris, closer it is a hair fragment
 
 
 def _distance_to_zero(mask: np.ndarray) -> np.ndarray:
@@ -35,8 +36,14 @@ def _distance_to_zero(mask: np.ndarray) -> np.ndarray:
 def clean_alpha_array(alpha: np.ndarray, *, haze_floor: float = HAZE_FLOOR,
                       haze_distance: float = HAZE_DISTANCE,
                       hard_max_width: float = HARD_EDGE_MAX_WIDTH,
-                      gain: float = EDGE_GAIN) -> np.ndarray:
-    """Return a cleaned copy of ``alpha`` (float32 in 0..1)."""
+                      gain: float = EDGE_GAIN,
+                      island_min_gap: float | None = 0.0) -> np.ndarray:
+    """Return a cleaned copy of ``alpha`` (float32 in 0..1).
+
+    Step 1b drops small solid islands that lie more than ``island_min_gap`` px from the rest of the subject:
+    0 drops every small island, ``DEBRIS_MIN_GAP`` keeps detached hair fragments next to matted fur,
+    ``None`` skips the step.
+    """
     a = np.clip(alpha.astype(np.float32), 0.0, 1.0)
     if not a.any():
         return a
@@ -59,11 +66,18 @@ def clean_alpha_array(alpha: np.ndarray, *, haze_floor: float = HAZE_FLOOR,
     # 1b. stray solid islands (generation debris): drop them with a thin ring around them.
     solid = (a >= 0.5).astype(np.uint8)
     count, labels, stats, _ = cv2.connectedComponentsWithStats(solid, connectivity=4)
-    if count > 2:
+    if island_min_gap is not None and count > 2:
         min_island = max(MIN_ISLAND_PIXELS, int(MIN_ISLAND_FRACTION * a.size))
         small = np.flatnonzero(stats[1:, cv2.CC_STAT_AREA] < min_island) + 1
         # The largest component is always the subject; never treat it as debris.
         small = small[small != 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))]
+        if small.size and island_min_gap > 0:
+            rest = (solid > 0) & ~np.isin(labels, small)
+            gap = _distance_to_zero(~rest)
+            gaps = np.full(count, np.inf, np.float32)
+            island_pixels = np.isin(labels, small)
+            np.minimum.at(gaps, labels[island_pixels], gap[island_pixels])
+            small = small[gaps[small] > island_min_gap]
         if small.size:
             removed = np.isin(labels, small)
             ring = cv2.dilate(removed.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0

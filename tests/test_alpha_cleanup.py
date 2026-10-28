@@ -111,3 +111,29 @@ def test_delivery_gain_keeps_the_soft_transition_but_still_clears_haze():
     band = lambda a: int(((a > 0.1) & (a < 0.9)).sum())
     assert band(soft) > band(steep) * 1.5
     assert band(soft) >= band(alpha) * 0.9
+
+
+def test_islands_far_from_the_subject_are_debris_but_hair_fragments_close_to_it_stay():
+    alpha = _disc()
+    alpha[5:30, 5:30] = 0.08          # faint haze patch
+    alpha[170:173, 20:23] = 0.3       # tiny weak speck
+    alpha[100:103, 163:166] = 1.0     # a detached hair fragment 3 px from the subject edge (radius 60)
+    alpha[190:193, 190:193] = 1.0     # a stray solid dot far from everything
+    cleaned = clean_alpha_array(alpha, island_min_gap=8.0)
+    assert cleaned[5:30, 5:30].max() == 0.0
+    assert cleaned[170:173, 20:23].max() == 0.0
+    assert cleaned[100:103, 163:166].min() == 1.0
+    assert cleaned[190:193, 190:193].max() == 0.0
+    assert cleaned[100, 100] == 1.0
+
+
+def test_default_drops_every_small_island_however_close():
+    alpha = _disc()
+    alpha[100:103, 163:166] = 1.0
+    assert clean_alpha_array(alpha)[100:103, 163:166].max() == 0.0
+
+
+def test_islands_can_be_left_alone_entirely():
+    alpha = _disc()
+    alpha[190:193, 190:193] = 1.0
+    assert clean_alpha_array(alpha, island_min_gap=None)[190:193, 190:193].min() == 1.0
