@@ -42,7 +42,15 @@ def runtime(tmp_path_factory):
     host.load_active("patterns")
     yield host
     wait_until_idle(QApplication.instance() or QApplication([]), host)
-    host.unload("patterns")
+    try:
+        host.unload("patterns")
+    except Exception as error:  # report what is still busy instead of a generic refusal
+        print("patterns teardown: still busy —",
+              f"jobs={getattr(host, '_active_jobs', {}).get('patterns')}",
+              f"job_leases={len(getattr(host, '_job_leases', {}).get('patterns') or ())}",
+              f"page_leases={len(getattr(host, '_page_leases', {}).get('patterns') or ())}",
+              flush=True)
+        raise error
 
 
 @pytest.fixture
