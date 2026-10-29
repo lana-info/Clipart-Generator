@@ -1,0 +1,127 @@
+blue gap kind shd | gapCore coreViol engCore |  stem1  stem2   wisp   navy violet | rimMed
+ 253   1 open   0 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   1 open   1 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   1 encl   0 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   1 encl   1 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   2 open   0 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   2 open   1 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   2 encl   0 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   2 encl   1 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   4 open   0 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   4 open   1 |      19      279     251 |      0      0      0    255    255 |      0
+ 253   4 encl   0 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   4 encl   1 |      19      238     251 |      0      0      0    255    255 |      0
+ 253   8 open   0 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   8 open   1 |     122     1400     255 |      0      0      0    255    255 |      0
+ 253   8 encl   0 |       0        0       0 |    255    255    255    255    255 |      0
+ 253   8 encl   1 |     120     1200     255 |      0      0      0    255    255 |      0
+ 253  16 open   0 |       0        0       0 |    255    255    255    255    255 |      0
+ 253  16 open   1 |     255     3920     255 |      0      0      0    255    255 |      0
+ 253  16 encl   0 |       0        0       0 |    255    255    255    255    255 |      0
+ 253  16 encl   1 |     255     3360     255 |      0      0      0    255    255 |      0
+ 150   1 open   0 |       0        0       0 |    255    255    255     98    255 |      0
+ 150   1 open   1 |       0        0       0 |    255    255    255     97    255 |      0
+ 150   1 encl   0 |       0        0       0 |    255    255    255     98    255 |      0
+ 150   1 encl   1 |       0        0       0 |    255    255    255     97    255 |      0
+ 150   2 open   0 |       0        0       0 |    255    255    255     98    255 |      0
+ 150   2 open   1 |       0        0       0 |    255    255    255     97    255 |      0
+ 150   2 encl   0 |       0        0       0 |    255    255    255     98    255 |      0
+ 150   2 encl   1 |       0        0       0 |    255    255    255     97    255 |      0
+ 150   4 open   0 |       0        0       0 |    255    255    255     98    255 |      0
+ 150   4 open   1 |     117      560     117 |    255    255    255     98    255 |      0
+ 150   4 encl   0 |       0        0       0 |    255    255    255     98    255 |      0
+ 150   4 encl   1 |     117      480     117 |    255    255    255     98    255 |      0
+ 150   8 open   0 |       0        0       0 |    255    255    255     98    255 |      0
+ 150   8 open   1 |     176     1680     176 |    255    255    255     98    255 |      0
+ 150   8 encl   0 |       0        0       0 |    255    255    255     98    255 |      0
+ 150   8 encl   1 |     176     1440     176 |    255    255    255     98    255 |      0
+ 150  16 open   0 |       0        0       0 |    255    255    255     98    255 |      0
+ 150  16 open   1 |     176     3920     176 |    255    255    255     98    255 |      0
+ 150  16 encl   0 |       0        0       0 |    255    255    255     98    255 |      0
+ 150  16 encl   1 |     176     3360     176 |    255    255    255     98    255 |      0
+ 117   1 open   0 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   1 open   1 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   1 encl   0 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   1 encl   1 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   2 open   0 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   2 open   1 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   2 encl   0 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   2 encl   1 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   4 open   0 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   4 open   1 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   4 encl   0 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   4 encl   1 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   8 open   0 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   8 open   1 |     164     1120     164 |    255    255    255     53    255 |      0
+ 117   8 encl   0 |       0        0       0 |    255    255    255     53    255 |      0
+ 117   8 encl   1 |     164      960     164 |    255    255    255     53    255 |      0
+ 117  16 open   0 |       0        0       0 |    255    255    255     53    255 |      0
+ 117  16 open   1 |     167     3360     167 |    255    255    255     53    255 |      0
+ 117  16 encl   0 |       0        0       0 |    255    255    255     53    255 |      0
+ 117  16 encl   1 |     167     2880     167 |    255    255    255     53    255 |      0
+  80   1 open   0 |       0        0       0 |    255    255    255     92    255 |      0
+  80   1 open   1 |       0        0       0 |    255    255    255     92    255 |      0
+  80   1 encl   0 |       0        0       0 |    255    255    255     92    255 |      0
+  80   1 encl   1 |       0        0       0 |    255    255    255     92    255 |      0
+  80   2 open   0 |       0        0       0 |    255    255    255     92    255 |      0
+  80   2 open   1 |       0        0       0 |    255    255    255     92    255 |      0
+  80   2 encl   0 |       0        0       0 |    255    255    255     92    255 |      0
+  80   2 encl   1 |       0        0       0 |    255    255    255     92    255 |      0
+  80   4 open   0 |       0        0       0 |    255    255    255     92    255 |      0
+  80   4 open   1 |     108      190     108 |    255    255    255     92    255 |      0
+  80   4 encl   0 |       0        0       0 |    255    255    255     92    255 |      0
+  80   4 encl   1 |     108      162     108 |    255    255    255     92    255 |      0
+  80   8 open   0 |       0        0       0 |    255    255    255     92    255 |      0
+  80   8 open   1 |     255     1396     255 |    255    255    255     92    255 |      0
+  80   8 encl   0 |       0        0       0 |    255    255    255     92    255 |      0
+  80   8 encl   1 |     255     1195     255 |    255    255    255     92    255 |      0
+  80  16 open   0 |       0        0       0 |    255    255    255     92    255 |      0
+  80  16 open   1 |     255     3732     255 |    255    255    255     92    255 |      0
+  80  16 encl   0 |       0        0       0 |    255    255    255     92    255 |      0
+  80  16 encl   1 |     255     3199     255 |    255    255    255     92    255 |      0
+  40   1 open   0 | raises ChromaKeyAmbiguousError
+  40   1 open   1 | raises ChromaKeyAmbiguousError
+  40   1 encl   0 | raises ChromaKeyAmbiguousError
+  40   1 encl   1 | raises ChromaKeyAmbiguousError
+  40   2 open   0 | raises ChromaKeyAmbiguousError
+  40   2 open   1 | raises ChromaKeyAmbiguousError
+  40   2 encl   0 | raises ChromaKeyAmbiguousError
+  40   2 encl   1 | raises ChromaKeyAmbiguousError
+  40   4 open   0 | raises ChromaKeyAmbiguousError
+  40   4 open   1 | raises ChromaKeyAmbiguousError
+  40   4 encl   0 | raises ChromaKeyAmbiguousError
+  40   4 encl   1 | raises ChromaKeyAmbiguousError
+  40   8 open   0 | raises ChromaKeyAmbiguousError
+  40   8 open   1 | raises ChromaKeyAmbiguousError
+  40   8 encl   0 | raises ChromaKeyAmbiguousError
+  40   8 encl   1 | raises ChromaKeyAmbiguousError
+  40  16 open   0 | raises ChromaKeyAmbiguousError
+  40  16 open   1 | raises ChromaKeyAmbiguousError
+  40  16 encl   0 | raises ChromaKeyAmbiguousError
+  40  16 encl   1 | raises ChromaKeyAmbiguousError
+
+violations: 114
+   (253, 4, False, True, 'gap core film 19')
+   (253, 4, False, True, '1px stem lost')
+   (253, 4, False, True, '2px stem lost')
+   (253, 4, True, True, 'gap core film 19')
+   (253, 4, True, True, '1px stem lost')
+   (253, 4, True, True, '2px stem lost')
+   (253, 8, False, True, 'gap core film 122')
+   (253, 8, False, True, '1px stem lost')
+   (253, 8, False, True, '2px stem lost')
+   (253, 8, True, True, 'gap core film 120')
+   (253, 8, True, True, '1px stem lost')
+   (253, 8, True, True, '2px stem lost')
+   (253, 16, False, True, 'gap core film 255')
+   (253, 16, False, True, '1px stem lost')
+   (253, 16, False, True, '2px stem lost')
+   (253, 16, True, True, 'gap core film 255')
+   (253, 16, True, True, '1px stem lost')
+   (253, 16, True, True, '2px stem lost')
+   (150, 1, False, False, 'navy detail loss')
+   (150, 1, False, True, 'navy detail loss')
+   (150, 1, True, False, 'navy detail loss')
+   (150, 1, True, True, 'navy detail loss')
+   (150, 2, False, False, 'navy detail loss')
+   (150, 2, False, True, 'navy detail loss')

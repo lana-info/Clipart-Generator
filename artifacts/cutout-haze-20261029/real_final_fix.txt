@@ -1,0 +1,10 @@
+== rough_88_generated.png: control(946,438) base=0 engine_fix=0 final_fix=0
+   strict film: base 6 -> fix 1 (engine fix 1)
+   visible px: base 384234 fix 383140;  opaque: base 377631 fix 376206
+   baseline-opaque -> fix-not-opaque: 1451;  new-opaque(baseline non-opaque -> 255): 26
+   sum alpha: base 97.402M fix 96.967M
+== rough_89_generated.png: control(946,438) base=199 engine_fix=0 final_fix=0
+   strict film: base 75 -> fix 11 (engine fix 21)
+   visible px: base 573842 fix 572416;  opaque: base 565380 fix 563136
+   baseline-opaque -> fix-not-opaque: 2385;  new-opaque(baseline non-opaque -> 255): 141
+   sum alpha: base 145.694M fix 145.074M

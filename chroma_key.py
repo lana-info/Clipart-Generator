@@ -27,6 +27,33 @@ _MAX_ENCLOSED_TRANSITION_ROI_WORK_MULTIPLIER: Final[int] = 4
 _ALPHA_NOISE_FLOOR: Final[float] = 1e-6
 _SUBJECT_PROFILES: Final[frozenset[str]] = frozenset(("legacy", "opaque_clipart"))
 
+# Shaded key pockets: the generator darkens the flat key inside narrow gaps
+# between subject parts (ambient occlusion in a crevice). Such a pixel is
+# numerically identical to an opaque subject colour behind partial coverage, so
+# coverage alone can never classify it; only chroma direction, level and the
+# local geometry of the gap can. Every threshold below is relative to the
+# measured key, so the detector is independent of the image's numeric scale.
+SHADED_KEY_MAX_ANGLE: Final[float] = 20.0      # degrees between the pixel chroma and the key chroma
+SHADED_KEY_LEAD_FRACTION: Final[float] = 0.15  # key-channel lead over the strongest other channel, as a
+#                                                share of the measured key's own lead: a shade of the key
+#                                                keeps its hue however dark the key is
+SHADED_KEY_MAX_LEVEL: Final[float] = 0.70      # key channel below this share of the key's level:
+#                                                a crevice shadow blocks much of the light, while a
+#                                                brighter key-coloured sample stays a plausible
+#                                                partial coverage of paint and keeps its alpha
+SHADED_KEY_KEY_DISTANCE: Final[float] = 0.18   # share of the key length that still counts as solid key
+SHADED_KEY_SOLID_LEVEL: Final[float] = 0.95    # ... or this share of the key's own channel level
+SHADED_KEY_BACKGROUND_CLEARANCE: Final[float] = 2.0  # px from that solid key; closer is an ordinary AA edge
+SHADED_KEY_PAINT_ANGLE: Final[float] = 45.0    # degrees off the key chroma that only subject paint reaches
+SHADED_KEY_MAX_GAP_WIDTH: Final[float] = 18.0  # px across the two paint walls that brace a gap (a
+#                                                16 px opening spans 17 px wall to wall); a wider shade
+#                                                is an area, not a gap between subject parts
+SHADED_KEY_MIN_CORE: Final[float] = 1.5        # px half-width of the darkest core: a gap has one, a
+#                                                one-pixel key-coloured dot is paint and has none
+SHADED_KEY_MIN_EXTENT: Final[float] = 5.0      # px: a thin gap is also a long seam, not a compact dot
+SHADED_KEY_MIN_RAMP: Final[float] = 0.12       # share of the key level a shade must span from mouth to
+#                                                depth: a crevice ramps, a flat key-like patch does not
+
 MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
     "watercolor": (
         " Watercolor texture belongs to the subject only; the background "
@@ -73,6 +100,126 @@ def parse_key_color(value: object) -> tuple[int, int, int]:
     if _HEX_COLOR.fullmatch(normalized):
         return tuple(int(normalized[index : index + 2], 16) for index in (1, 3, 5))
     raise ValueError("Цвет chroma key должен быть blue, red, green или #RRGGBB")
+
+
+def chroma_gap(first: object, second: object) -> float:
+    """Angle in degrees between two colours' chroma directions.
+
+    Two samples of one key hue differ by this alone whatever their level, so a
+    dark but saturated key still matches its requested colour.
+    """
+    first = np.asarray(first, dtype=np.float32)
+    second = np.asarray(second, dtype=np.float32)
+    left = np.array([first[0] - first[1], first[1] - first[2]], dtype=np.float32)
+    right = np.array([second[0] - second[1], second[1] - second[2]], dtype=np.float32)
+    scale = float(np.linalg.norm(left) * np.linalg.norm(right))
+    if scale < 1e-6:
+        return 90.0
+    return float(np.degrees(np.arccos(np.clip(float(left @ right) / scale, -1.0, 1.0))))
+
+
+def key_chroma_angle(rgb: np.ndarray, measured_key: np.ndarray) -> np.ndarray:
+    """Angle in degrees between every pixel's chroma and the measured key's chroma.
+
+    ``rgb`` and ``measured_key`` may use any common numeric range. Green and red
+    keys carry the same construction, so no channel is privileged.
+    """
+    key_chroma = np.asarray(measured_key, dtype=np.float32)[:2] - np.asarray(
+        measured_key, dtype=np.float32
+    )[1:]
+    pixel_chroma = np.stack(
+        (rgb[..., 0] - rgb[..., 1], rgb[..., 1] - rgb[..., 2]),
+        axis=-1,
+    ).astype(np.float32)
+    key_length = max(float(np.linalg.norm(key_chroma)), 1e-6)
+    norm = np.linalg.norm(pixel_chroma, axis=-1) * key_length
+    cosine = (pixel_chroma @ key_chroma) / np.maximum(norm, 1e-6)
+    return np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
+
+
+def shaded_key_pocket(rgb: np.ndarray, measured_key: np.ndarray) -> np.ndarray:
+    """Background that the generator shaded: dark pockets of the key's own hue in a gap.
+
+    A shaded key sample is a mixture the key's own chromaticity cannot separate
+    from an opaque subject detail seen through partial coverage, so this never
+    decides on colour alone. The shade must show the key's hue at a level well
+    below the key's, lie too far from the solid key to be an anti-aliased edge,
+    sit between two paint walls, and ramp from its mouth to its depth: a crevice
+    shadow darkens, while a patch painted in one key-like colour does not.
+    """
+    measured_key = np.asarray(measured_key, dtype=np.float32)
+    channel = int(np.argmax(measured_key))
+    others = [index for index in range(3) if index != channel]
+    other = np.maximum(rgb[..., others[0]], rgb[..., others[1]])
+    lead = rgb[..., channel] - other
+    key_lead = float(measured_key[channel] - max(measured_key[others[0]], measured_key[others[1]]))
+    angle = key_chroma_angle(rgb, measured_key)
+    near_background = (
+        np.linalg.norm(rgb - measured_key, axis=2)
+        < SHADED_KEY_KEY_DISTANCE * max(float(np.linalg.norm(measured_key)), 1e-6)
+    )
+    shade = (
+        (lead >= SHADED_KEY_LEAD_FRACTION * key_lead)
+        & (rgb[..., channel] <= SHADED_KEY_MAX_LEVEL * measured_key[channel])
+        & (angle <= SHADED_KEY_MAX_ANGLE)
+        & ~near_background
+    )
+    if not np.any(shade):
+        return shade
+    # The unshaded key itself, judged against its own level so that a dark key
+    # keeps working: only the flat background is an anti-aliased edge reference.
+    unshaded = (rgb[..., channel] >= SHADED_KEY_SOLID_LEVEL * measured_key[channel]) & (
+        angle <= SHADED_KEY_MAX_ANGLE
+    )
+    # Shading ramps: a crevice is darker at its deepest point than at its mouth,
+    # while a patch painted in one key-like colour does not change level. A shape
+    # that never ramps over its whole extent is a painted detail, not a gap.
+    paint = angle >= SHADED_KEY_PAINT_ANGLE
+    background_clearance = cv2.distanceTransform((~unshaded).astype(np.uint8), cv2.DIST_L2, 5)
+    gap_width = _bracketing_paint_width(paint)
+    # A gap is a seam: it either has a dark core, or it is a long thin channel.
+    # A compact one-pixel key-coloured dot is painted detail, not a gap.
+    level = rgb[..., channel]
+    thickness = cv2.distanceTransform(shade.astype(np.uint8), cv2.DIST_L2, 5)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(shade.astype(np.uint8), connectivity=8)
+    widest = np.zeros(count, np.float32)
+    np.maximum.at(widest, labels.ravel(), thickness.ravel())
+    extent = np.maximum(stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT]).astype(np.float32)
+    seam = (widest >= SHADED_KEY_MIN_CORE) | (extent >= SHADED_KEY_MIN_EXTENT)
+    lowest = np.full(count, np.inf, np.float32)
+    highest = np.full(count, -np.inf, np.float32)
+    np.minimum.at(lowest, labels.ravel(), level.ravel())
+    np.maximum.at(highest, labels.ravel(), level.ravel())
+    shadow = (highest - lowest)[labels] >= SHADED_KEY_MIN_RAMP * measured_key[channel]
+    return (
+        shade
+        & seam[labels]
+        & shadow
+        & (background_clearance > SHADED_KEY_BACKGROUND_CLEARANCE)
+        & (gap_width <= SHADED_KEY_MAX_GAP_WIDTH)
+    )
+
+
+def _bracketing_paint_width(paint: np.ndarray) -> np.ndarray:
+    """Distance across the paint walls that brace every pixel, along the axes.
+
+    A pixel inside a gap between two subject parts is close to paint on two
+    opposite sides; a pixel of an anti-aliased subject contour is close on one
+    side only. The smaller of the horizontal and vertical spans is returned.
+    """
+    height, width = paint.shape
+    far = np.float32(width + height)
+    columns = np.arange(width, dtype=np.float32)[None, :]
+    rows = np.arange(height, dtype=np.float32)[:, None]
+    to_paint_x = np.where(paint, columns, -far)
+    to_paint_y = np.where(paint, rows, -far)
+    left = columns - np.maximum.accumulate(to_paint_x, axis=1)
+    up = rows - np.maximum.accumulate(to_paint_y, axis=0)
+    from_paint_x = np.where(paint, columns, far)
+    from_paint_y = np.where(paint, rows, far)
+    right = np.minimum.accumulate(from_paint_x[:, ::-1], axis=1)[:, ::-1] - columns
+    down = np.minimum.accumulate(from_paint_y[::-1, :], axis=0)[::-1, :] - rows
+    return np.minimum(left + right, up + down)
 
 
 def remove_chroma_key(
@@ -305,9 +452,14 @@ def _remove_chroma_key_precise(
             raw_matte,
         )
     matte[distance_from_key >= 200.0] = 1.0
+    # An enclosed shade of the key is background, not an opaque marker: it must
+    # not enter the recovery, and no later stage may raise it again.
+    pocket = shaded_key_pocket(rgb, measured_key)
+    matte[pocket] = 0.0
     if allow_enclosed_transition_recovery:
-        matte = _recover_opaque_texture_matte(rgb, measured_key, matte)
+        matte = _recover_opaque_texture_matte(rgb, measured_key, matte, background=pocket)
         matte, _ = _extend_opaque_color_runs(rgb, matte, measured_key)
+        matte[pocket] = 0.0
     visible = matte > (1.0 / 255.0)
     if np.any(visible):
         recovered = (
@@ -532,12 +684,17 @@ def _opaque_colors_explained_by_key_mix(
 
 def _recover_opaque_texture_matte(
     rgb: np.ndarray, key: np.ndarray, matte: np.ndarray,
+    *, background: np.ndarray | None = None,
 ) -> np.ndarray:
     """Recover opaque texture markers without flattening the outer AA band.
 
     Only the opaque-subject profile calls this. Enclosed coverage dips, narrow
     strokes bracketed by opaque samples, and flat separated colour patches are
     foreground evidence. The actual outer band still needs a colour-mixture fit.
+    ``background`` names pixels already known to be background (a shaded key
+    pocket); their colour is numerically far from the key yet cannot serve as an
+    opaque marker, so they are excluded from the marker and support tests while
+    still counting as neighbourhood for the depth transform.
     """
     distance_squared = np.zeros(matte.shape, np.float32)
     for channel in range(3):
@@ -545,7 +702,11 @@ def _recover_opaque_texture_matte(
         distance_squared += delta * delta
     separated = distance_squared >= _MIN_OPAQUE_REFERENCE_DISTANCE ** 2
     del distance_squared, delta
-    support = (matte > 0.02) | separated
+    if background is None:
+        background = np.zeros(matte.shape, bool)
+    else:
+        separated &= ~background
+    support = (matte > 0.02) | separated | background
     _, subject_labels = cv2.connectedComponents(support.astype(np.uint8), connectivity=8)
     depth = cv2.distanceTransform(support.astype(np.uint8), cv2.DIST_L2, 5)
     core = (matte == 1.0) & (depth > 3.0)
@@ -1425,6 +1586,9 @@ def _remove_chroma_key_staged(
             "Chroma Key фон неоднородный; нужен ровный однотонный фон"
         )
     del sides, side_medians, requested_key
+    # Shading inside narrow gaps is background whatever the coverage solve and the
+    # texture recovery make of it; the mask is taken from the untouched source.
+    pocket = shaded_key_pocket(rgb, measured_key)
 
     dominant = rgb[..., key_channel]
     other = np.maximum(
@@ -1703,8 +1867,13 @@ def _remove_chroma_key_staged(
         key_edge = _supported_key_edge(original_rgb, alpha, measured_key) | early_rim
         key_edge_rgb = rgb[key_edge].copy()
         key_edge_alpha = alpha[key_edge].copy()
-        recovered_alpha = _recover_opaque_texture_matte(original_rgb, measured_key, alpha)
+        alpha[pocket] = 0.0
+        recovered_alpha = _recover_opaque_texture_matte(
+            original_rgb, measured_key, alpha, background=pocket,
+        )
         recovered_alpha, opaque_runs = _extend_opaque_color_runs(original_rgb, recovered_alpha, measured_key)
+        # A confirmed gap stays background: neither recovery may rebuild opacity on it.
+        recovered_alpha[pocket] = 0.0
         changed = (recovered_alpha > alpha) & (recovered_alpha < 1.0)
         rgb[changed] = (
             original_rgb[changed] - (1-recovered_alpha[changed, None])*measured_key
@@ -1714,8 +1883,14 @@ def _remove_chroma_key_staged(
         rgb[opaque] = original_rgb[opaque]
         alpha[key_edge] = key_edge_alpha
         rgb[key_edge] = key_edge_rgb
+        alpha[pocket] = 0.0
+        # Transparent pixels keep the source colour, as in the precise profile; the
+        # matting extends a visible neighbour colour over them.
+        rgb[pocket] = original_rgb[pocket]
         del key_edge_rgb, key_edge_alpha
         del original_rgb, opaque, recovered_alpha, changed
+    elif np.any(pocket):
+        alpha[pocket] = 0.0
 
     # Float noise (~1e-8) differs between CPU SIMD paths; without snapping it flips the
     # exact `alpha > 0.0` edge test and the whole result changes from machine to machine.

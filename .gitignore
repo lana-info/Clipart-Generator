@@ -60,3 +60,10 @@ ai-metla-test-20260719/
 start_clipart_gui_launch.log
 # Generated test-only public trust profile; excluded from production checkouts.
 /_acceptance_build.py
+
+# Full-size evidence plates (about 1 MB each, derivable with scripts/chroma_shaded_gap_*.py);
+# the light montages, logs and report in the same folders stay tracked.
+artifacts/**/*_on_white.png
+artifacts/**/*_on_black.png
+artifacts/**/*_on_magenta.png
+artifacts/**/*_on_cyan.png

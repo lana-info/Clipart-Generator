@@ -1,0 +1,1410 @@
+chroma_key    : /root/projects/Clipart Generator/fix-cutout-haze-20261029-worktree/chroma_key.py
+chroma_matting: /root/projects/Clipart Generator/fix-cutout-haze-20261029-worktree/chroma_matting.py
+FF....FFFF.FFFFFFFF......F...........FF....FFF..F.F.....F............... [ 30%]
+.......FF.........F.....F.....F......F................................................................................................. [ 87%]
+....F..............F...F.F.F..                                           [100%]
+=================================== FAILURES ===================================
+_____ test_left_entry_only_enables_for_available_png_and_never_runs_worker _____
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_left_entry_only_enables_f0')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+
+    def test_left_entry_only_enables_for_available_png_and_never_runs_worker(tmp_path,app):
+        source=png(tmp_path/'inputs'/'sample.png')
+        shell,c=setup_editor(tmp_path,app)
+        assert entry(shell) is not None
+        assert not entry(shell).isEnabled()
+        c.files_page.add_files([str(source)])
+>       assert entry(shell).isEnabled()
+E       assert False
+E        +  where False = <built-in method isEnabled of V3Button object at 0x7dc12d982df0>()
+E        +    where <built-in method isEnabled of V3Button object at 0x7dc12d982df0> = <v3_components.V3Button object at 0x7dc12d982df0>.isEnabled
+E        +      where <v3_components.V3Button object at 0x7dc12d982df0> = entry(<v3_wizard.AppShell object at 0x7dc12d906c10>)
+
+tests/test_direct_transparency_entry.py:49: AssertionError
+____ test_save_copy_preserves_source_and_existing_files_and_restores_editor ____
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_save_copy_preserves_sourc0')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+
+    def test_save_copy_preserves_source_and_existing_files_and_restores_editor(tmp_path,app):
+        source=png(tmp_path/'inputs'/'sample.png');before=digest(source)
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+        page=c.pages[StepId.TRANSPARENCY]
+>       doc=page.document;doc.begin_stroke();doc.extend_stroke(((10,10),),radius=3,action='remove',hardness=100);doc.end_stroke()
+            ^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc12d06fb10>
+
+    @property
+    def document(self) -> MaskEditDocument:
+        path = self.current_path
+        if path is None or path != self._loaded_path or self._document is None:
+>           raise ValueError("Нет изображения для проверки")
+E           ValueError: Нет изображения для проверки
+
+v3_transparency_preview.py:2813: ValueError
+___________ test_long_input_name_can_save_transactional_copy[stem0] ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_long_input_name_can_save_0')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+stem = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    @pytest.mark.parametrize('stem',['a'*230,'я'*110])
+    def test_long_input_name_can_save_transactional_copy(tmp_path,app,stem):
+        source=png(tmp_path/'inputs'/f'{stem}.png');before=digest(source)
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+>       output,mask=c.pages[StepId.TRANSPARENCY].save_current()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc1343bbc50>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+___________ test_long_input_name_can_save_transactional_copy[stem1] ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_long_input_name_can_save_1')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+stem = 'яяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяя'
+
+    @pytest.mark.parametrize('stem',['a'*230,'я'*110])
+    def test_long_input_name_can_save_transactional_copy(tmp_path,app,stem):
+        source=png(tmp_path/'inputs'/f'{stem}.png');before=digest(source)
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+>       output,mask=c.pages[StepId.TRANSPARENCY].save_current()
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc1342c3a70>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+______ test_copy_failure_preserves_source_and_does_not_leave_empty_files _______
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_copy_failure_preserves_so0')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc134277890>
+
+    def test_copy_failure_preserves_source_and_does_not_leave_empty_files(tmp_path,app,monkeypatch):
+        source=png(tmp_path/'inputs'/'sample.png');before=digest(source)
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+        page=c.pages[StepId.TRANSPARENCY]
+        def fail(*args,**kwargs):raise OSError('simulated disk failure')
+>       monkeypatch.setattr(page.document,'save',fail)
+                            ^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc1343d0050>
+
+    @property
+    def document(self) -> MaskEditDocument:
+        path = self.current_path
+        if path is None or path != self._loaded_path or self._document is None:
+>           raise ValueError("Нет изображения для проверки")
+E           ValueError: Нет изображения для проверки
+
+v3_transparency_preview.py:2813: ValueError
+___ test_same_named_sources_save_distinct_copies_and_reject_outside_mapping ____
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_same_named_sources_save_d0')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+
+    def test_same_named_sources_save_distinct_copies_and_reject_outside_mapping(tmp_path,app):
+        one=png(tmp_path/'one'/'sample.png');two=png(tmp_path/'two'/'sample.png',(1,2,3,255))
+        shell,c=setup_editor(tmp_path,app,[one,two]);entry(shell).click()
+>       page=c.pages[StepId.TRANSPARENCY];first,_=page.save_current();page.file_list.setCurrentRow(1)
+                                                  ^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc13427f1b0>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+________ test_explicit_reimport_does_not_reopen_old_edited_copy[clear] _________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_explicit_reimport_does_no0')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>, remove = 'clear'
+
+    @pytest.mark.parametrize('remove',['clear','remove','restart'])
+    def test_explicit_reimport_does_not_reopen_old_edited_copy(tmp_path,app,remove):
+        source=png(tmp_path/'inputs'/'sample.png')
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+>       c.pages[StepId.TRANSPARENCY].save_current();c._close_transparency_editor()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc12d0962b0>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+________ test_explicit_reimport_does_not_reopen_old_edited_copy[remove] ________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_explicit_reimport_does_no1')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>, remove = 'remove'
+
+    @pytest.mark.parametrize('remove',['clear','remove','restart'])
+    def test_explicit_reimport_does_not_reopen_old_edited_copy(tmp_path,app,remove):
+        source=png(tmp_path/'inputs'/'sample.png')
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+>       c.pages[StepId.TRANSPARENCY].save_current();c._close_transparency_editor()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc12d0f18b0>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+_______ test_explicit_reimport_does_not_reopen_old_edited_copy[restart] ________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_explicit_reimport_does_no2')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+remove = 'restart'
+
+    @pytest.mark.parametrize('remove',['clear','remove','restart'])
+    def test_explicit_reimport_does_not_reopen_old_edited_copy(tmp_path,app,remove):
+        source=png(tmp_path/'inputs'/'sample.png')
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+>       c.pages[StepId.TRANSPARENCY].save_current();c._close_transparency_editor()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc12cb09130>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+_______________ test_corrupt_saved_copy_does_not_block_original ________________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_corrupt_saved_copy_does_n0')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+
+    def test_corrupt_saved_copy_does_not_block_original(tmp_path,app):
+        source=png(tmp_path/'inputs'/'sample.png')
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+>       output,_=c.pages[StepId.TRANSPARENCY].save_current();output.write_bytes(b'not PNG')
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc12cb38550>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+_____ test_crc_valid_corrupt_copy_falls_back_without_deleting[huge-header] _____
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_crc_valid_corrupt_copy_fa0')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+corruption = 'huge-header'
+
+    @pytest.mark.parametrize('corruption',['huge-header','invalid-deflate'])
+    def test_crc_valid_corrupt_copy_falls_back_without_deleting(tmp_path,app,corruption):
+        import struct,zlib
+        source=png(tmp_path/'inputs'/'sample.png')
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+>       output,_=c.pages[StepId.TRANSPARENCY].save_current()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:193: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc12cb0f570>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+___ test_crc_valid_corrupt_copy_falls_back_without_deleting[invalid-deflate] ___
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_crc_valid_corrupt_copy_fa1')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+corruption = 'invalid-deflate'
+
+    @pytest.mark.parametrize('corruption',['huge-header','invalid-deflate'])
+    def test_crc_valid_corrupt_copy_falls_back_without_deleting(tmp_path,app,corruption):
+        import struct,zlib
+        source=png(tmp_path/'inputs'/'sample.png')
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+>       output,_=c.pages[StepId.TRANSPARENCY].save_current()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:193: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc12cb1a670>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+_______ test_direct_copy_keeps_metadata_and_hash_bound_generation_intent _______
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_direct_copy_keeps_metadat0')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+
+    def test_direct_copy_keeps_metadata_and_hash_bound_generation_intent(tmp_path,app):
+        from chroma_generation_record import write_generation_intent,bind_generation_record,capture_generation_record,record_path
+        source=tmp_path/'inputs'/'sample.png';source.parent.mkdir()
+        intent=write_generation_intent(source,color='blue',prompt='safe synthetic test')
+        Image.new('RGBA',(24,24),(220,180,90,255)).save(source,dpi=(300,300),icc_profile=b'test-profile')
+        bind_generation_record(source,intent)
+        before=digest(source);sidecar_before=record_path(source).read_bytes()
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+>       output,_=c.pages[StepId.TRANSPARENCY].save_current()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc12cb9d8b0>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+----------------------------- Captured stderr call -----------------------------
+qt.gui.imageio: libpng warning: iCCP: too short
+_ test_save_copy_still_works_when_the_source_generation_record_no_longer_matches _
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_save_copy_still_works_whe0')
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+
+    def test_save_copy_still_works_when_the_source_generation_record_no_longer_matches(tmp_path,app):
+        """Owner 2026-10-27: «Не удалось сохранить PNG — Сведения генерации повреждены или относятся к другому файлу»."""
+        from chroma_generation_record import write_generation_intent,bind_generation_record,capture_generation_record,record_path
+        source=tmp_path/'inputs'/'sample.png';source.parent.mkdir()
+        intent=write_generation_intent(source,color='blue',prompt='safe synthetic test')
+        Image.new('RGBA',(24,24),(220,180,90,255)).save(source)
+        bind_generation_record(source,intent)
+        Image.new('RGBA',(24,24),(10,20,30,255)).save(source)  # the picture changed after the record was bound
+        before=digest(source)
+        with pytest.raises(ValueError):
+            capture_generation_record(source)
+        shell,c=setup_editor(tmp_path,app,[source]);entry(shell).click()
+>       output,_=c.pages[StepId.TRANSPARENCY].save_current()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_direct_transparency_entry.py:242: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <v3_transparency_preview.ClipartTransparencyEditorPage object at 0x7dc12cba0870>
+
+    def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
+            job = self.canvas._contour_job
+            if job['future'] is not None and job['future'].done():
+                self.canvas._poll_contour()
+            else:
+                loop = QEventLoop(self)
+                self.canvas.contour_finished.connect(loop.quit)
+                try:
+                    loop.exec()
+                finally:
+                    self.canvas.contour_finished.disconnect(loop.quit)
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
+        output_path = self.current_path
+        if output_path is None:
+>           raise ValueError("Нет изображения для сохранения")
+E           ValueError: Нет изображения для сохранения
+
+v3_transparency_preview.py:3620: ValueError
+_________ test_cancelled_slots_do_not_block_ready_export_after_reopen __________
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc12c51f1b0>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc12c5bbb10>, <Mock id='138268625950560'>, <Mock id='138268625948544'>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc12c2df440>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_cancelled_slots_do_not_bl0')
+
+    def test_cancelled_slots_do_not_block_ready_export_after_reopen(workspace, monkeypatch, tmp_path):
+        view, controller, _, worker = workspace
+        controller.brief.total.setValue(20)
+        prepare_launch(controller)
+        session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+        session.output_dir.mkdir(parents=True, exist_ok=True)
+        output = session.output_dir / 'single_ready.png'
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+        image.save(output)
+        session.items[0].status = RunItemStatus.SUCCEEDED
+        session.items[0].output_path = str(output)
+        for item in session.items[1:]:
+            item.status = RunItemStatus.CANCELLED
+        session.handle_finished()
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+        controller._save_run()
+        controller.save_timer.stop()
+        assert view.continue_saved_project(view._active_project_id)
+        resumed = view.shell.workflow_controller('auto-clipart')
+        resumed.save_timer.stop()
+        assert all(item.status is RunItemStatus.CANCELLED for item in resumed.run_queue.session.items[1:])
+        resumed._refresh_export()
+        wait_png_check(resumed.export_panel)
+>       assert resumed.export_panel.review_issues == []
+E       AssertionError: assert [{'kind': 'mi... 'paths': []}] == []
+E         
+E         Left contains one more item: {'kind': 'missing', 'object_id': '918de954-9c83-46bc-aee3-27d653e80043', 'count': 0, 'paths': []}
+E         Use -v to get more diff
+
+tests/test_auto_clipart_workflow.py:257: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+_ test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance[none] _
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc12c17b6b0>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc12c190050>, <Mock id='138268622096864'>, <Mock id='138268622097008'>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc12c1a8860>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_replan_reuses_ready_outpu0')
+change = 'none'
+
+    @pytest.mark.parametrize('change', ['none', 'manual_keep_hero', 'prompt', 'settings', 'missing_png', 'legacy_settings'])
+    def test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance(workspace, monkeypatch, tmp_path, change):
+        view, controller, _, factory = workspace
+        controller.brief.total.setValue(20)
+        prepare_launch(controller)
+        session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+        session.output_dir.mkdir(parents=True, exist_ok=True)
+        output = session.output_dir / 'retained_ready.png'
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+        image.save(output)
+        # The approved balanced recipe for one image retains the first decor idea.
+        role = 'hero' if change == 'manual_keep_hero' else 'decor'
+        retained_id = next(item['id'] for item in controller.brief.object_editor.items if item['role'] == role)
+        ready_item = next(item for item in session.items if item.payload['object_id'] == retained_id)
+        for item in session.items:
+            item.status = RunItemStatus.FAILED
+        ready_item.status = RunItemStatus.SUCCEEDED
+        ready_item.output_path = str(output)
+        ready_item.paid_completed_stages = ('upscale_after',)
+        session.handle_finished()
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+        controller._save_run()
+        if change == 'legacy_settings':
+            controller.shell.state.data.automatic.pop('run_settings_fingerprint')
+        controller.save_timer.stop()
+        assert view.continue_saved_project(view._active_project_id)
+        resumed = view.shell.workflow_controller('auto-clipart')
+        resumed.save_timer.stop()
+        monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+        for _ in range(5):
+            resumed.navigate(-1)
+        if change != 'manual_keep_hero':
+            resumed.brief.total.setValue(1)
+        if change == 'settings':
+            resumed.shell.state.data.operations.unsharp = not resumed.shell.state.data.operations.unsharp
+        if change == 'missing_png':
+            output.unlink()
+        for _ in range(4):
+            resumed.navigate(1)
+        if change == 'manual_keep_hero':
+            editor = resumed.brief.object_editor
+            while len(editor.items) > 1:
+                editor.list.setCurrentRow(len(editor.items) - 1)
+                editor.remove()
+            assert editor.items[0]['id'] == retained_id
+        if change == 'prompt':
+            resumed.brief.object_editor.items[0]['name'] = 'Different asset'
+            resumed.brief.object_editor.refresh()
+        view.shell.next_button.click()
+        archive = resumed.shell.state.data.automatic['previous_runs'][-1]
+        assert len(archive['run']) == 20
+        assert archive['run'][ready_item.index - 1]['paid_completed_stages'] == ['upscale_after']
+        if change not in {'none', 'manual_keep_hero'}:
+            assert resumed.run_queue.session is None
+            factory.assert_not_called()
+            return
+        retained = resumed.run_queue.session
+>       assert retained is not None and len(retained.items) == 1 and not retained.running
+E       assert (None is not None)
+
+tests/test_auto_clipart_workflow.py:451: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+_ test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance[manual_keep_hero] _
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc12c3b8370>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc12c3fbbb0>, <Mock id='138268621888192'>, <Mock id='138268621897648'>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc12c174dd0>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_replan_reuses_ready_outpu1')
+change = 'manual_keep_hero'
+
+    @pytest.mark.parametrize('change', ['none', 'manual_keep_hero', 'prompt', 'settings', 'missing_png', 'legacy_settings'])
+    def test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance(workspace, monkeypatch, tmp_path, change):
+        view, controller, _, factory = workspace
+        controller.brief.total.setValue(20)
+        prepare_launch(controller)
+        session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+        session.output_dir.mkdir(parents=True, exist_ok=True)
+        output = session.output_dir / 'retained_ready.png'
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+        image.save(output)
+        # The approved balanced recipe for one image retains the first decor idea.
+        role = 'hero' if change == 'manual_keep_hero' else 'decor'
+        retained_id = next(item['id'] for item in controller.brief.object_editor.items if item['role'] == role)
+        ready_item = next(item for item in session.items if item.payload['object_id'] == retained_id)
+        for item in session.items:
+            item.status = RunItemStatus.FAILED
+        ready_item.status = RunItemStatus.SUCCEEDED
+        ready_item.output_path = str(output)
+        ready_item.paid_completed_stages = ('upscale_after',)
+        session.handle_finished()
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+        controller._save_run()
+        if change == 'legacy_settings':
+            controller.shell.state.data.automatic.pop('run_settings_fingerprint')
+        controller.save_timer.stop()
+        assert view.continue_saved_project(view._active_project_id)
+        resumed = view.shell.workflow_controller('auto-clipart')
+        resumed.save_timer.stop()
+        monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+        for _ in range(5):
+            resumed.navigate(-1)
+        if change != 'manual_keep_hero':
+            resumed.brief.total.setValue(1)
+        if change == 'settings':
+            resumed.shell.state.data.operations.unsharp = not resumed.shell.state.data.operations.unsharp
+        if change == 'missing_png':
+            output.unlink()
+        for _ in range(4):
+            resumed.navigate(1)
+        if change == 'manual_keep_hero':
+            editor = resumed.brief.object_editor
+            while len(editor.items) > 1:
+                editor.list.setCurrentRow(len(editor.items) - 1)
+                editor.remove()
+            assert editor.items[0]['id'] == retained_id
+        if change == 'prompt':
+            resumed.brief.object_editor.items[0]['name'] = 'Different asset'
+            resumed.brief.object_editor.refresh()
+        view.shell.next_button.click()
+        archive = resumed.shell.state.data.automatic['previous_runs'][-1]
+        assert len(archive['run']) == 20
+        assert archive['run'][ready_item.index - 1]['paid_completed_stages'] == ['upscale_after']
+        if change not in {'none', 'manual_keep_hero'}:
+            assert resumed.run_queue.session is None
+            factory.assert_not_called()
+            return
+        retained = resumed.run_queue.session
+>       assert retained is not None and len(retained.items) == 1 and not retained.running
+E       assert (None is not None)
+
+tests/test_auto_clipart_workflow.py:451: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+_ test_mixed_reused_results_retry_only_failed_and_preserve_missing_paid_provenance[False] _
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc125ec8ff0>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc125ee5ef0>, <Mock id='138268515366144'>, <Mock id='138268515356592'>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc125bde8d0>
+missing_paid_output = False
+
+    @pytest.mark.parametrize('missing_paid_output', [False, True])
+    def test_mixed_reused_results_retry_only_failed_and_preserve_missing_paid_provenance(workspace, monkeypatch, missing_paid_output):
+        view, controller, _, factory = workspace
+        controller.brief.total.setValue(20)
+        prepare_launch(controller)
+        controller.upscale_provider.setCurrentIndex(controller.upscale_provider.findData('kie'))
+        session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+        session.output_dir.mkdir(parents=True, exist_ok=True)
+        ids = {role: next(item['id'] for item in controller.brief.object_editor.items if item['role'] == role)
+               for role in ('hero', 'decor')}
+        ready = next(item for item in session.items if item.payload['object_id'] == ids['hero'])
+        failed = next(item for item in session.items if item.payload['object_id'] == ids['decor'])
+        for item in session.items:
+            item.status = RunItemStatus.FAILED
+        ready.output_path = str(session.output_dir / 'kept_ready.png')
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+        image.save(ready.output_path)
+        ready.status = RunItemStatus.SUCCEEDED
+        if missing_paid_output:
+            failed.status = RunItemStatus.SUCCEEDED
+            failed.output_path = str(session.output_dir / 'deleted_paid_ready.png')
+            failed.source_path = str(session.output_dir / 'preserved_raw.png')
+            image.save(failed.source_path)
+            failed.attempts = 4
+            failed.paid_completed_stages = ('upscale_after',)
+            failed.stage_statuses = {'generation': 'complete', 'upscale_after': 'complete'}
+        session.handle_finished()
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+        controller._save_run()
+        monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+        for _ in range(5):
+            controller.navigate(-1)
+        controller.brief.total.setValue(2)
+        for _ in range(4):
+            controller.navigate(1)
+        view.shell.next_button.click()
+        mixed = controller.run_queue.session
+>       assert controller.shell.state.current_step is StepId.RESULTS
+E       AssertionError: assert <StepId.REVIEW_RUN: 'review_run'> is <StepId.RESULTS: 'results'>
+E        +  where <StepId.REVIEW_RUN: 'review_run'> = <studio_workflow_host.WorkflowStateView object at 0x7dc12c29e110>.current_step
+E        +    where <studio_workflow_host.WorkflowStateView object at 0x7dc12c29e110> = <studio_workflow_host.WorkflowHost object at 0x7dc12c692fd0>.state
+E        +      where <studio_workflow_host.WorkflowHost object at 0x7dc12c692fd0> = <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc125ee5ef0>.shell
+E        +  and   <StepId.RESULTS: 'results'> = StepId.RESULTS
+
+tests/test_auto_clipart_workflow.py:528: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+_ test_mixed_reused_results_retry_only_failed_and_preserve_missing_paid_provenance[True] _
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc125d149b0>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc125deb4d0>, <Mock id='138268517758976'>, <Mock id='138268629417616'>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc125e24620>
+missing_paid_output = True
+
+    @pytest.mark.parametrize('missing_paid_output', [False, True])
+    def test_mixed_reused_results_retry_only_failed_and_preserve_missing_paid_provenance(workspace, monkeypatch, missing_paid_output):
+        view, controller, _, factory = workspace
+        controller.brief.total.setValue(20)
+        prepare_launch(controller)
+        controller.upscale_provider.setCurrentIndex(controller.upscale_provider.findData('kie'))
+        session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+        session.output_dir.mkdir(parents=True, exist_ok=True)
+        ids = {role: next(item['id'] for item in controller.brief.object_editor.items if item['role'] == role)
+               for role in ('hero', 'decor')}
+        ready = next(item for item in session.items if item.payload['object_id'] == ids['hero'])
+        failed = next(item for item in session.items if item.payload['object_id'] == ids['decor'])
+        for item in session.items:
+            item.status = RunItemStatus.FAILED
+        ready.output_path = str(session.output_dir / 'kept_ready.png')
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+        image.save(ready.output_path)
+        ready.status = RunItemStatus.SUCCEEDED
+        if missing_paid_output:
+            failed.status = RunItemStatus.SUCCEEDED
+            failed.output_path = str(session.output_dir / 'deleted_paid_ready.png')
+            failed.source_path = str(session.output_dir / 'preserved_raw.png')
+            image.save(failed.source_path)
+            failed.attempts = 4
+            failed.paid_completed_stages = ('upscale_after',)
+            failed.stage_statuses = {'generation': 'complete', 'upscale_after': 'complete'}
+        session.handle_finished()
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+        controller._save_run()
+        monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+        for _ in range(5):
+            controller.navigate(-1)
+        controller.brief.total.setValue(2)
+        for _ in range(4):
+            controller.navigate(1)
+        view.shell.next_button.click()
+        mixed = controller.run_queue.session
+>       assert controller.shell.state.current_step is StepId.RESULTS
+E       AssertionError: assert <StepId.REVIEW_RUN: 'review_run'> is <StepId.RESULTS: 'results'>
+E        +  where <StepId.REVIEW_RUN: 'review_run'> = <studio_workflow_host.WorkflowStateView object at 0x7dc12c533290>.current_step
+E        +    where <studio_workflow_host.WorkflowStateView object at 0x7dc12c533290> = <studio_workflow_host.WorkflowHost object at 0x7dc12c57ac50>.state
+E        +      where <studio_workflow_host.WorkflowHost object at 0x7dc12c57ac50> = <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc125deb4d0>.shell
+E        +  and   <StepId.RESULTS: 'results'> = StepId.RESULTS
+
+tests/test_auto_clipart_workflow.py:528: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+_ test_increased_reused_plan_resumes_only_19_unsubmitted_items_with_explicit_click _
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc125da5ef0>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc125ddcc30>, <Mock id='138268517218976'>, <Mock id='138268517219168'>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc125da25a0>
+
+    def test_increased_reused_plan_resumes_only_19_unsubmitted_items_with_explicit_click(workspace, monkeypatch):
+        view, controller, _, factory = workspace
+        prepare_launch(controller)
+        controller.upscale_provider.setCurrentIndex(controller.upscale_provider.findData('kie'))
+        session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+        session.output_dir.mkdir(parents=True, exist_ok=True)
+        output = session.output_dir / 'previous_ready.png'
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+        image.save(output)
+        session.items[0].status = RunItemStatus.SUCCEEDED
+        session.items[0].output_path = str(output)
+        retained_id = session.items[0].payload['object_id']
+        session.handle_finished()
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+        controller._save_run()
+        for _ in range(5):
+            controller.navigate(-1)
+        controller.brief.total.setValue(20)
+        for _ in range(4):
+            controller.navigate(1)
+        for item in controller.brief.object_editor.items:
+            item['name'] = 'Winter flower'
+        controller.brief.object_editor.refresh()
+        confirmations = []
+        monkeypatch.setattr(QMessageBox, 'question', lambda *args: confirmations.append(args[2]) or QMessageBox.StandardButton.Yes)
+        view.shell.next_button.click()
+        resumed = controller.run_queue.session
+>       assert controller.shell.state.current_step is StepId.RESULTS
+E       AssertionError: assert <StepId.REVIEW_RUN: 'review_run'> is <StepId.RESULTS: 'results'>
+E        +  where <StepId.REVIEW_RUN: 'review_run'> = <studio_workflow_host.WorkflowStateView object at 0x7dc12c887740>.current_step
+E        +    where <studio_workflow_host.WorkflowStateView object at 0x7dc12c887740> = <studio_workflow_host.WorkflowHost object at 0x7dc12c3c22d0>.state
+E        +      where <studio_workflow_host.WorkflowHost object at 0x7dc12c3c22d0> = <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc125ddcc30>.shell
+E        +  and   <StepId.RESULTS: 'results'> = StepId.RESULTS
+
+tests/test_auto_clipart_workflow.py:586: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+____ test_png_check_keeps_its_page_and_selected_picture_when_a_file_changes ____
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc124288690>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc124278ff0>, <Mock id='138268488214064'>, <Mock id='138268488212864'>)
+
+    def test_png_check_keeps_its_page_and_selected_picture_when_a_file_changes(workspace):
+        import time
+        _, controller, _, _ = workspace
+        prepare_launch(controller)
+        request = build_clipart_run_request(controller.shell.state)
+        session = RunQueueSession(request, controller.shell.state.mode)
+        session.output_dir.mkdir(parents=True, exist_ok=True)
+        outputs = []
+        while len(session.items) < 2:
+            session.items.append(replace(session.items[0], index=len(session.items) + 1))
+        for index in range(2):
+            output = session.output_dir / f'example_{index}_ready.png'
+            Image.new('RGBA', (64, 64), (120, 80, 40, 255)).save(output)
+            session.items[index].status = RunItemStatus.SUCCEEDED
+            session.items[index].output_path = str(output)
+            outputs.append(output)
+        session.running = False
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+    
+        def wait_checked():
+            deadline = time.monotonic() + 10
+            while controller.export_panel._qc_pending and time.monotonic() < deadline:
+                QApplication.processEvents()
+                time.sleep(0.01)
+            QApplication.processEvents()
+    
+        controller._refresh_export()
+        wait_checked()
+        controller.export_panel._show_quality_review()
+        controller.export_panel.quality_list.setCurrentRow(1)
+        selected = controller.export_panel._current_quality_key()
+>       assert selected == str(outputs[1].resolve())
+E       AssertionError: assert '' == '/tmp/pytest-...e_1_ready.png'
+E         
+E         - /tmp/pytest-of-root/pytest-940/test_png_check_keeps_its_page_0/output/example_1_ready.png
+
+tests/test_auto_clipart_workflow.py:687: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+__________ test_export_step_embeds_editable_sets_and_persists_new_set __________
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc1241d54f0>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc124195ef0>, <Mock id='138268488118160'>, <Mock id='138268514796080'>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc1241e2e10>
+
+    def test_export_step_embeds_editable_sets_and_persists_new_set(workspace, monkeypatch):
+        _, controller, _, _ = workspace
+        prepare_launch(controller)
+        request = build_clipart_run_request(controller.shell.state)
+        session = RunQueueSession(request, controller.shell.state.mode)
+        session.output_dir.mkdir(parents=True, exist_ok=True)
+        output = session.output_dir / 'example_ready.png'
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+        image.save(output)
+        session.items[0].status = RunItemStatus.SUCCEEDED
+        session.items[0].output_path = str(output)
+        session.running = False
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+        controller._refresh_export()
+        panel = controller.export_panel
+        assert panel is not None and panel.embedded and not panel.isWindow()
+>       assert panel.table.columnCount() == 2
+E       assert 1 == 2
+E        +  where 1 = <built-in method columnCount of QTableWidget object at 0x7dc12438d6d0>()
+E        +    where <built-in method columnCount of QTableWidget object at 0x7dc12438d6d0> = <PyQt6.QtWidgets.QTableWidget object at 0x7dc12438d6d0>.columnCount
+E        +      where <PyQt6.QtWidgets.QTableWidget object at 0x7dc12438d6d0> = <studio_set_export_ui.SetExportDialog object at 0x7dc12438d090>.table
+
+tests/test_auto_clipart_workflow.py:739: AssertionError
+____________ test_confirmed_run_progress_results_export_and_resume _____________
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc11ee32490>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc11eb56df0>, <Mock id='138268400149392'>, <Mock id='138268400146656'>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc11edfde50>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_confirmed_run_progress_re0')
+
+    def test_confirmed_run_progress_results_export_and_resume(workspace, monkeypatch, tmp_path):
+        from pathlib import Path
+        from zipfile import ZipFile
+        from PIL import Image, ImageDraw
+        from studio_set_export import export_clipart_sets
+        from v3_run_queue import RunItemStatus
+    
+        view, controller, gate, worker = workspace
+        raw_worker = FixtureWorker()
+        worker.return_value = raw_worker
+        prepare_launch(controller)
+        controller.upscale_provider.setCurrentIndex(controller.upscale_provider.findData("kie"))
+        errors = []
+        controller.error.connect(errors.append)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
+        view.shell.go_next()
+        assert not errors, errors
+        worker.assert_called_once()
+        assert view.project_state.current_step is StepId.RESULTS
+        session = controller.run_queue.session
+        assert session.running
+        session.handle_item_progress(dict(item_index=1, total_items=1, stage="generation",
+                                          status="running", percent=40))
+        assert not view.shell.next_button.isEnabled()
+        output = Path(view.project_state.common.output_dir) / "flower.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        png = Image.new("RGBA", (128, 128))
+        ImageDraw.Draw(png).ellipse((32, 32, 96, 96), fill=(220, 90, 140, 255))
+        png.save(output)
+        session.handle_item_progress(dict(item_index=1, total_items=1, stage="complete",
+                                          status="succeeded", percent=100, output_path=str(output)))
+        controller.worker.stop()
+        raw_worker.finished.emit("Done")
+        assert session.items[0].status is RunItemStatus.SUCCEEDED
+        assert not session.running
+        controller.navigate(1)
+        assert view.project_state.current_step is StepId.TRANSPARENCY
+        wait_png_check(controller.export_panel)
+>       assert view.shell.next_button.isEnabled()
+E       assert False
+E        +  where False = <built-in method isEnabled of V3Button object at 0x7dc11eb4fa70>()
+E        +    where <built-in method isEnabled of V3Button object at 0x7dc11eb4fa70> = <v3_components.V3Button object at 0x7dc11eb4fa70>.isEnabled
+E        +      where <v3_components.V3Button object at 0x7dc11eb4fa70> = <studio_auto_clipart_shell.AutoClipartShell object at 0x7dc11eb4e7b0>.next_button
+E        +        where <studio_auto_clipart_shell.AutoClipartShell object at 0x7dc11eb4e7b0> = <v3_mode_selection.V3ApplicationView object at 0x7dc11ee32490>.shell
+
+tests/test_auto_clipart_workflow.py:891: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+_ test_ready_files_in_the_result_folder_can_be_reconnected_without_generation __
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc11dd77430>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc11dd9fd90>, <Mock id='138268382877248'>, <Mock id='138268382875664'>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc11dd84b30>
+
+    def test_ready_files_in_the_result_folder_can_be_reconnected_without_generation(workspace, monkeypatch):
+        """Owner 2026-10-25: a new run was started and stopped, the old results vanished from the project, but the
+        PNG files were still in the result folder."""
+        view, controller, _, worker = workspace
+        controller.brief.total.setValue(6)
+        prepare_launch(controller)
+        session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+        session.output_dir.mkdir(parents=True, exist_ok=True)
+        for number in (1, 2, 4):
+            image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+            ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+            image.save(session.output_dir / f'flower_{number:02d}_ready.png')
+        for item in session.items:
+            item.status = RunItemStatus.CANCELLED
+            item.short_message = 'Не выполнялся после остановки.'
+        session.handle_finished()
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+        controller._save_run()
+        controller.save_timer.stop()
+        controller._refresh_more_menu()
+        assert controller.more_recover_action.isVisible()
+        assert controller.more_recover_action.text() == 'Вернуть готовые файлы (3)'
+        assert controller._recoverable_outputs().keys() == {0, 1, 3}
+        asked = []
+        monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: asked.append(args[2]) or QMessageBox.StandardButton.Yes)
+        controller.recover_results()
+        assert 'найдено готовых PNG: 3' in asked[0] and 'платных запросов нет' in asked[0]
+        done = [item for item in session.items if item.status is RunItemStatus.SUCCEEDED]
+        assert [Path(item.output_path).name for item in done] == [
+            'flower_01_ready.png', 'flower_02_ready.png', 'flower_04_ready.png']
+        assert all(not item.review_checked for item in done)  # still «Не проверено»
+>       assert len(controller.run_queue.page._export_paths()) == 3
+E       assert 0 == 3
+E        +  where 0 = len([])
+E        +    where [] = _export_paths()
+E        +      where _export_paths = <v3_run_queue.RunResultsPage object at 0x7dc11dd9fe30>._export_paths
+E        +        where <v3_run_queue.RunResultsPage object at 0x7dc11dd9fe30> = <v3_run_queue.RunQueueSupport object at 0x7dc11dd86a50>.page
+E        +          where <v3_run_queue.RunQueueSupport object at 0x7dc11dd86a50> = <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc11dd9fd90>.run_queue
+
+tests/test_auto_clipart_workflow.py:1368: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+_________ test_results_png_check_button_opens_png_check_before_export __________
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc11de04a50>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc11de260d0>, <Mock id='138268383240432'>, <Mock id='138268383245712'>)
+
+    def test_results_png_check_button_opens_png_check_before_export(workspace):
+        view, controller, _, _ = workspace
+        prepare_launch(controller)
+        session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+        session.output_dir.mkdir(parents=True, exist_ok=True)
+        path = session.output_dir / 'duck_birthday_01.png'
+        image = Image.new('RGBA', (96, 96), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((12, 12, 83, 83), fill=(240, 200, 140, 255))
+        image.save(path)
+        session.items[0].status = RunItemStatus.SUCCEEDED
+        session.items[0].output_path = str(path)
+        for item in session.items[1:]:
+            item.status = RunItemStatus.FAILED
+        session.handle_finished()
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+        controller._select_step(StepId.RESULTS)
+        button = controller.run_queue.page.check_transparency_button
+        assert button.text() == "Проверка PNG"
+        controller._open_png_check()
+        assert view.project_state.current_step is StepId.TRANSPARENCY
+        panel = controller.export_panel
+        wait_png_check(panel)
+        assert panel.stack.currentWidget() is panel.quality_page
+>       assert panel.quality_list.count() == 1
+E       assert 0 == 1
+E        +  where 0 = <built-in method count of QListWidget object at 0x7dc11d947bb0>()
+E        +    where <built-in method count of QListWidget object at 0x7dc11d947bb0> = <PyQt6.QtWidgets.QListWidget object at 0x7dc11d947bb0>.count
+E        +      where <PyQt6.QtWidgets.QListWidget object at 0x7dc11d947bb0> = <studio_set_export_ui.SetExportDialog object at 0x7dc11d945d10>.quality_list
+
+tests/test_auto_clipart_workflow.py:1399: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+__________________ test_results_only_export_current_successes __________________
+
+images = [PosixPath('/tmp/pytest-of-root/pytest-940/test_results_only_export_curre0/item-0.png'), PosixPath('/tmp/pytest-of-roo...nly_export_curre0/item-1.png'), PosixPath('/tmp/pytest-of-root/pytest-940/test_results_only_export_curre0/item-2.png')]
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_results_only_export_curre0')
+
+    def test_results_only_export_current_successes(images, tmp_path):
+        page = _clipart_results_page(ProjectState(mode=ProjectMode.CLIPART))
+        page.session = SimpleNamespace(running=False, output_dir=tmp_path, items=[
+            RunItem(1, 'success', status=RunItemStatus.SUCCEEDED, output_path=str(images[0])),
+            RunItem(2, 'failed', status=RunItemStatus.FAILED, output_path=str(images[1])),
+            RunItem(3, 'duplicate', status=RunItemStatus.SUCCEEDED, output_path=str(images[0])),
+        ])
+>       assert page._export_paths() == [images[0]]
+E       AssertionError: assert [] == [PosixPath('/.../item-0.png')]
+E         
+E         Right contains one more item: PosixPath('/tmp/pytest-of-root/pytest-940/test_results_only_export_curre0/item-0.png')
+E         Use -v to get more diff
+
+tests/test_studio_set_export_ui.py:174: AssertionError
+_____ test_bundle_plan_seeds_four_memberships_without_duplicate_generation _____
+
+images = [PosixPath('/tmp/pytest-of-root/pytest-940/test_bundle_plan_seeds_four_me0/item-0.png'), PosixPath('/tmp/pytest-of-roo...an_seeds_four_me0/item-1.png'), PosixPath('/tmp/pytest-of-root/pytest-940/test_bundle_plan_seeds_four_me0/item-2.png')]
+
+    def test_bundle_plan_seeds_four_memberships_without_duplicate_generation(images):
+        from studio_bundle_planner import propose_bundle_plan
+        from studio_clipart_objects import fill_recipe
+        from studio_clipart_recipe import ClipartRecipe
+        recipe = ClipartRecipe()
+        recipe.select(30)
+        recipe.objects = fill_recipe([], recipe.counts)
+        recipe.bundle_plan = propose_bundle_plan(recipe.objects)
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.recipe = recipe.to_dict()
+        page = _clipart_results_page(state)
+        root = images[0].parent
+        object_id = recipe.bundle_plan['sets'][0]['item_ids'][0]
+        page.session = SimpleNamespace(running=False, output_dir=root, items=[
+            RunItem(1, 'one', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]),
+                    payload={'object_id': object_id})
+        ])
+        page._seed_bundle_membership()
+>       links = state.clipart.export_membership[str(images[0].resolve())]['memberships']
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: '/tmp/pytest-of-root/pytest-940/test_bundle_plan_seeds_four_me0/item-0.png'
+
+tests/test_studio_set_export_ui.py:303: KeyError
+________ test_bundle_export_issues_report_missing_and_ambiguous_results ________
+
+images = [PosixPath('/tmp/pytest-of-root/pytest-940/test_bundle_export_issues_repo0/item-0.png'), PosixPath('/tmp/pytest-of-roo...port_issues_repo0/item-1.png'), PosixPath('/tmp/pytest-of-root/pytest-940/test_bundle_export_issues_repo0/item-2.png')]
+
+    def test_bundle_export_issues_report_missing_and_ambiguous_results(images):
+        from studio_bundle_planner import propose_bundle_plan
+        from studio_clipart_objects import fill_recipe
+        from studio_clipart_recipe import ClipartRecipe
+        recipe = ClipartRecipe()
+        recipe.select(8)
+        recipe.objects = fill_recipe([], recipe.counts)
+        recipe.bundle_plan = propose_bundle_plan(recipe.objects)
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.recipe = recipe.to_dict()
+        page = _clipart_results_page(state)
+        root = images[0].parent
+        ids = recipe.bundle_plan['sets'][-1]['item_ids']
+        page.session = SimpleNamespace(running=False, output_dir=root, items=[
+            RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': ids[0]}),
+            RunItem(2, 'v2', status=RunItemStatus.SUCCEEDED, output_path=str(images[1]), payload={'object_id': ids[0]}),
+            RunItem(3, 'failed', status=RunItemStatus.FAILED, output_path='', payload={'object_id': ids[1]}),
+        ])
+        issues = page._bundle_export_issues()
+>       assert {issue['kind'] for issue in issues} == {'ambiguous', 'missing'}
+E       AssertionError: assert {'missing'} == {'ambiguous', 'missing'}
+E         
+E         Extra items in the right set:
+E         'ambiguous'
+E         Use -v to get more diff
+
+tests/test_studio_set_export_ui.py:436: AssertionError
+______ test_bundle_membership_seed_deduplicates_duplicate_session_records ______
+
+images = [PosixPath('/tmp/pytest-of-root/pytest-940/test_bundle_membership_seed_de0/item-0.png'), PosixPath('/tmp/pytest-of-roo...mbership_seed_de0/item-1.png'), PosixPath('/tmp/pytest-of-root/pytest-940/test_bundle_membership_seed_de0/item-2.png')]
+
+    def test_bundle_membership_seed_deduplicates_duplicate_session_records(images):
+        from studio_bundle_planner import propose_bundle_plan
+        from studio_clipart_objects import fill_recipe
+        from studio_clipart_recipe import ClipartRecipe
+        recipe = ClipartRecipe()
+        recipe.select(8)
+        recipe.objects = fill_recipe([], recipe.counts)
+        recipe.bundle_plan = propose_bundle_plan(recipe.objects)
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.recipe = recipe.to_dict()
+        page = _clipart_results_page(state)
+        root = images[0].parent
+        object_id = recipe.bundle_plan['sets'][-1]['item_ids'][0]
+        page.session = SimpleNamespace(running=False, output_dir=root, items=[
+            RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': object_id}),
+            RunItem(2, 'same file again', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': object_id}),
+        ])
+>       assert page._seed_bundle_membership()
+E       assert False
+E        +  where False = _seed_bundle_membership()
+E        +    where _seed_bundle_membership = <v3_run_queue.RunResultsPage object at 0x7dc11de20eb0>._seed_bundle_membership
+
+tests/test_studio_set_export_ui.py:577: AssertionError
+_ test_corrected_generated_image_finishes_locally_without_generation_or_upscale _
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_corrected_generated_image0')
+
+    def test_corrected_generated_image_finishes_locally_without_generation_or_upscale(tmp_path):
+        import main
+        app = QApplication.instance() or QApplication([])
+        request = generation_request(tmp_path, count=1)
+        request.settings.update(upscale=False, remove_bg=True, remove_bg_provider='local_chroma_key',
+                                upscale_after=True, upscale_after_provider='kie',
+                                unsharp_enabled=False, edge_shrink_enabled=False,
+                                trim_enabled=False, export_300_dpi=False)
+        session = RunQueueSession(request, ProjectMode.CLIPART)
+        output = session.output_dir / 'image_ready.png'
+        output.parent.mkdir(parents=True, exist_ok=True)
+        Image.new('RGB', (64, 64), 'white').save(output)
+        session.handle_diagnostic(dict(event='stage_finished', item_index=1, item_total=1,
+                                      stage='upscale_after', outcome='succeeded'))
+        session.handle_item_progress(dict(item_index=1, total_items=1,
+                                          stage='alpha_validation', status='stage_failed'))
+        session.handle_item_progress(dict(item_index=1, total_items=1, stage='export',
+                                          status='succeeded', output_path=str(output)))
+        session.handle_finished()
+        page = RunResultsPage(ProjectState(mode=ProjectMode.CLIPART))
+        page.set_session(session)
+        edited = tmp_path / 'corrected.png'
+        image = Image.new('RGBA', (64, 64))
+        from PIL import ImageDraw
+        ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 60, 30, 255))
+        image.save(edited)
+        before = edited.read_bytes()
+        page.use_edited_output(output, edited)
+        retry = session.prepare_retry()
+        assert retry.mode == 'mode2_process'
+        assert retry.selected_files == [str(edited.resolve())]
+        assert not retry.generated_prompts and not retry.settings['upscale_after']
+        assert session.items[0].editor_output_path == str(edited.resolve())
+        worker = main.WorkerThread(retry.mode, retry.work_dir, retry.settings,
+                                   selected_files=retry.selected_files)
+        worker.progress.connect(session.handle_progress)
+        messages = []
+        worker.progress.connect(messages.append)
+        worker.item_progress.connect(session.handle_item_progress)
+        worker.diagnostic.connect(session.handle_diagnostic)
+        with patch.object(worker, '_run_upscale_pass', side_effect=AssertionError('No upscale')), \
+             patch.object(worker, '_run_local_rembg', side_effect=AssertionError('Existing alpha')):
+            worker._mode2_process_files(emit_final=False)
+        session.handle_finished()
+        assert session.items[0].status is RunItemStatus.SUCCEEDED, messages
+        assert session.items[0].editor_output_path == ""
+>       assert len(page._export_paths()) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = _export_paths()
+E        +      where _export_paths = <v3_run_queue.RunResultsPage object at 0x7dc11e30a3f0>._export_paths
+
+tests/test_v3_run_queue.py:2107: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+_________ test_actual_editor_save_rechecks_blocked_and_accepted_export _________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_actual_editor_save_rechec0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc11e31d5b0>
+
+    def test_actual_editor_save_rechecks_blocked_and_accepted_export(tmp_path, monkeypatch):
+        state, session, page, output = finished_page(tmp_path, Image.new("RGBA", (64, 64), "orange"))
+        export_page = QWidget()
+        QVBoxLayout(export_page)
+        empty = QLabel("empty")
+        export_page.layout().addWidget(empty)
+        controller = SimpleNamespace(run_queue=SimpleNamespace(page=page, session=session), review=None,
+            shell=SimpleNamespace(state=SimpleNamespace(data=state.clipart), refresh=lambda: None),
+            export_panel=None, export_page=export_page, export_empty=empty)
+        def refresh():
+            AutoClipartFlowController._refresh_export(controller)
+            panel = controller.export_panel
+            deadline = time.monotonic() + 20
+            while panel is not None and panel._qc_pending and time.monotonic() < deadline:
+                QApplication.processEvents()
+                time.sleep(0.01)
+            QApplication.processEvents()
+        refresh()
+        state.clipart.export_membership = controller.export_panel.saved_membership
+>       assert controller.export_panel.export_button.isEnabled()  # a blocking automatic finding no longer disables export (owner 2026-10-28)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       assert False
+E        +  where False = <built-in method isEnabled of QPushButton object at 0x7dc11e2b3bb0>()
+E        +    where <built-in method isEnabled of QPushButton object at 0x7dc11e2b3bb0> = <PyQt6.QtWidgets.QPushButton object at 0x7dc11e2b3bb0>.isEnabled
+E        +      where <PyQt6.QtWidgets.QPushButton object at 0x7dc11e2b3bb0> = <studio_set_export_ui.SetExportDialog object at 0x7dc11e2c3bb0>.export_button
+E        +        where <studio_set_export_ui.SetExportDialog object at 0x7dc11e2c3bb0> = namespace(run_queue=namespace(page=<v3_run_queue.RunResultsPage object at 0x7dc11e2c3f70>, session=<v3_run_queue.RunQu...age=<PyQt6.QtWidgets.QWidget object at 0x7dc11e2c1b30>, export_empty=<PyQt6.QtWidgets.QLabel object at 0x7dc11e2c0ff0>).export_panel
+
+tests/test_review_processing_results.py:91: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+__________ test_batch_keeps_sources_reuses_model_and_rejects_bad_mask __________
+
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_batch_keeps_sources_reuse0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc11e264d40>
+
+    def test_batch_keeps_sources_reuses_model_and_rejects_bad_mask(app, tmp_path, monkeypatch):
+        sources = []
+        for name, color in [('good', (180, 90, 50)), ('bad', (0, 0, 0))]:
+            path = tmp_path / f'{name}.png'
+            Image.new('RGB', (64, 64), color).save(path)
+            sources.append(path)
+        native = tmp_path / 'native.png'
+        image = Image.new('RGBA', (64, 64))
+        ImageDraw.Draw(image).rectangle((12, 12, 52, 52), fill=(10, 20, 30, 255))
+        image.save(native)
+        sources.append(native)
+        original_bytes = {path: path.read_bytes() for path in sources}
+        state, request = make_request(tmp_path, sources)
+        session = RunQueueSession(request, ProjectMode.PROCESSING)
+        def remove(data, session):
+            with Image.open(BytesIO(data)) as source:
+                result = source.convert('RGBA')
+            if result.getpixel((0, 0))[0]:
+                alpha = Image.new('L', result.size)
+                ImageDraw.Draw(alpha).rectangle((8, 8, 55, 55), fill=230)
+                result.putalpha(alpha)
+            buffer = BytesIO()
+            result.save(buffer, format='PNG')
+            return buffer.getvalue()
+        new_session = Mock(return_value=object())
+        remover = Mock(side_effect=remove)
+        monkeypatch.setattr(main, 'import_rembg_tools', lambda: (new_session, remover))
+        worker = main.WorkerThread(request.mode, request.work_dir, request.settings,
+                                   selected_files=request.selected_files)
+        worker.progress.connect(session.handle_progress)
+        worker.item_progress.connect(session.handle_item_progress)
+        worker._mode2_process_files(emit_final=False)
+        session.handle_finished()
+        assert [item.status for item in session.items] == [
+            RunItemStatus.SUCCEEDED, RunItemStatus.FAILED, RunItemStatus.SUCCEEDED]
+        new_session.assert_called_once_with('u2net')
+        assert remover.call_count == 2  # Already transparent images retain their alpha.
+        with Image.open(session.items[0].output_path) as output:
+            assert output.size == (64, 64)
+            assert {value for value, count in enumerate(output.getchannel('A').histogram()) if count} == {0, 255}
+            assert output.getpixel((32, 32)) == (180, 90, 50, 255)
+            assert output.getpixel((8, 32))[3] == 0
+        with Image.open(session.items[2].output_path) as output:
+            assert output.convert('RGBA').tobytes() == image.tobytes()
+        assert all(path.read_bytes() == data for path, data in original_bytes.items())
+        page = RunResultsPage(state)
+        page.set_session(session)
+>       assert len(page._export_paths()) == 2
+E       assert 0 == 2
+E        +  where 0 = len([])
+E        +    where [] = _export_paths()
+E        +      where _export_paths = <v3_run_queue.RunResultsPage object at 0x7dc11e18d130>._export_paths
+
+tests/test_processing_sharp_cutout.py:99: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+______________ test_processing_editor_saved_copy_replaces_result _______________
+
+app = <PyQt6.QtWidgets.QApplication object at 0x7dc12d905950>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_processing_editor_saved_c0')
+
+    def test_processing_editor_saved_copy_replaces_result(app, tmp_path):
+        from studio_workflow_host import WorkflowHost
+        from v3_processing_flow import install_processing_flow
+        from v3_wizard import AppShell
+        source = tmp_path / 'source.png'
+        Image.new('RGB', (64, 64), 'white').save(source)
+        state, request = make_request(tmp_path, [source])
+        shell = AppShell(state)
+        controller = install_processing_flow(WorkflowHost(shell, 'processing', worker_factory=Mock()))
+        session = RunQueueSession(request, ProjectMode.PROCESSING)
+        output = session.output_dir / 'source_ready.png'
+        output.parent.mkdir(parents=True, exist_ok=True)
+        image = Image.new('RGBA', (64, 64))
+        ImageDraw.Draw(image).ellipse((10, 10, 50, 50), fill=(80, 120, 160, 255))
+        image.save(output)
+        session.handle_item_progress(dict(item_index=1, total_items=1, stage='export',
+                                         status='succeeded', output_path=str(output)))
+        session.handle_finished()
+        controller.run_queue.session = session
+        controller.run_queue.page.set_session(session)
+        editor = controller._create_transparency_page()
+        edited = tmp_path / 'corrected.png'
+        image.save(edited)
+        editor.copy_saved.emit(str(output), str(edited))
+>       assert controller.run_queue.page._export_paths() == [edited.resolve()]
+E       AssertionError: assert [] == [PosixPath('/...rrected.png')]
+E         
+E         Right contains one more item: PosixPath('/tmp/pytest-of-root/pytest-940/test_processing_editor_saved_c0/corrected.png')
+E         Use -v to get more diff
+
+tests/test_processing_sharp_cutout.py:134: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+_____ test_legacy_failed_jobs_export_ready_png_without_erasing_saved_work ______
+
+workspace = (<v3_mode_selection.V3ApplicationView object at 0x7dc11e15c2d0>, <studio_auto_clipart_flow.AutoClipartFlowController object at 0x7dc125a38550>, <Mock id='138268387996400'>, <Mock id='138268387985072'>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7dc11e265d60>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-940/test_legacy_failed_jobs_export0')
+
+    def test_legacy_failed_jobs_export_ready_png_without_erasing_saved_work(workspace, monkeypatch, tmp_path):
+        view, controller, _, factory = workspace
+        session, path = _legacy_partial(controller)
+        panel = controller.export_panel
+>       assert panel is not None and panel.table.rowCount() == 1
+E       assert (<studio_set_export_ui.SetExportDialog object at 0x7dc11ed3f430> is not None and 0 == 1)
+E        +  where 0 = <built-in method rowCount of QTableWidget object at 0x7dc11ed3e2b0>()
+E        +    where <built-in method rowCount of QTableWidget object at 0x7dc11ed3e2b0> = <PyQt6.QtWidgets.QTableWidget object at 0x7dc11ed3e2b0>.rowCount
+E        +      where <PyQt6.QtWidgets.QTableWidget object at 0x7dc11ed3e2b0> = <studio_set_export_ui.SetExportDialog object at 0x7dc11ed3f430>.table
+
+tests/test_auto_clipart_export_table.py:42: AssertionError
+----------------------------- Captured stderr call -----------------------------
+This plugin does not support propagateSizeHints()
+=========================== short test summary info ============================
+FAILED tests/test_direct_transparency_entry.py::test_left_entry_only_enables_for_available_png_and_never_runs_worker
+FAILED tests/test_direct_transparency_entry.py::test_save_copy_preserves_source_and_existing_files_and_restores_editor
+FAILED tests/test_direct_transparency_entry.py::test_long_input_name_can_save_transactional_copy[stem0]
+FAILED tests/test_direct_transparency_entry.py::test_long_input_name_can_save_transactional_copy[stem1]
+FAILED tests/test_direct_transparency_entry.py::test_copy_failure_preserves_source_and_does_not_leave_empty_files
+FAILED tests/test_direct_transparency_entry.py::test_same_named_sources_save_distinct_copies_and_reject_outside_mapping
+FAILED tests/test_direct_transparency_entry.py::test_explicit_reimport_does_not_reopen_old_edited_copy[clear]
+FAILED tests/test_direct_transparency_entry.py::test_explicit_reimport_does_not_reopen_old_edited_copy[remove]
+FAILED tests/test_direct_transparency_entry.py::test_explicit_reimport_does_not_reopen_old_edited_copy[restart]
+FAILED tests/test_direct_transparency_entry.py::test_corrupt_saved_copy_does_not_block_original
+FAILED tests/test_direct_transparency_entry.py::test_crc_valid_corrupt_copy_falls_back_without_deleting[huge-header]
+FAILED tests/test_direct_transparency_entry.py::test_crc_valid_corrupt_copy_falls_back_without_deleting[invalid-deflate]
+FAILED tests/test_direct_transparency_entry.py::test_direct_copy_keeps_metadata_and_hash_bound_generation_intent
+FAILED tests/test_direct_transparency_entry.py::test_save_copy_still_works_when_the_source_generation_record_no_longer_matches
+FAILED tests/test_auto_clipart_workflow.py::test_cancelled_slots_do_not_block_ready_export_after_reopen
+FAILED tests/test_auto_clipart_workflow.py::test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance[none]
+FAILED tests/test_auto_clipart_workflow.py::test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance[manual_keep_hero]
+FAILED tests/test_auto_clipart_workflow.py::test_mixed_reused_results_retry_only_failed_and_preserve_missing_paid_provenance[False]
+FAILED tests/test_auto_clipart_workflow.py::test_mixed_reused_results_retry_only_failed_and_preserve_missing_paid_provenance[True]
+FAILED tests/test_auto_clipart_workflow.py::test_increased_reused_plan_resumes_only_19_unsubmitted_items_with_explicit_click
+FAILED tests/test_auto_clipart_workflow.py::test_png_check_keeps_its_page_and_selected_picture_when_a_file_changes
+FAILED tests/test_auto_clipart_workflow.py::test_export_step_embeds_editable_sets_and_persists_new_set
+FAILED tests/test_auto_clipart_workflow.py::test_confirmed_run_progress_results_export_and_resume
+FAILED tests/test_auto_clipart_workflow.py::test_ready_files_in_the_result_folder_can_be_reconnected_without_generation
+FAILED tests/test_auto_clipart_workflow.py::test_results_png_check_button_opens_png_check_before_export
+FAILED tests/test_studio_set_export_ui.py::test_results_only_export_current_successes
+FAILED tests/test_studio_set_export_ui.py::test_bundle_plan_seeds_four_memberships_without_duplicate_generation
+FAILED tests/test_studio_set_export_ui.py::test_bundle_export_issues_report_missing_and_ambiguous_results
+FAILED tests/test_studio_set_export_ui.py::test_bundle_membership_seed_deduplicates_duplicate_session_records
+FAILED tests/test_v3_run_queue.py::test_corrected_generated_image_finishes_locally_without_generation_or_upscale
+FAILED tests/test_review_processing_results.py::test_actual_editor_save_rechecks_blocked_and_accepted_export
+FAILED tests/test_processing_sharp_cutout.py::test_batch_keeps_sources_reuses_model_and_rejects_bad_mask
+FAILED tests/test_processing_sharp_cutout.py::test_processing_editor_saved_copy_replaces_result
+FAILED tests/test_auto_clipart_export_table.py::test_legacy_failed_jobs_export_ready_png_without_erasing_saved_work
+34 failed, 203 passed, 9 subtests passed in 141.31s (0:02:21)

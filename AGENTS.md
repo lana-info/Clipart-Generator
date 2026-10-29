@@ -31,8 +31,15 @@
   publishing an application or module, changing a protected/release branch
   outside the normal PR flow, or any destructive operation that could lose
   uncommitted work.
+- Owner decision 2026-10-29 (explicit): commits, pushes, branches, worktrees,
+  PRs and merges are agent-owned and need no permission; her go is required only
+  to start a build (`release-multi-platform.yml`, `azure-pipelines.yml`) or to
+  publish an application or module. She does not run Git herself, so the agent
+  must finish each task with the branch committed and pushed, and record the
+  `ветка · слито в develop/3.2 · в сборке · опубликовано` line.
 - Never dispatch GitHub Actions or start local/GitHub builds without a separate
-  explicit user command. An ordinary push must not trigger a build workflow.
+  explicit user command. An ordinary push must not trigger a build workflow; put
+  `[skip ci]` in the commit message unless the owner asks for CI on that push.
 - Merge completed task branches into the active target development branch one
   at a time and verify after each merge.
 - Update `release/3.x` only after the candidate is stable and explicitly approved.
