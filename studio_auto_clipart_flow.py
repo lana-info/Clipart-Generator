@@ -686,11 +686,13 @@ class AutoClipartFlowController(ClipartFlowController):
         panel.review_requested.connect(lambda: self._select_step(StepId.RESULTS))
         panel.stack.currentChanged.connect(lambda _index: self.shell.refresh())
         if self.review is not None:
-            panel.enable_marks(self.review.marks_by_path(), self.review.edited_paths())
+            panel.enable_marks(self.review.marks_by_path(), self.review.edited_paths(),
+                               self.review.notes_by_path())
             stale = getattr(self, "_marks_listener", None)
             if stale in self.review.marks_listeners:
                 self.review.marks_listeners.remove(stale)
-            self._marks_listener = lambda: panel.enable_marks(self.review.marks_by_path(), self.review.edited_paths())
+            self._marks_listener = lambda: panel.enable_marks(self.review.marks_by_path(), self.review.edited_paths(),
+                               self.review.notes_by_path())
             self.review.marks_listeners.append(self._marks_listener)
             panel.mark_requested.connect(self.review.mark_output)
             panel.prompt_requested.connect(lambda path: self.review.edit_prompt_for(path, panel))

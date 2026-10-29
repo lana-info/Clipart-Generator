@@ -450,6 +450,7 @@ class SetExportDialog(QDialog):
         self._qc_total = 0
         self._viewed_quality = set()
         self._marks = {}
+        self._notes = {}
         self._marks_enabled = False
         self._quality_page_base_text = ''
         self.exported = []
@@ -1046,6 +1047,9 @@ class SetExportDialog(QDialog):
                 status = mark if report.status == 'ok' else f'{status} · {mark}'
             if key in getattr(self, '_edited', ()):
                 status += ' · промпт исправлен'
+            note = self._notes.get(key)
+            if note:
+                status += f' · заметка: {note[:80]}'
             row = QListWidgetItem(path.name)  # status is a mark on the picture and a tooltip, not a caption
             row.setData(Qt.ItemDataRole.UserRole, key)
             row.setToolTip(f'{path.name} — {status}')
@@ -1105,21 +1109,28 @@ class SetExportDialog(QDialog):
             painter.drawText(x, y, 22, 22, int(Qt.AlignmentFlag.AlignCenter), glyph)
 
         mark = self._marks.get(key, '')
+        # Every state carries a glyph, not only a colour (owner 2026-10-29): «Г» — брак генерации,
+        # «В» — брак вырезания, «✓» — принято, «✕» — удалено, «З» — у картинки есть заметка.
+        state_badges = {
+            'ok': ('#34d399', '✓', '#06201c'),
+            'bad_generation': ('#f59e0b', 'Г', '#1f1300'),
+            'bad_cutout': ('#a78bfa', 'В', '#140a2e'),
+            'deleted': ('#8a97a8', '✕', '#101820'),
+        }
         if not active:
             painter.setPen(QPen(QColor('#8ea3b8'), 2))
             painter.setBrush(QColor('#2b3340'))
             painter.drawEllipse(size - 24, 4, 18, 18)
             painter.drawLine(size - 21, 19, size - 9, 7)
-        elif mark == 'ok':
-            badge(size - 25, 3, '#34d399', '', '#06201c')
-        elif mark == 'bad_generation':
-            badge(size - 25, 3, '#f59e0b', '', '#1f1300')
-        elif mark == 'bad_cutout':
-            badge(size - 25, 3, '#a78bfa', '', '#140a2e')
+        elif mark in state_badges:
+            fill, glyph, ink = state_badges[mark]
+            badge(size - 25, 3, fill, glyph, ink)
         elif self._needs_attention(key):
             badge(size - 25, 3, '#f59e0b', '!', '#1f1300')
-        if key in getattr(self, '_edited', ()):  # a corrected prompt: pencil badge, opposite the mark
+        if key in getattr(self, '_edited', ()):  # a corrected prompt: pencil badge
             badge(3, size - 25, '#1b2636', '✎', '#e4edf6')
+        if self._notes.get(key):  # a note is attached to the picture: its own badge
+            badge(size - 25, size - 25, '#1d3a40', 'З', '#9fe8dc')
         painter.end()
         icon = QIcon()
         for mode in (QIcon.Mode.Normal, QIcon.Mode.Active, QIcon.Mode.Selected):
@@ -1175,10 +1186,18 @@ class SetExportDialog(QDialog):
         self.quality_fix_button.setEnabled(active and self.worker is None)
         self.quality_exclude_button.setEnabled(active and self.worker is None)
 
-    def enable_marks(self, marks, edited=()):
-        """Show the quick marks; ``marks`` maps a PNG path to its current mark."""
+    def enable_marks(self, marks, edited=(), notes=None):
+        """Show the quick marks; ``marks`` maps a PNG path to its current mark.
+
+        Owner 2026-10-29: the shortcuts in the gallery carry a readable badge for
+        every state (ok / generation defect / cutout defect / deleted), a pencil for
+        a corrected prompt and a separate badge when the picture has a note.
+        ``edited`` and ``notes`` are iterables of resolved paths.
+        """
         self._marks = {str(Path(path).resolve()): mark for path, mark in dict(marks).items()}
         self._edited = {str(Path(path).resolve()) for path in edited}
+        self._notes = {str(Path(path).resolve()): str(text)
+                       for path, text in dict(notes or {}).items() if str(text).strip()}
         self._marks_enabled = True
         self._sync_mark_buttons(self._current_quality_key())
         self._refresh_quality_page()
