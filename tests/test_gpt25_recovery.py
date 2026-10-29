@@ -274,7 +274,9 @@ def test_core_gateway_requires_fresh_user_consent_for_exact_expired_task(tmp_pat
                 gateway.launch(request)
     question.assert_called_once()
     assert question.call_args.args[-1] == QMessageBox.StandardButton.No
-    assert "новой оплаты" in question.call_args.args[2]
+    # Owner 2026-10-29: the long «…потребует новой оплаты по текущему тарифу» warning is gone from the
+    # dialog; the fresh consent question itself stays, and no prompt text leaks into it.
+    assert "Запустить новую генерацию?" in question.call_args.args[2]
     assert PROMPT not in question.call_args.args[2] and "old" not in question.call_args.args[2]
     assert len(created) == int(answer)
     if answer:
