@@ -196,7 +196,14 @@ def _estimate_subject_colour(rgb: np.ndarray, alpha: np.ndarray, background: np.
 
 
 def _cap_key_tint(colour: np.ndarray, alpha: np.ndarray, channel: int) -> np.ndarray:
-    """Edge colour may lead the key channel no more than the nearest sure subject pixel does."""
+    """Pull a key-tinted edge colour towards the nearest sure subject colour.
+
+    The edge may lead the key channel no more than the nearest sure subject pixel does.
+    Cutting only the key channel, however, leaves the rim green: for the owner's frames
+    (rough_02/04, 2026-10-29) the blue was removed while red and green stayed, and the
+    edge turned olive. The excess is therefore removed by moving the whole colour towards
+    the trusted neighbour in proportion to it, so the rim keeps the subject's hue.
+    """
     visible = alpha > 0
     trusted = (alpha >= 1.0) & (cv2.distanceTransform(visible.astype(np.uint8), cv2.DIST_L2, 5) > 3)
     edge = visible & ~trusted
@@ -209,11 +216,14 @@ def _cap_key_tint(colour: np.ndarray, alpha: np.ndarray, channel: int) -> np.nda
     reference = palette[labels]
     capped = colour.copy()
     excess = np.zeros(alpha.shape)
+    lead = np.zeros(alpha.shape)
     for other in (c for c in range(3) if c != channel):
         allowed = np.maximum(reference[..., channel] - reference[..., other], 0.0)
         excess = np.maximum(excess, (colour[..., channel] - colour[..., other]) - allowed)
-    capped[..., channel] = np.where(edge, colour[..., channel] - np.maximum(excess, 0.0), colour[..., channel])
-    return capped
+        lead = np.maximum(lead, colour[..., channel] - colour[..., other])
+    weight = np.clip(excess / np.maximum(lead, 1e-3), 0.0, 1.0)[..., None]
+    blended = colour + (reference - colour) * weight
+    return np.where(edge[..., None], blended, colour)
 
 
 def matte_edges(source: Image.Image, cutout: Image.Image, key_color: str,
