@@ -60,9 +60,9 @@ def test_archive_name_is_project_set_set_name():
     names = {"Маленький гусёнок": "Little Goose", "Персонажи": "Characters"}
     assert archive_basename("017 Clipart Маленький гусёнок", "Персонажи",
                             {"017 Clipart Маленький гусёнок": "017 Clipart Little Goose Garden Party",
-                             "Персонажи": "Characters"}) == "017-clipart-little-goose-garden-party_set-characters"
+                             "Персонажи": "Characters"}, count=42) == "017-clipart-little-goose-garden-party-set-characters-42"
     assert archive_basename("", "Set 1") == "set-1"
-    assert archive_basename("Project", "Set Full Bundle") == "project_set-full-bundle"
+    assert archive_basename("Project", "Set Full Bundle") == "project-set-full-bundle"
     assert names  # keep fixture used
 
 
@@ -77,9 +77,16 @@ def test_export_uses_translated_names_and_unique_archives(tmp_path):
     names = {"Проект Гуси": "Goose Project", "Персонажи": "Characters", "кот0": "cat0", "кот1": "cat1"}
     sets = [{"title": "Персонажи", "images": sources}, {"title": "Персонажи", "images": sources[:1]}]
     archives = export_clipart_sets(sets, dest, project_name="Проект Гуси", names=names)
-    assert [a.name for a in archives] == ["goose-project_set-characters-2.zip", "goose-project_set-characters.zip"]
-    with ZipFile(dest / archives[0].parent.name / "goose-project_set-characters.zip") as zf:
+    # The archive carries the bare picture count at the end (owner 2026-10-29), and the
+    # published folder is exactly «clipart set».
+    assert [a.name for a in archives] == ["goose-project-set-characters-1.zip", "goose-project-set-characters-2.zip"]
+    assert {a.parent.name for a in archives} == {"clipart set"}
+    with ZipFile(dest / "clipart set" / "goose-project-set-characters-2.zip") as zf:
         assert sorted(n for n in zf.namelist() if n.startswith("png/")) == ["png/001_cat0.png", "png/002_cat1.png"]
+    # A repeated export never overwrites the published folder.
+    again = export_clipart_sets(sets, dest, project_name="Проект Гуси", names=names)
+    assert {a.parent.name for a in again} == {"clipart set 2"}
+    assert (dest / "clipart set" / "goose-project-set-characters-2.zip").is_file()
 
 
 def test_images_label_is_english_singular_plural():
@@ -99,4 +106,5 @@ def test_non_english_answers_and_cancel_are_handled():
 
 def test_long_project_name_keeps_set_part_readable():
     name = archive_basename("Word " * 40, "Characters")
-    assert name.endswith("_set-characters") and len(name) < 100
+    assert name.endswith("-set-characters") and len(name) < 100
+    assert archive_basename("Word " * 40, "Characters", count=12).endswith("-set-characters-12")

@@ -81,7 +81,7 @@ def test_invalid_archive_never_cleans(owned):
         worker.run()
     assert worker.error and not worker.paths
     assert len(list((root / 'rough').glob('*.png'))) == 5
-    assert not list(root.glob('clipart-sets-*'))
+    assert not list(root.glob('clipart set*'))
 
 
 def test_modified_untracked_symlink_and_other_run_files_are_preserved(owned):
