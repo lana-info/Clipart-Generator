@@ -724,6 +724,23 @@ class RunQueueSession(QObject):
             for status in RunItemStatus
         }
 
+    def stream_counts(self) -> dict[str, int]:
+        """Counts of the pictures this run or regeneration actually sent.
+
+        The owner 2026-10-28: after a regeneration of three pictures the panel
+        must report those three, not the whole batch of the project.
+        """
+        chosen = [self.items[index] for index in self.active_order if 0 <= index < len(self.items)]
+        return {
+            status.value: sum(item.status is status for item in chosen)
+            for status in RunItemStatus
+        }
+
+    @property
+    def regeneration(self) -> bool:
+        """True while the current stream is a retry/reprocess of part of the batch."""
+        return 0 < len(self.active_order) < len(self.items)
+
     @property
     def elapsed_seconds(self) -> int:
         end = self.finished_at if self.finished_at is not None else time.monotonic()
@@ -1753,13 +1770,22 @@ class RunCompletionDialog(QDialog):
         layout = QVBoxLayout(self)
         title = QLabel("Задание выполнено")
         title.setProperty("v3Title", True)
-        counts = session.counts()
-        self.summary_label = QLabel(
-            f"Обработано: {counts['succeeded']}\n"
-            f"С ошибками: {counts['failed']}\n"
-            f"Пропущено: {counts['cancelled']}\n"
-            f"Время: {format_elapsed_duration(session.elapsed_seconds)}"
-        )
+        counts = session.stream_counts()
+        if session.regeneration:
+            # Only the pictures this regeneration sent (owner 2026-10-28), never the whole batch.
+            sent = counts["succeeded"] + counts["failed"] + counts["cancelled"]
+            self.summary_label = QLabel(
+                f"Отправлено на перегенерацию: {sent}\n"
+                f"С ошибками: {counts['failed']}\n"
+                f"Время: {format_elapsed_duration(session.elapsed_seconds)}"
+            )
+        else:
+            self.summary_label = QLabel(
+                f"Обработано: {counts['succeeded']}\n"
+                f"С ошибками: {counts['failed']}\n"
+                f"Пропущено: {counts['cancelled']}\n"
+                f"Время: {format_elapsed_duration(session.elapsed_seconds)}"
+            )
         self.summary_label.setWordWrap(True)
         folder_label = QLabel(f"Папка результата: {session.output_dir}")
         folder_label.setWordWrap(True)
@@ -2433,17 +2459,27 @@ class RunResultsPage(QWidget):
 
     @staticmethod
     def _summary_text(session: RunQueueSession, counts: dict[str, int]) -> str:
+        stream = session.stream_counts()
         if session.running:
             heading = "Обработка выполняется"
-        elif counts["failed"]:
+        elif stream["failed"]:
             heading = "Обработка завершена с ошибками"
-        elif counts["cancelled"]:
+        elif stream["cancelled"]:
             heading = "Обработка завершена не полностью"
         else:
             heading = "Обработка завершена успешно"
         # The folder path is on the «Открыть папку с результатами» button; the numbers stay in one line, and
         # «завершена успешно» is not repeated: no heading means everything went well.
         head = "" if heading == "Обработка завершена успешно" else f"{heading}\n"
+        if session.regeneration:
+            # The owner 2026-10-28: a regeneration reports only what it sent, never the whole batch.
+            sent = stream["succeeded"] + stream["failed"] + stream["cancelled"]
+            return (
+                f"{head}"
+                f"Отправлено на перегенерацию: {sent}   "
+                f"С ошибками: {stream['failed']}   "
+                f"Время: {format_elapsed_duration(session.elapsed_seconds)}"
+            )
         return (
             f"{head}"
             f"Обработано: {counts['succeeded']}   "
