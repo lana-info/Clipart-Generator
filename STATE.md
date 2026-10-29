@@ -9,6 +9,11 @@
 После перегенерации панель результатов и окно «Задание выполнено» показывают «Отправлено на перегенерацию: N · С ошибками: M · Время» — по отправленным картинкам, а не по всей партии проекта (было «Обработано: 47» при трёх перегенерациях). Первый запуск по-прежнему показывает «Обработано / Ошибки / Пропущено / Всего». Код: `RunQueueSession.stream_counts()` и `regeneration`, `RunResultsPage._summary_text`, `RunCompletionDialog`. Тесты: `test_regeneration_panel_counts_only_the_sent_pictures`, `test_first_run_panel_keeps_the_batch_numbers`; связанные файлы — 212 passed.
 
 `ветка codex/fix-panel-counters-20261029 · слито в develop/3.2: да (этим PR) · в сборке: нет · опубликовано: нет`
+## Имена папки и архива экспорта (NAME-1…NAME-3): реализовано 2026-10-29
+
+Папка экспорта теперь ровно `clipart set` (повтор — `clipart set 2`, без перезаписи), имя архива — `<проект>-set-<набор>-<число>`, без даты; количество — последним числом. Причина даты `10-10-2026-22` найдена: её подставляет авто-имя проекта, когда поле «Название проекта» пустое (`studio_auto_clipart_flow.py:217,450`), экспорт её лишь транслитерирует. Запись и правило: [docs/ERRORS.md, export-names-20261029](docs/ERRORS.md#export-names-20261029). Тесты: `test_export_names_translation.py`, `test_set_export_translit_header.py`, `test_studio_set_export_ui.py`, `test_studio_working_files.py`; подвыборка «export/set/name/working_files/delivery» — 358 passed (3 падения — пре-существующие `test_direct_transparency_entry.py` в этом окружении). Осталось: ручная проверка владельцем; отдельный вопрос — убирать ли дату из авто-имени проекта.
+
+`ветка codex/fix-export-names-20261029 · слито в develop/3.2: да (этим PR) · в сборке: нет · опубликовано: нет`
 
 ## SET-0: тесты приведены к правилу «в набор только явно подтверждённое „Ок“» (2026-10-29)
 
