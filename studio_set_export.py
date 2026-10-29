@@ -3,7 +3,6 @@ import hashlib
 import os
 from pathlib import Path
 import tempfile
-from uuid import uuid4
 from zipfile import ZipFile, ZIP_DEFLATED
 
 from PIL import Image
@@ -16,8 +15,13 @@ class ExportCancelled(RuntimeError):
     pass
 
 
-def archive_basename(project_name, set_title, names=None):
-    """'<project> set <set>' as a safe English file name (no extension)."""
+def archive_basename(project_name, set_title, names=None, count=None):
+    """'<project>-set-<set>[-<count>]' as a safe English file name (no extension).
+
+    The owner 2026-10-29: the archive name is the project, the set and the bare
+    number of pictures at the end (``…-set-maxi-42``); no date is added here —
+    a date can only come from the project name itself.
+    """
     names = names or {}
     def english(text):
         return names.get(text, text)
@@ -26,8 +30,20 @@ def archive_basename(project_name, set_title, names=None):
     if set_slug.split('-')[0] == 'set' and len(set_slug) > 4:
         set_slug = set_slug[4:]
     project, set_slug = project[:70].strip('-'), set_slug[:45].strip('-')
-    base = f'{project}_set-{set_slug}' if project else f'set-{set_slug}'
+    base = f'{project}-set-{set_slug}' if project else f'set-{set_slug}'
+    if count is not None:
+        base = f'{base}-{int(count)}'
     return base.strip('-_.')
+
+
+def export_folder(destination) -> Path:
+    """The published folder is «clipart set»; a repeated export gets a bare number."""
+    destination = Path(destination)
+    candidate, suffix = destination / 'clipart set', 2
+    while candidate.exists():
+        candidate = destination / f'clipart set {suffix}'
+        suffix += 1
+    return candidate
 
 
 def export_clipart_sets(sets, destination, *, cancelled=lambda: False, exported_hashes=None,
@@ -62,7 +78,7 @@ sets, image stems) to English; unmapped Cyrillic is transliterated.
         if len({p.resolve() for p in paths}) != len(paths):
             raise ValueError('Один файл указан в наборе несколько раз')
         prepared.append((group['title'], paths))
-    output = destination / f'clipart-sets-{uuid4().hex}'
+    output = export_folder(destination)
     # Staging keeps incomplete archives invisible to delivery consumers.
     with tempfile.TemporaryDirectory(prefix='.clipart-export-', dir=destination) as temporary:
         staging = Path(temporary)
@@ -102,7 +118,7 @@ sets, image stems) to English; unmapped Cyrillic is transliterated.
                           if project_name.strip() else f"Set {set_english}")
                 sheet = create_contact_sheet_pdf(copied, work / 'overview.pdf', title=header)
                 check_cancelled()
-                base = archive_basename(project_name, title, names)
+                base = archive_basename(project_name, title, names, count=len(paths))
                 candidate, suffix = base, 2
                 while candidate.casefold() in used_archives:
                     candidate = f'{base}-{suffix}'

@@ -122,7 +122,10 @@ def test_renamed_set_title_is_used_for_zip_filename(images, tmp_path, monkeypatc
     dialog._rename_current_set()
     archives = export_clipart_sets(dialog.groups(), tmp_path)
     assert len(archives) == 1
-    assert archives[0].name == 'set-zimnie-personazhi.zip'
+    # «<проект>-set-<набор>-<число>» in the folder «clipart set» (owner 2026-10-29).
+    count = len(dialog.groups()[0]['images'])
+    assert archives[0].name == f'set-zimnie-personazhi-{count}.zip'
+    assert archives[0].parent.name == 'clipart set'
     dialog.reject()
 
 
