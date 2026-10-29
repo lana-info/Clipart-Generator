@@ -754,6 +754,67 @@ def test_regenerated_picture_stays_in_the_png_check_list(workspace):
     session.running = False
 
 
+def test_gallery_badges_every_mark_note_and_survives_a_reopen(workspace):
+    """Owner 2026-10-29: the PNG gallery badges every state (принято / брак генерации / брак
+    вырезания), a corrected prompt and a note; the badges come from the session, so they survive
+    leaving the page, reopening the project and switching projects."""
+    from studio_clipart_versions import keep_version
+    _, controller, _, _ = workspace
+    controller.brief.total.setValue(3)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for index in range(3):
+        path = session.output_dir / f'flower_{index + 1:02d}_ready.png'
+        Image.new('RGBA', (64, 64), (120, 80, 40, 255)).save(path)
+        session.items[index].status = RunItemStatus.SUCCEEDED
+        session.items[index].output_path = str(path)
+        paths.append(path)
+    session.items[0].review_mark, session.items[0].review_checked = 'ok', False   # «Не проверено»
+    session.items[1].review_mark, session.items[1].review_checked = 'bad_cutout', True
+    session.items[2].review_mark, session.items[2].review_checked = 'bad_generation', True
+    session.items[2].review_note = 'переснять фон'
+    session.items[2].prompt_edited = True
+    session.running = False
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._refresh_export()
+    wait_png_check(controller.export_panel)
+    panel = controller.export_panel
+    panel._show_quality_review()
+    assert panel._marks[str(paths[1].resolve())] == 'bad_cutout'
+    assert panel._marks[str(paths[2].resolve())] == 'bad_generation'
+    assert panel._notes[str(paths[2].resolve())] == 'переснять фон'
+    assert str(paths[2].resolve()) in panel._edited
+    # The badges are drawn: a marked picture's thumbnail differs from a plain one.
+    marked = panel._quality_icon(str(paths[1].resolve()), None, True, True).pixmap(120, 120).toImage()
+    plain = panel._quality_icon(str(paths[0].resolve()), None, True, True).pixmap(120, 120).toImage()
+    assert marked != plain
+    # The state is explained on hover.
+    tooltips = {panel.quality_list.item(row).data(Qt.ItemDataRole.UserRole):
+                panel.quality_list.item(row).toolTip() for row in range(panel.quality_list.count())}
+    assert 'Брак вырезания' in tooltips[str(paths[1].resolve())]
+    assert 'промпт исправлен' in tooltips[str(paths[2].resolve())]
+    assert 'заметка: переснять фон' in tooltips[str(paths[2].resolve())]
+    # A fresh page over the same session (leaving the step, reopening the project) shows the same badges.
+    reopened = controller.review.notes_by_path()
+    assert reopened[str(paths[2].resolve())] == 'переснять фон'
+    assert controller.review.marks_by_path()[str(paths[1].resolve())] == 'bad_cutout'
+    assert str(paths[2].resolve()) in controller.review.edited_paths()
+    # A regeneration moves the mark and the note into the saved version and clears them (owner 2026-10-29);
+    # «промпт исправлен» stays because the prompt really was corrected.
+    assert keep_version(session.items[2], session.output_dir, prompt='зимний цветок')
+    assert session.items[2].review_mark == 'ok' and session.items[2].review_checked is False
+    assert session.items[2].review_note == '' and session.items[2].prompt_edited is True
+    assert session.items[2].versions and session.items[2].versions[-1]['note'] == 'переснять фон'
+    # Removing a note takes its badge away with it.
+    session.items[2].review_note = 'временная'
+    assert str(paths[2].resolve()) in controller.review.notes_by_path()
+    session.items[2].review_note = ''
+    assert str(paths[2].resolve()) not in controller.review.notes_by_path()
+
+
 def test_second_redo_asked_while_one_runs_waits_in_a_queue_and_starts_after(workspace, monkeypatch):
     _, controller, _, _ = workspace
     prepare_launch(controller)

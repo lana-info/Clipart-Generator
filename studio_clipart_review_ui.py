@@ -1068,6 +1068,14 @@ class ImageReview:
         return {str(Path(item.output_path).resolve()): mark_state(item)
                 for item in self.session.items if item.output_path}
 
+    def notes_by_path(self):
+        """{resolved output path: note} so the gallery can badge a picture that carries a note."""
+        if self.session is None:
+            return {}
+        return {str(Path(item.output_path).resolve()): item.review_note
+                for item in self.session.items
+                if item.output_path and getattr(item, "review_note", "")}
+
     def mark_output(self, path, mark):
         """Mark a picture by its file (used from the PNG-check screen); same data as the marks on the results step."""
         if self.session is None or mark not in (*MARK_LABEL, "unchecked") or self._job is not None:
