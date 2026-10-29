@@ -26,7 +26,8 @@
 Решение: в ветке `codex/fix-set-ok-only-20261029` экспортный список принимает только успешный PNG с
 `review_mark == "ok"` и `review_checked == True`. Регрессионный тест проверяет «Ок», непроверенное, оба вида
 брака и удалённое. Проверка: `python3 -m py_compile v3_run_queue.py tests/test_clipart_image_marks.py` успешна;
-pytest не установлен в текущем окружении, ручная проверка владельцем на наборе с браком остаётся обязательной.
+`.venv/bin/python -m pytest -q tests/test_clipart_image_marks.py -k explicitly_accepted_pictures` — 1 passed.
+Ручная проверка владельцем на наборе с браком остаётся обязательной.
 
 ## 2026-10-28 — Края вырезанных объектов размыты и зубчатые, листья сделаны плохо {#cutout-edges-general-20261028}
 
