@@ -21,10 +21,12 @@ from PIL import Image
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
 
-from chroma_key import KEY_COLORS, measure_chroma_background
+from chroma_key import KEY_COLORS, chroma_gap, measure_chroma_background, shaded_key_pocket
 
 KEY_CHANNEL = {"red": 0, "green": 1, "blue": 2}
 KEY_DISTANCE = 45.0             # RGB distance to the measured key that is sure background
+KEY_HUE_GAP = 60.0              # degrees of chroma difference that still matches the requested key: a
+#                                 dark but saturated key is the same key, only less bright
 DARK_KEY_RATIO = 1.6            # shaded key: key channel this many times the strongest other channel ...
 DARK_KEY_LEAD = 40              # ... and this far ahead of it
 SHADED_KEY_MAX_HALF_WIDTH = 2.5  # shaded key slivers are thin; a wider key-like patch is subject
@@ -78,11 +80,15 @@ def _trimap(rgb: np.ndarray, engine_alpha: np.ndarray, channel: int, key: np.nda
     near_key = np.linalg.norm(rgb - key, axis=2) < KEY_DISTANCE / 255.0
     opaque = engine_alpha >= 255
     shaded_key = _enclosed_shaded_key(rgb, engine_alpha, channel)
-    background = near_key | (engine_alpha == 0) | shaded_key
+    # A shade of the key in a thin gap is background even when the engine solved
+    # coverage there; without this the closed-form solve would read the shade as
+    # subject coverage and paint a film across the gap.
+    shaded_pocket = shaded_key_pocket(rgb, key)
+    background = near_key | (engine_alpha == 0) | shaded_key | shaded_pocket
     untinted = (key_lead < SOLID_TINT / 255.0).all(axis=2)
     subject = opaque & (_erode(opaque, SOLID_EROSION) | untinted) & ~background
     # Key-like pixels deep inside the engine's opaque area are not trusted as background (only slivers are).
-    background &= ~_erode(opaque, BACKGROUND_EROSION) | shaded_key
+    background &= ~_erode(opaque, BACKGROUND_EROSION) | shaded_key | shaded_pocket
     return background, subject
 
 
@@ -132,8 +138,13 @@ def _closed_form_alpha(rgb: np.ndarray, known: np.ndarray, known_alpha: np.ndarr
     return alpha.reshape(height, width)
 
 
-def _estimate_subject_colour(rgb: np.ndarray, alpha: np.ndarray, key: np.ndarray) -> np.ndarray:
-    """Subject colour F with rgb = alpha*F + (1-alpha)*key, smooth along the edge; sure pixels keep rgb."""
+def _estimate_subject_colour(rgb: np.ndarray, alpha: np.ndarray, background: np.ndarray) -> np.ndarray:
+    """Subject colour F with rgb = alpha*F + (1-alpha)*background, smooth along the edge; sure pixels keep rgb.
+
+    ``background`` is the local background colour per pixel (the measured key on a
+    plain background, the shade inside a shaded gap), so the unmixing stays valid
+    where the generator darkened the key.
+    """
     height, width = alpha.shape
     solid = alpha >= 1.0
     reach = _dilate(alpha > 0, 2 * (FOREGROUND_REACH // 2) + 1)
@@ -148,7 +159,8 @@ def _estimate_subject_colour(rgb: np.ndarray, alpha: np.ndarray, key: np.ndarray
         rows, cols = [], []
         degree = np.zeros(unknown_index.size)
         right = (flat_alpha[unknown_index, None] * (rgb.reshape(-1, 3)[unknown_index]
-                                                    - (1.0 - flat_alpha[unknown_index, None]) * key))
+                                                    - (1.0 - flat_alpha[unknown_index, None])
+                                                    * background.reshape(-1, 3)[unknown_index]))
         fixed_part = np.zeros_like(right)
         flat_colour = rgb.reshape(-1, 3)
         for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
@@ -218,7 +230,9 @@ def matte_edges(source: Image.Image, cutout: Image.Image, key_color: str,
     rgb = np.asarray(source.convert("RGB"), np.float64) / 255.0
     engine = np.asarray(cutout.convert("RGBA"))
     key = np.array(measure_chroma_background(source), np.float64) / 255.0
-    if np.linalg.norm(key - np.array(KEY_COLORS[key_color.strip().lower()]) / 255.0) > 0.35:
+    requested_key = np.array(KEY_COLORS[key_color.strip().lower()], np.float64) / 255.0
+    # One sample of the key hue is the key: a dark rendered key is not another colour.
+    if chroma_gap(requested_key, key) > KEY_HUE_GAP:
         return cutout
     background, subject = _trimap(rgb, engine[..., 3], channel, key)
     unknown = ~background & ~subject
@@ -235,6 +249,19 @@ def matte_edges(source: Image.Image, cutout: Image.Image, key_color: str,
     if count > max_unknown:
         raise ValueError("Слишком широкая область края для матирования")
 
+    # An edge composites against the background it actually touches. On the plain
+    # frame that is the measured key; on the rim of a shaded gap it is the shade,
+    # and unmixing such a rim against the bright key would invent paint.
+    if np.any(background):
+        _, background_labels = cv2.distanceTransformWithLabels(
+            (~background).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL,
+        )
+        background_palette = np.zeros((int(background_labels.max()) + 1, 3))
+        background_palette[background_labels[background]] = rgb[background]
+        local_background = background_palette[background_labels]
+    else:
+        local_background = np.broadcast_to(key, rgb.shape).copy()
+
     ys, xs = np.nonzero(unknown)
     y0, y1 = max(ys.min() - 4, 0), min(ys.max() + 5, rgb.shape[0])
     x0, x1 = max(xs.min() - 4, 0), min(xs.max() + 5, rgb.shape[1])
@@ -244,14 +271,17 @@ def matte_edges(source: Image.Image, cutout: Image.Image, key_color: str,
     alpha[window] = _closed_form_alpha(rgb[window], known, subject[window].astype(np.float64))
 
     colour = np.zeros_like(rgb)
+    local_window = local_background[window]
     for _ in range(2):
         band = (alpha > 0) & (alpha < 1)
-        colour[window] = _estimate_subject_colour(rgb[window], alpha[window], key)
-        direction = colour - key
-        mixture = ((rgb - key) * direction).sum(axis=2) / np.maximum((direction * direction).sum(axis=2), 1e-3)
+        colour[window] = _estimate_subject_colour(rgb[window], alpha[window], local_window)
+        direction = colour - local_background
+        mixture = ((rgb - local_background) * direction).sum(axis=2) / np.maximum(
+            (direction * direction).sum(axis=2), 1e-3
+        )
         alpha = np.where(band, np.clip(mixture, 0.0, 1.0), alpha)
     alpha[alpha < 0.01] = 0.0
-    colour[window] = _estimate_subject_colour(rgb[window], alpha[window], key)
+    colour[window] = _estimate_subject_colour(rgb[window], alpha[window], local_window)
     colour[window] = _cap_key_tint(colour[window], alpha[window], channel)
 
     outside = np.ones(alpha.shape, bool)
@@ -259,9 +289,14 @@ def matte_edges(source: Image.Image, cutout: Image.Image, key_color: str,
     alpha[outside] = 0.0
     output = np.dstack([colour, alpha])
     result = Image.fromarray(np.clip(np.rint(output * 255.0), 0, 255).astype(np.uint8), "RGBA")
+    pixels = np.asarray(result).copy()
+    # The unknown band's window does not cover the whole frame: whatever it never
+    # examined keeps the engine's own decision, and only the background the engine
+    # left visible is dropped.
+    pixels[outside] = engine[outside]
+    pixels[dropped, 3] = 0
     untouched = engine[..., 3] == 255
     untouched &= _erode(untouched, SOLID_EROSION) & ~unknown & ~background
-    pixels = np.asarray(result).copy()
     pixels[untouched] = engine[untouched]
     result = Image.fromarray(pixels, "RGBA")
     result.info.update(cutout.info)
