@@ -1,0 +1,154 @@
+baseline | blue gap kind shd | gapCore coreViol engCore |  stem1  stem2   wisp   navy violet | rimMed
+ 253   1 open   0 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   1 open   1 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   1 encl   0 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   1 encl   1 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   2 open   0 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   2 open   1 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   2 encl   0 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   2 encl   1 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   4 open   0 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   4 open   1 | base      19      279     251 |      0      0      0    255    255 |      0   fix       7        0     251 |    255    255      0    255    255 |      0
+ 253   4 encl   0 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   4 encl   1 | base      19      238     251 |      0      0      0    255    255 |      0   fix       7        0     251 |    255    255      0    255    255 |      0
+ 253   8 open   0 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   8 open   1 | base     122     1400     255 |      0      0      0    255    255 |      0   fix       0        0     167 |    255    255      0    255    255 |      0
+ 253   8 encl   0 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253   8 encl   1 | base     120     1200     255 |      0      0      0    255    255 |      0   fix       0        0     167 |    255    255      0    255    255 |      0
+ 253  16 open   0 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253  16 open   1 | base     255     3920     255 |      0      0      0    255    255 |      0   fix     217       23     167 |    255    255      0    255    255 |      0
+ 253  16 encl   0 | base       0        0       0 |    255    255    255    255    255 |      0   fix       0        0       0 |    255    255    255    255    255 |      0
+ 253  16 encl   1 | base     255     3360     255 |      0      0      0    255    255 |      0   fix     229       19     167 |    255    255      0    255    255 |      0
+ 150   1 open   0 | base       0        0       0 |    255    255    255     98    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   1 open   1 | base       0        0       0 |    255    255    255     97    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   1 encl   0 | base       0        0       0 |    255    255    255     98    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   1 encl   1 | base       0        0       0 |    255    255    255     97    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   2 open   0 | base       0        0       0 |    255    255    255     98    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   2 open   1 | base       0        0       0 |    255    255    255     97    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   2 encl   0 | base       0        0       0 |    255    255    255     98    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   2 encl   1 | base       0        0       0 |    255    255    255     97    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   4 open   0 | base       0        0       0 |    255    255    255     98    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   4 open   1 | base     117      560     117 |    255    255    255     98    255 |      0   fix       0        0     117 |    255    255      0    255    255 |      0
+ 150   4 encl   0 | base       0        0       0 |    255    255    255     98    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   4 encl   1 | base     117      480     117 |    255    255    255     98    255 |      0   fix       0        0     117 |    255    255      0    255    255 |      0
+ 150   8 open   0 | base       0        0       0 |    255    255    255     98    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   8 open   1 | base     176     1680     176 |    255    255    255     98    255 |      0   fix       0        0     176 |    255    255      0    255    255 |      0
+ 150   8 encl   0 | base       0        0       0 |    255    255    255     98    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150   8 encl   1 | base     176     1440     176 |    255    255    255     98    255 |      0   fix       0        0     176 |    255    255      0    255    255 |      0
+ 150  16 open   0 | base       0        0       0 |    255    255    255     98    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150  16 open   1 | base     176     3920     176 |    255    255    255     98    255 |      0   fix       0        0     176 |    255    255      0    255    255 |      0
+ 150  16 encl   0 | base       0        0       0 |    255    255    255     98    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 150  16 encl   1 | base     176     3360     176 |    255    255    255     98    255 |      0   fix       0        0     176 |    255    255      0    255    255 |      0
+ 117   1 open   0 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   1 open   1 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   1 encl   0 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   1 encl   1 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   2 open   0 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   2 open   1 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   2 encl   0 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   2 encl   1 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   4 open   0 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   4 open   1 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   4 encl   0 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   4 encl   1 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   8 open   0 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   8 open   1 | base     164     1120     164 |    255    255    255     53    255 |      0   fix       0        0     160 |    255    255      0    255    255 |      0
+ 117   8 encl   0 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117   8 encl   1 | base     164      960     164 |    255    255    255     53    255 |      0   fix       0        0     160 |    255    255      0    255    255 |      0
+ 117  16 open   0 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117  16 open   1 | base     167     3360     167 |    255    255    255     53    255 |      0   fix       0        0     164 |    255    255      0    255    255 |      0
+ 117  16 encl   0 | base       0        0       0 |    255    255    255     53    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+ 117  16 encl   1 | base     167     2880     167 |    255    255    255     53    255 |      0   fix       0        0     164 |    255    255      0    255    255 |      0
+  80   1 open   0 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   1 open   1 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   1 encl   0 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   1 encl   1 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   2 open   0 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   2 open   1 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   2 encl   0 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   2 encl   1 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   4 open   0 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   4 open   1 | base     108      190     108 |    255    255    255     92    255 |      0   fix       0        0     108 |    255    255      0    255    255 |      0
+  80   4 encl   0 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   4 encl   1 | base     108      162     108 |    255    255    255     92    255 |      0   fix       0        0     108 |    255    255      0    255    255 |      0
+  80   8 open   0 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   8 open   1 | base     255     1396     255 |    255    255    255     92    255 |      0   fix       0        0     255 |    255    255      0    255    255 |      0
+  80   8 encl   0 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80   8 encl   1 | base     255     1195     255 |    255    255    255     92    255 |      0   fix       0        0     255 |    255    255      0    255    255 |      0
+  80  16 open   0 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80  16 open   1 | base     255     3732     255 |    255    255    255     92    255 |      0   fix     255     2200     255 |    255    255      0    255    255 |      0
+  80  16 encl   0 | base       0        0       0 |    255    255    255     92    255 |      0   fix       0        0       0 |    255    255      0    255    255 |      0
+  80  16 encl   1 | base     255     3199     255 |    255    255    255     92    255 |      0   fix     255     1885     255 |    255    255      0    255    255 |      0
+  40   1 open   0 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   1 open   1 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   1 encl   0 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   1 encl   1 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   2 open   0 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   2 open   1 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   2 encl   0 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   2 encl   1 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   4 open   0 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   4 open   1 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   4 encl   0 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   4 encl   1 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   8 open   0 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   8 open   1 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   8 encl   0 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40   8 encl   1 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40  16 open   0 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40  16 open   1 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40  16 encl   0 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+  40  16 encl   1 | base: raises ChromaKeyAmbiguousError; fix: raises ChromaKeyAmbiguousError
+
+fix violations: 24 (24 distinct)
+   [253, 16, False, True, 'gap core film', '217']
+   [253, 16, True, True, 'gap core film', '229']
+   [80, 16, False, True, 'gap core film', '255']
+   [80, 16, True, True, 'gap core film', '255']
+   [40, 1, False, False, 'raises ChromaKeyAmbiguousError', '']
+   [40, 1, False, True, 'raises ChromaKeyAmbiguousError', '']
+   [40, 1, True, False, 'raises ChromaKeyAmbiguousError', '']
+   [40, 1, True, True, 'raises ChromaKeyAmbiguousError', '']
+   [40, 2, False, False, 'raises ChromaKeyAmbiguousError', '']
+   [40, 2, False, True, 'raises ChromaKeyAmbiguousError', '']
+   [40, 2, True, False, 'raises ChromaKeyAmbiguousError', '']
+   [40, 2, True, True, 'raises ChromaKeyAmbiguousError', '']
+   [40, 4, False, False, 'raises ChromaKeyAmbiguousError', '']
+   [40, 4, False, True, 'raises ChromaKeyAmbiguousError', '']
+   [40, 4, True, False, 'raises ChromaKeyAmbiguousError', '']
+   [40, 4, True, True, 'raises ChromaKeyAmbiguousError', '']
+   [40, 8, False, False, 'raises ChromaKeyAmbiguousError', '']
+   [40, 8, False, True, 'raises ChromaKeyAmbiguousError', '']
+   [40, 8, True, False, 'raises ChromaKeyAmbiguousError', '']
+   [40, 8, True, True, 'raises ChromaKeyAmbiguousError', '']
+   [40, 16, False, False, 'raises ChromaKeyAmbiguousError', '']
+   [40, 16, False, True, 'raises ChromaKeyAmbiguousError', '']
+   [40, 16, True, False, 'raises ChromaKeyAmbiguousError', '']
+   [40, 16, True, True, 'raises ChromaKeyAmbiguousError', '']
+baseline violations: 114 (108 distinct)
+   [253, 4, False, True, 'gap core film', '19']
+   [253, 4, False, True, 'stem1 lost', '0']
+   [253, 4, False, True, 'stem2 lost', '0']
+   [253, 4, True, True, 'gap core film', '19']
+   [253, 4, True, True, 'stem1 lost', '0']
+   [253, 4, True, True, 'stem2 lost', '0']
+   [253, 8, False, True, 'gap core film', '122']
+   [253, 8, False, True, 'stem1 lost', '0']
+   [253, 8, False, True, 'stem2 lost', '0']
+   [253, 8, True, True, 'gap core film', '120']
+   [253, 8, True, True, 'stem1 lost', '0']
+   [253, 8, True, True, 'stem2 lost', '0']
+   [253, 16, False, True, 'gap core film', '255']
+   [253, 16, False, True, 'stem1 lost', '0']
+   [253, 16, False, True, 'stem2 lost', '0']
+   [253, 16, True, True, 'gap core film', '255']
+   [253, 16, True, True, 'stem1 lost', '0']
+   [253, 16, True, True, 'stem2 lost', '0']
+   [150, 1, False, False, 'navy lost', '98']
+   [150, 1, False, True, 'navy lost', '97']
+   [150, 1, True, False, 'navy lost', '98']
+   [150, 1, True, True, 'navy lost', '97']
+   [150, 2, False, False, 'navy lost', '98']
+   [150, 2, False, True, 'navy lost', '97']
+
+regressions after the fix: 0
