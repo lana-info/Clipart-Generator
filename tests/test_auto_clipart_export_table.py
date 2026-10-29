@@ -22,6 +22,8 @@ def _legacy_partial(controller):
     image.save(path)
     session.items[0].status = RunItemStatus.SUCCEEDED
     session.items[0].output_path = str(path)
+    # A legacy ready PNG is exported once the owner confirms «Ок» (SET-0, 2026-10-28).
+    session.items[0].review_mark, session.items[0].review_checked = 'ok', True
     for item in session.items[1:]:
         item.status = RunItemStatus.FAILED
     session.handle_finished()

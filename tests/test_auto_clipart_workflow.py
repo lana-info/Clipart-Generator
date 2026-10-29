@@ -241,6 +241,8 @@ def test_cancelled_slots_do_not_block_ready_export_after_reopen(workspace, monke
     image.save(output)
     session.items[0].status = RunItemStatus.SUCCEEDED
     session.items[0].output_path = str(output)
+    # The owner pressed «Ок»: only confirmed pictures join export sets (SET-0, 2026-10-28).
+    session.items[0].review_mark, session.items[0].review_checked = 'ok', True
     for item in session.items[1:]:
         item.status = RunItemStatus.CANCELLED
     session.handle_finished()
@@ -409,6 +411,8 @@ def test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance(wor
     ready_item.status = RunItemStatus.SUCCEEDED
     ready_item.output_path = str(output)
     ready_item.paid_completed_stages = ('upscale_after',)
+    # The owner pressed «Ок» on the retained picture before the replan (SET-0, 2026-10-28).
+    ready_item.review_mark, ready_item.review_checked = 'ok', True
     session.handle_finished()
     controller.run_queue.session = session
     controller.run_queue.page.set_session(session)
@@ -505,6 +509,8 @@ def test_mixed_reused_results_retry_only_failed_and_preserve_missing_paid_proven
     ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
     image.save(ready.output_path)
     ready.status = RunItemStatus.SUCCEEDED
+    # The owner pressed «Ок» on the kept picture before the replan (SET-0, 2026-10-28).
+    ready.review_mark, ready.review_checked = 'ok', True
     if missing_paid_output:
         failed.status = RunItemStatus.SUCCEEDED
         failed.output_path = str(session.output_dir / 'deleted_paid_ready.png')
@@ -567,6 +573,8 @@ def test_increased_reused_plan_resumes_only_19_unsubmitted_items_with_explicit_c
     session.items[0].status = RunItemStatus.SUCCEEDED
     session.items[0].output_path = str(output)
     retained_id = session.items[0].payload['object_id']
+    # The owner pressed «Ок» on the retained picture (SET-0, 2026-10-28).
+    session.items[0].review_mark, session.items[0].review_checked = 'ok', True
     session.handle_finished()
     controller.run_queue.session = session
     controller.run_queue.page.set_session(session)
@@ -667,6 +675,8 @@ def test_png_check_keeps_its_page_and_selected_picture_when_a_file_changes(works
         Image.new('RGBA', (64, 64), (120, 80, 40, 255)).save(output)
         session.items[index].status = RunItemStatus.SUCCEEDED
         session.items[index].output_path = str(output)
+        # The owner pressed «Ок» on both pictures: only confirmed ones reach the PNG check (SET-0, 2026-10-28).
+        session.items[index].review_mark, session.items[index].review_checked = 'ok', True
         outputs.append(output)
     session.running = False
     controller.run_queue.session = session
@@ -730,6 +740,8 @@ def test_export_step_embeds_editable_sets_and_persists_new_set(workspace, monkey
     image.save(output)
     session.items[0].status = RunItemStatus.SUCCEEDED
     session.items[0].output_path = str(output)
+    # The owner pressed «Ок»: only confirmed pictures join export sets (SET-0, 2026-10-28).
+    session.items[0].review_mark, session.items[0].review_checked = 'ok', True
     session.running = False
     controller.run_queue.session = session
     controller.run_queue.page.set_session(session)
@@ -885,6 +897,8 @@ def test_confirmed_run_progress_results_export_and_resume(workspace, monkeypatch
     raw_worker.finished.emit("Done")
     assert session.items[0].status is RunItemStatus.SUCCEEDED
     assert not session.running
+    # The owner pressed «Ок»: only confirmed pictures join export sets (SET-0, 2026-10-28).
+    session.items[0].review_mark, session.items[0].review_checked = "ok", True
     controller.navigate(1)
     assert view.project_state.current_step is StepId.TRANSPARENCY
     wait_png_check(controller.export_panel)
@@ -1365,6 +1379,10 @@ def test_ready_files_in_the_result_folder_can_be_reconnected_without_generation(
     assert [Path(item.output_path).name for item in done] == [
         'flower_01_ready.png', 'flower_02_ready.png', 'flower_04_ready.png']
     assert all(not item.review_checked for item in done)  # still «Не проверено»
+    # Reconnected pictures are results, not set members, until the owner confirms «Ок» (SET-0, 2026-10-28).
+    assert controller.run_queue.page._export_paths() == []
+    for item in done:
+        item.review_mark, item.review_checked = 'ok', True
     assert len(controller.run_queue.page._export_paths()) == 3
     assert controller._recoverable_outputs() == {}
     controller.recover_results()  # nothing left: no second question
@@ -1383,6 +1401,8 @@ def test_results_png_check_button_opens_png_check_before_export(workspace):
     image.save(path)
     session.items[0].status = RunItemStatus.SUCCEEDED
     session.items[0].output_path = str(path)
+    # The owner pressed «Ок»: only confirmed pictures reach the PNG check (SET-0, 2026-10-28).
+    session.items[0].review_mark, session.items[0].review_checked = 'ok', True
     for item in session.items[1:]:
         item.status = RunItemStatus.FAILED
     session.handle_finished()

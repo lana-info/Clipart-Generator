@@ -94,6 +94,10 @@ def test_batch_keeps_sources_reuses_model_and_rejects_bad_mask(app, tmp_path, mo
     with Image.open(session.items[2].output_path) as output:
         assert output.convert('RGBA').tobytes() == image.tobytes()
     assert all(path.read_bytes() == data for path, data in original_bytes.items())
+    # The owner pressed «Ок» on both cut-outs: only confirmed pictures join export sets (SET-0, 2026-10-28).
+    for item in session.items:
+        if item.status is RunItemStatus.SUCCEEDED:
+            item.review_mark, item.review_checked = 'ok', True
     page = RunResultsPage(state)
     page.set_session(session)
     assert len(page._export_paths()) == 2
@@ -124,6 +128,8 @@ def test_processing_editor_saved_copy_replaces_result(app, tmp_path):
     image.save(output)
     session.handle_item_progress(dict(item_index=1, total_items=1, stage='export',
                                      status='succeeded', output_path=str(output)))
+    # The owner pressed «Ок»: only confirmed pictures join export sets (SET-0, 2026-10-28).
+    session.items[0].review_mark, session.items[0].review_checked = 'ok', True
     session.handle_finished()
     controller.run_queue.session = session
     controller.run_queue.page.set_session(session)

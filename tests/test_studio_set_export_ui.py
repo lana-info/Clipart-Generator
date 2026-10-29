@@ -20,6 +20,12 @@ def _clipart_results_page(state):
     )
 
 
+def _confirmed(item: RunItem) -> RunItem:
+    """The owner pressed «Ок»: only confirmed pictures join export sets (SET-0, 2026-10-28)."""
+    item.review_mark, item.review_checked = 'ok', True
+    return item
+
+
 @pytest.fixture
 def images(tmp_path):
     app = QApplication.instance() or QApplication([])
@@ -167,11 +173,17 @@ def test_cancel_before_publish_removes_staging(images, tmp_path):
 def test_results_only_export_current_successes(images, tmp_path):
     page = _clipart_results_page(ProjectState(mode=ProjectMode.CLIPART))
     page.session = SimpleNamespace(running=False, output_dir=tmp_path, items=[
-        RunItem(1, 'success', status=RunItemStatus.SUCCEEDED, output_path=str(images[0])),
+        _confirmed(RunItem(1, 'success', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]))),
         RunItem(2, 'failed', status=RunItemStatus.FAILED, output_path=str(images[1])),
-        RunItem(3, 'duplicate', status=RunItemStatus.SUCCEEDED, output_path=str(images[0])),
+        _confirmed(RunItem(3, 'duplicate', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]))),
+        RunItem(4, 'unchecked', status=RunItemStatus.SUCCEEDED, output_path=str(images[2])),
     ])
     assert page._export_paths() == [images[0]]
+    # A merely successful or unchecked picture is not a set member yet (owner 2026-10-28).
+    page.session.items[3].review_mark, page.session.items[3].review_checked = 'ok', False
+    assert page._export_paths() == [images[0]]
+    page.session.items[3].review_checked = True
+    assert page._export_paths() == [images[0], images[2]]
     # Unrecorded PNGs in the directory never become set members automatically.
     page.session.running = True
     assert page._export_paths() == []
@@ -296,8 +308,8 @@ def test_bundle_plan_seeds_four_memberships_without_duplicate_generation(images)
     root = images[0].parent
     object_id = recipe.bundle_plan['sets'][0]['item_ids'][0]
     page.session = SimpleNamespace(running=False, output_dir=root, items=[
-        RunItem(1, 'one', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]),
-                payload={'object_id': object_id})
+        _confirmed(RunItem(1, 'one', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]),
+                           payload={'object_id': object_id}))
     ])
     page._seed_bundle_membership()
     links = state.clipart.export_membership[str(images[0].resolve())]['memberships']
@@ -428,8 +440,10 @@ def test_bundle_export_issues_report_missing_and_ambiguous_results(images):
     root = images[0].parent
     ids = recipe.bundle_plan['sets'][-1]['item_ids']
     page.session = SimpleNamespace(running=False, output_dir=root, items=[
-        RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': ids[0]}),
-        RunItem(2, 'v2', status=RunItemStatus.SUCCEEDED, output_path=str(images[1]), payload={'object_id': ids[0]}),
+        _confirmed(RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]),
+                           payload={'object_id': ids[0]})),
+        _confirmed(RunItem(2, 'v2', status=RunItemStatus.SUCCEEDED, output_path=str(images[1]),
+                           payload={'object_id': ids[0]})),
         RunItem(3, 'failed', status=RunItemStatus.FAILED, output_path='', payload={'object_id': ids[1]}),
     ])
     issues = page._bundle_export_issues()
@@ -471,8 +485,10 @@ def test_bundle_export_issues_deduplicates_same_png_for_same_object(images):
     root = images[0].parent
     object_id = recipe.bundle_plan['sets'][-1]['item_ids'][0]
     page.session = SimpleNamespace(running=False, output_dir=root, items=[
-        RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': object_id}),
-        RunItem(2, 'duplicate record', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': object_id}),
+        _confirmed(RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]),
+                           payload={'object_id': object_id})),
+        _confirmed(RunItem(2, 'duplicate record', status=RunItemStatus.SUCCEEDED,
+                           output_path=str(images[0]), payload={'object_id': object_id})),
     ])
     issues = page._bundle_export_issues()
     assert not any(issue['object_id'] == object_id and issue['kind'] == 'ambiguous' for issue in issues)
@@ -571,8 +587,10 @@ def test_bundle_membership_seed_deduplicates_duplicate_session_records(images):
     root = images[0].parent
     object_id = recipe.bundle_plan['sets'][-1]['item_ids'][0]
     page.session = SimpleNamespace(running=False, output_dir=root, items=[
-        RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': object_id}),
-        RunItem(2, 'same file again', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': object_id}),
+        _confirmed(RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]),
+                           payload={'object_id': object_id})),
+        _confirmed(RunItem(2, 'same file again', status=RunItemStatus.SUCCEEDED,
+                           output_path=str(images[0]), payload={'object_id': object_id})),
     ])
     assert page._seed_bundle_membership()
     key = str(images[0].resolve())

@@ -2076,6 +2076,8 @@ def test_corrected_generated_image_finishes_locally_without_generation_or_upscal
                                       stage='alpha_validation', status='stage_failed'))
     session.handle_item_progress(dict(item_index=1, total_items=1, stage='export',
                                       status='succeeded', output_path=str(output)))
+    # The owner pressed «Ок»: only confirmed pictures join export sets (SET-0, 2026-10-28).
+    session.items[0].review_mark, session.items[0].review_checked = 'ok', True
     session.handle_finished()
     page = RunResultsPage(ProjectState(mode=ProjectMode.CLIPART))
     page.set_session(session)
