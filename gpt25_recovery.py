@@ -75,8 +75,7 @@ def confirm_expired_generation_retries(
     answer = QMessageBox.question(
         parent, "Результат генерации недоступен",
         f"{label}: прежние результаты больше недоступны ({len(approvals)}).\n"
-        "Повтор создаст новые изображения и потребует новой оплаты по текущему тарифу.\n"
-        "Запустить новую платную генерацию?",
+        "Запустить новую генерацию?",
         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         QMessageBox.StandardButton.No,
     )

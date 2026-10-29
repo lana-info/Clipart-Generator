@@ -37,10 +37,9 @@ class AutoClipartShell(AppShell):
         index = self.state.route.index(self.state.current_step)
         controller = self.workflow_controller(self.module_id)
         busy = bool(controller and controller.is_busy())
-        if not hasattr(self, 'save_project_button'):
-            self.save_project_button = V3Button('Сохранить проект', ButtonVariant.SECONDARY)
-            self.save_project_button.clicked.connect(self._save_export_project)
-            self.footer.layout().insertWidget(self.footer.layout().indexOf(self.next_button), self.save_project_button)
+        if not hasattr(self, 'project_save_label'):
+            # Owner 2026-10-29: the project saves itself, the «Сохранить проект» button is gone;
+            # the small label still reports the last automatic save.
             self.project_save_label = QLabel('')
             self.project_save_label.setProperty('v3Small', True)
             self.footer.layout().insertWidget(0, self.project_save_label)
@@ -52,8 +51,6 @@ class AutoClipartShell(AppShell):
         self.sets_back_button.setVisible(
             index == 7 and panel_now is not None and panel_now.stack.currentWidget() is panel_now.quality_page)
         self.sets_back_button.setEnabled(not busy)
-        self.save_project_button.setVisible(index == 7)
-        self.save_project_button.setEnabled(bool(controller) and not busy)
         self.project_save_label.setVisible(index == 7)
         saved = not self.save_error_label.text() and self.receivers(self.state_changed) > 0
         self.project_save_label.setText('Проект сохранён' if saved else '')

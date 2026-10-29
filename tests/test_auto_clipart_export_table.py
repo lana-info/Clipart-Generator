@@ -51,7 +51,9 @@ def test_legacy_failed_jobs_export_ready_png_without_erasing_saved_work(workspac
     assert view.shell.next_button.isEnabled()
     before = path.read_bytes()
     selected_groups = panel.groups()
-    view.shell.save_project_button.click()
+    # Owner 2026-10-29: the «Сохранить проект» button is gone; the project saves itself, and the
+    # test drives the same flush the button used to trigger.
+    view.shell._save_export_project()
     assert not view.shell.save_error_label.text()
     assert view.shell.project_save_label.text() == 'Проект сохранён'
     assert len(controller.shell.state.data.automatic['run']) == 20
@@ -91,8 +93,9 @@ def test_empty_export_can_save_and_reports_project_save_failure(workspace, monke
     assert panel is not None and panel.table.rowCount() == 0
     assert panel.summary_counts.text() == '0 изображений · 0 наборов'
     assert not view.shell.next_button.isEnabled()
-    assert view.shell.save_project_button.isEnabled()
-    view.shell.save_project_button.click()
+    # Owner 2026-10-29: the «Сохранить проект» button is gone; the project saves itself, and the
+    # test drives the same flush the button used to trigger.
+    view.shell._save_export_project()
     assert not view.shell.save_error_label.text()
     assert view._active_project_id
 
@@ -100,7 +103,9 @@ def test_empty_export_can_save_and_reports_project_save_failure(workspace, monke
         raise OSError('test persistence unavailable')
 
     monkeypatch.setattr(view._project_documents, 'save', fail_save)
-    view.shell.save_project_button.click()
+    # Owner 2026-10-29: the «Сохранить проект» button is gone; the project saves itself, and the
+    # test drives the same flush the button used to trigger.
+    view.shell._save_export_project()
     assert 'Не удалось сохранить' in view.shell.save_error_label.text()
     assert view.shell.project_save_label.text() == ''
     factory.assert_not_called()

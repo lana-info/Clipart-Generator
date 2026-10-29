@@ -1513,7 +1513,9 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertIn("Обработано: 1", dialog.summary_label.text())
             self.assertIn("Пропущено: 0", dialog.summary_label.text())
             self.assertIn("Время:", dialog.summary_label.text())
-            self.assertTrue(dialog.open_folder_button.isEnabled())
+            # Owner 2026-10-29: only «Закрыть» stays here; the folder has its own button on the page.
+            self.assertFalse(hasattr(dialog, "open_folder_button"))
+            self.assertEqual(dialog.close_button.text(), "Закрыть")
             dialog.close()
             page.close()
 
