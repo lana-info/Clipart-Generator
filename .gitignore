@@ -67,3 +67,6 @@ artifacts/**/*_on_white.png
 artifacts/**/*_on_black.png
 artifacts/**/*_on_magenta.png
 artifacts/**/*_on_cyan.png
+
+# Cut-outs written by scripts/measure_edge_quality.py (regenerable, about 5 MB each)
+artifacts/**/out/

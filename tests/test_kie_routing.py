@@ -697,6 +697,55 @@ class KieRoutingTests(unittest.TestCase):
         # The downloaded Fal result is exported as is, never downloaded a second time.
         self.assertTrue(local_result)
 
+    def test_fal_upscale_prepares_rgb_under_the_edge_before_upload(self):
+        """EDGE-FAL (owner 2026-10-28): the Bria upscalers see the colour under transparent
+        pixels; the rim junk is replaced by the nearest subject colour before the upload, as the
+        local Real-ESRGAN path already does. An opaque picture is uploaded unchanged."""
+        with tempfile.TemporaryDirectory(prefix="fal-upscale-rgb-") as temp:
+            source = Path(temp) / "source.png"
+            with Image.new("RGBA", (32, 32), (0, 0, 0, 0)) as canvas:
+                canvas.paste((200, 120, 60, 255), (8, 8, 24, 24))
+                # Junk hidden colour under the transparent margin, the way generators leave it.
+                for x in range(32):
+                    canvas.putpixel((x, 7), (0, 0, 0, 0))
+                    canvas.putpixel((x, 24), (255, 255, 255, 0))
+                canvas.save(source)
+            opaque = Path(temp) / "opaque.png"
+            Image.new("RGB", (32, 32), (10, 20, 30)).save(opaque)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret", fal_concurrency=1),
+            )
+            uploaded = {}
+            worker._fal_upload_https_url = types.MethodType(
+                lambda _self, path, _model_id: uploaded.update(
+                    path=path,
+                    image=Image.open(path).convert("RGBA").copy(),
+                ) or "https://cdn.example/uploaded.png",
+                worker,
+            )
+            worker._fal_process_image = types.MethodType(
+                lambda _self, image_url, **kwargs: "https://cdn.example/upscaled.png",
+                worker,
+            )
+            worker._download_file = types.MethodType(
+                lambda _self, _url, output_path: Path(output_path).write_bytes(b"result"),
+                worker,
+            )
+            worker._run_upscale_pass(str(source), None, temp, 1, "gen",
+                                     "upscaled_before", "fal", 2, "ignored")
+            self.assertNotEqual(uploaded["path"], str(source))
+            self.assertNotIn("A", Image.open(uploaded["path"]).getbands())
+            # The rim now carries the subject colour instead of black or white junk.
+            self.assertEqual(uploaded["image"].getpixel((16, 7))[:3], (200, 120, 60))
+            self.assertEqual(uploaded["image"].getpixel((16, 24))[:3], (200, 120, 60))
+            # An opaque picture is uploaded as it is.
+            uploaded.clear()
+            worker._run_upscale_pass(str(opaque), None, temp, 1, "gen",
+                                     "upscaled_before", "fal", 2, "ignored")
+            self.assertEqual(uploaded["path"], str(opaque))
+
     def test_fal_recraft_crisp_routes_fixed_four_x_without_scale_payload(self):
         with tempfile.TemporaryDirectory(prefix="fal-recraft-upscale-") as temp:
             source = Path(temp) / "source.png"
