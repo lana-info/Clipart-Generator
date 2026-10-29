@@ -24,8 +24,13 @@
 - Before commit, show the diff and test results.
 - After showing the completed diff and verification results, the main agent may
   commit and push the current task branch without requesting separate approval.
-- Merge, branch deletion, tag deletion, and worktree removal still require
-  explicit user approval.
+- The agent owns routine Git operations end-to-end: creating and deleting task
+  branches and worktrees, committing, pushing, opening and merging PRs, and
+  ordinary conflict-free integration into the active development branch. Do not
+  ask the owner for approval for those actions. Ask only before a release build,
+  publishing an application or module, changing a protected/release branch
+  outside the normal PR flow, or any destructive operation that could lose
+  uncommitted work.
 - Never dispatch GitHub Actions or start local/GitHub builds without a separate
   explicit user command. An ordinary push must not trigger a build workflow.
 - Merge completed task branches into the active target development branch one
