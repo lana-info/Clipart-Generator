@@ -3626,6 +3626,14 @@ class WorkerThread(QThread):
         )
         self.progress.emit(f"  Этап обработки: {stage}; status=running")
         if provider == "fal":
+            # The Fal upscalers read the colour beneath transparent pixels, so the same opaque
+            # preparation the local Real-ESRGAN path does is needed here: junk rim colour (black
+            # or white) otherwise bleeds into the upscaled edge as a halo (owner item 2026-10-28).
+            # Recraft Crisp gets its own opaque input just above and needs no second copy.
+            if upscale_model != FAL_RECRAFT_CRISP_MODEL_ID:
+                current_path = self._prepare_fal_upscale_rgb(
+                    current_path, raw_dir, idx, prefix, step_name,
+                )
             current_url = self._fal_source_url(
                 current_path,
                 current_url,
@@ -3740,6 +3748,27 @@ class WorkerThread(QThread):
         if path and os.path.isfile(path):
             self._remember_paid_image_input(url, path)
         return url
+
+    def _prepare_fal_upscale_rgb(self, input_path, raw_dir, idx, prefix, step_name):
+        """Opaque copy with the subject colour under the edge, for the Fal upscalers.
+
+        ``_prepare_upscale_rgb`` replaces the hidden rim colour with the nearest opaque
+        pixel; the local Real-ESRGAN path uses it, the Fal path did not, so a dark or
+        white rim under a light cut-out was enlarged into a halo. Pictures without a
+        usable alpha are returned unchanged, exactly as on the local path.
+        """
+        with Image.open(input_path) as source:
+            if "A" not in source.getbands():
+                return input_path
+            rgba = source.convert("RGBA")
+            if rgba.getchannel("A").getextrema()[0] == 255:
+                return input_path
+            prepared = self._prepare_upscale_rgb(rgba)
+        prepared_path = os.path.join(
+            raw_dir, f"{prefix}_{step_name}_fal_rgb_{idx:03d}_{self.run_stamp}.png"
+        )
+        prepared.save(prepared_path, format="PNG")
+        return prepared_path
 
     def _fal_source_url(self, current_path, current_url, *, require_https=False, fal_model_id=None):
         if current_url and str(current_url).startswith("https://"):

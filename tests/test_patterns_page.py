@@ -41,6 +41,7 @@ def runtime(tmp_path_factory):
     host = ModuleRuntimeHost(store, lambda module, action: module == "patterns" and action in allowed)
     host.load_active("patterns")
     yield host
+    wait_until_idle(QApplication.instance() or QApplication([]), host)
     host.unload("patterns")
 
 
@@ -79,12 +80,34 @@ def open_page(runtime, tmp_path, name="root"):
     return handle, handle.value, host
 
 
+def wait_until_idle(app, host, module_id="patterns", timeout=20.0):
+    """Wait for the module to finish its background work before closing it.
+
+    The module runtime refuses to unload a module with active jobs or live pages. A
+    resize of a big PNG (the too-large-copy test) is done by the module itself and can
+    still be running when a test closes its page, which made the whole file's teardown
+    fail at random (observed in CI 2026-10-29). Waiting removes the race instead of
+    hiding it: a real leak still fails the teardown after the timeout.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        busy = (getattr(host, "_active_jobs", {}).get(module_id)
+                or getattr(host, "_job_leases", {}).get(module_id)
+                or getattr(host, "_page_leases", {}).get(module_id))
+        if not busy:
+            return True
+        app.processEvents()
+        time.sleep(0.02)
+    return False
+
+
 def close_page(app, handle, page, host):
     page._busy = False
     host.close()
     page.deleteLater()
     app.processEvents()
     handle.close()
+    wait_until_idle(app, host)
 
 
 def test_page_runs_from_the_signed_package(runtime, app, tmp_path):
