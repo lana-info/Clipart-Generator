@@ -206,14 +206,18 @@ def generation_session(tmp_path, count=2):
     return session
 
 
-def test_deleted_picture_is_excluded_from_export(tmp_path):
+def test_only_explicitly_accepted_pictures_are_in_export_sets(tmp_path):
     state = ProjectState(mode=ProjectMode.CLIPART, common=CommonProjectData(work_dir=str(tmp_path)))
     page = RunResultsPage(state)
-    session = generation_session(tmp_path)
+    session = generation_session(tmp_path, count=5)
+    accepted, unchecked, generation_defect, cutout_defect, deleted = session.items
+    accepted.review_mark, accepted.review_checked = "ok", True
+    unchecked.review_mark, unchecked.review_checked = "ok", False
+    generation_defect.review_mark, generation_defect.review_checked = "bad_generation", True
+    cutout_defect.review_mark, cutout_defect.review_checked = "bad_cutout", True
+    deleted.review_mark, deleted.review_checked = "deleted", True
     page.set_session(session)
-    assert len(page._export_paths()) == 2
-    session.items[1].review_mark = "deleted"
-    assert page._export_paths() == [Path(session.items[0].output_path).resolve()]
+    assert page._export_paths() == [Path(accepted.output_path).resolve()]
     page.deleteLater()
 
 
