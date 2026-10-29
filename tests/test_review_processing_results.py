@@ -63,6 +63,8 @@ def finished_page(root, image):
     session = RunQueueSession(request, ProjectMode.CLIPART)
     session.handle_item_progress(dict(item_index=1, total_items=1, stage="export",
                                      status="succeeded", output_path=str(output)))
+    # The owner pressed «Ок»: only confirmed pictures join export sets (SET-0, 2026-10-28).
+    session.items[0].review_mark, session.items[0].review_checked = "ok", True
     session.handle_finished()
     page = RunResultsPage(state, results_extension=ClipartRunResultsExtension())
     page.set_session(session)
