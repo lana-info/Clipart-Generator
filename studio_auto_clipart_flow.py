@@ -2,7 +2,6 @@
 from copy import deepcopy
 import hashlib
 import json
-from datetime import datetime
 from html import escape
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -83,8 +82,7 @@ def launch_confirmation_html(*, object_count, models, cost, references=(), refer
         lines.append(f"<b>Внимание:</b> прежние результаты для {expired_count} "
                      f"{_plural_ru(expired_count, 'объекта', 'объектов', 'объектов')} ({escape(expired_providers)}) "
                      "больше недоступны.")
-        lines.append("Запуск = согласие на новую платную генерацию по текущему тарифу. "
-                     "Успешные изображения заново не создаются.")
+        # Owner 2026-10-29: no long «платно/тариф» warning; the price line of the confirmation stays.
     return "<br>".join(lines)
 
 
@@ -214,7 +212,7 @@ class CollectionBrief(ClipartBuilderDialog):
         folder_row.addWidget(self.directory, 1)
         folder_row.addWidget(choose)
         form.addRow("Рабочая папка", folder_row)
-        self.project_name.setPlaceholderText("Автоматический клипарт · " + datetime.now().strftime("%d.%m.%Y %H:%M"))
+        self.project_name.setPlaceholderText("Автоматический клипарт")
         self.pages.widget(0).widget().layout().insertLayout(0, form)
         self._applied_counts = dict(self.recipe.counts)
         # Total changes must affect the actual slots, including an existing plan.
@@ -447,7 +445,8 @@ class AutoClipartFlowController(ClipartFlowController):
             self.shell.state.data.prompt_generator = generator
             name = self.brief.project_name.text().strip()
             if not name:
-                name = "Автоматический клипарт · " + datetime.now().strftime("%d.%m.%Y %H:%M")
+                # Owner 2026-10-29: no date in the automatic project name — it used to leak into archive names.
+                name = "Автоматический клипарт"
                 self.brief.project_name.setText(name)
             self.shell.state.common.project_name = name
             self.shell.state.common.work_dir = self.brief.directory.text().strip()
@@ -823,15 +822,27 @@ class AutoClipartFlowController(ClipartFlowController):
             QMessageBox.warning(self.brief, "Clipart", str(error)[:500])
 
     def _queue_redo(self, kind, path):
-        """A redo asked while another one runs waits its turn (owner 2026-10-28: the second one was silently lost)."""
+        """A redo asked while another one runs waits its turn (owner 2026-10-28: the second one was silently lost).
+
+        The same picture asked again while it is still being redone is refused with a
+        note: asking twice must not queue or start it a second time (owner 2026-10-29).
+        """
         if self.review is None:
             return False
         session = self.run_queue.session
         if not (session is not None and session.running):
             return False
+        entry = (kind, str(path))
         queue = self.__dict__.setdefault("_redo_queue", [])
-        if (kind, str(path)) not in queue:
-            queue.append((kind, str(path)))
+        current = getattr(self, "_regen_return", None)
+        # The picture of the running redo stays in `_regen_return` until it comes back to the PNG check.
+        if entry in queue or (current is not None and str(current[0]) == str(path)):
+            self._show_redo_progress()
+            QMessageBox.information(
+                self.brief, "Уже в очереди",
+                "Эта картинка уже переделывается. Дождитесь окончания — второй раз запускать не нужно.")
+            return True
+        queue.append(entry)
         self._show_redo_progress()
         return True
 
@@ -1043,18 +1054,15 @@ class AutoClipartFlowController(ClipartFlowController):
         action = 'Продолжить незавершённые запросы' if continuing else 'Повторить неудачные запросы'
         if regenerate:
             action = 'Сгенерировать заново выбранные изображения'
-        replaced = ('Текущие версии выбранных изображений сохранятся в истории версий.\n'
-                    if callable(getattr(self, 'before_replace_outputs', None))
-                    else 'Текущие версии выбранных изображений будут заменены новыми.\n')
         message = (
             f'{action}: {len(approved.generated_prompts)}?\n'
-            + (replaced if regenerate else 'Успешные изображения не будут созданы заново.\n')
             + self._request_cost_line(approved) + '\n'
             'Модель: ' + ', '.join(sorted(models))
         )
         if summary is not None:
-            message = (f'Пересоздать помеченные. Брак генерации — {len(approved.generated_prompts)}: '
-                       'новая генерация, платно.\n' + self._request_cost_line(approved) + '\n'
+            # Owner 2026-10-29: the short ask with the price stays, the long «платно…» warning goes.
+            message = (f'Пересоздать помеченные: {len(approved.generated_prompts)}\n'
+                       + self._request_cost_line(approved) + '\n'
                        'Модель: ' + ', '.join(sorted(models)) + '\n' + '\n'.join(summary))
         if references:
             message += '\nМодели будут переданы референсы:\n' + '\n'.join(

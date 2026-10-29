@@ -765,11 +765,15 @@ def test_second_redo_asked_while_one_runs_waits_in_a_queue_and_starts_after(work
     started = []
     monkeypatch.setattr(controller.review, 'regenerate_path', lambda path: started.append(('regenerate', path)) or object())
     monkeypatch.setattr(controller.review, 'cutout_path', lambda path: started.append(('cutout', path)) or object())
+    notes = []
+    monkeypatch.setattr(QMessageBox, 'information', lambda *args, **kwargs: notes.append(args[2]))
     session.running = True
     controller._regenerate_from_png_check(str(second))
     controller._cutout_from_png_check(str(first))
     controller._cutout_from_png_check(str(first))  # asking twice does not queue it twice
     assert started == [] and len(controller._redo_queue) == 2
+    # Owner 2026-10-29: the second ask for the same picture is refused with a note, not queued again.
+    assert notes == ["Эта картинка уже переделывается. Дождитесь окончания — второй раз запускать не нужно."]
     session.running = False
     controller._start_queued_redo()
     assert started == [('regenerate', str(second))]  # one at a time, in the order asked
@@ -1344,7 +1348,8 @@ def test_launch_confirmation_discloses_expired_results_in_one_dialog(
     assert "заранее неизвестна" in captured["text"]
     assert "генерация 1" in captured["text"]
     assert "прежние результаты для 1 объекта (PiAPI) больше недоступны" in captured["text"]
-    assert "новую платную генерацию" in captured["text"]
+    # Owner 2026-10-29: the long «платно/тариф» warning is gone from the confirmation.
+    assert "платную генерацию по текущему тарифу" not in captured["text"]
     assert controller.shell.state.current_step is StepId.REVIEW_RUN
 
 

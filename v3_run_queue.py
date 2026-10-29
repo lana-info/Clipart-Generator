@@ -1666,8 +1666,10 @@ class RunQueue(QListWidget):
         chosen = self.selected_rows()
         self.clear()
         for item in items:
+            # Owner 2026-10-29: once the file exists, the row shows its name instead of «Изображение N».
+            shown = Path(item.output_path).name if item.output_path else item.display_name
             label = (
-                f"{item.index}. {item.display_name} — "
+                f"{item.index}. {shown} — "
                 f"{STATUS_LABELS[item.status]}"
             )
             note = self.annotate(item) if callable(self.annotate) else None
@@ -1790,16 +1792,11 @@ class RunCompletionDialog(QDialog):
         folder_label = QLabel(f"Папка результата: {session.output_dir}")
         folder_label.setWordWrap(True)
         actions = QHBoxLayout()
-        self.open_folder_button = V3Button(
-            "Открыть папку с результатами",
-            ButtonVariant.PRIMARY,
-        )
-        self.open_folder_button.setEnabled(session.output_dir.is_dir())
-        self.open_folder_button.clicked.connect(page._open_folder)
+        # Owner 2026-10-29: the panel keeps only «Закрыть»; the folder has its own button on the results page.
         self.close_button = V3Button("Закрыть", ButtonVariant.SECONDARY)
         self.close_button.clicked.connect(self.close)
-        actions.addWidget(self.open_folder_button)
         actions.addWidget(self.close_button)
+        actions.addStretch(1)
         layout.addWidget(title)
         layout.addWidget(self.summary_label)
         layout.addWidget(folder_label)
@@ -2761,6 +2758,10 @@ class RunResultsPage(QWidget):
                 self._completion_dialog.close()
                 self._completion_dialog.deleteLater()
                 self._completion_dialog = None
+            return
+        # Owner 2026-10-29: the panel appears once, for the main run; redone pictures do not
+        # need it again — the results page shows their progress and numbers anyway.
+        if session.regeneration:
             return
         if session.finished_at is None:
             return
