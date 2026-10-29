@@ -2284,8 +2284,11 @@ class RunResultsPage(QWidget):
             return []
         paths, seen = [], set()
         for item in self.session.items:
+            # A generated file is not a set member until the owner explicitly
+            # accepts it.  Keeping merely successful or unchecked results here
+            # made defects silently reappear in the export sets.
             if (item.status is not RunItemStatus.SUCCEEDED or not item.output_path
-                    or item.review_mark == "deleted"):
+                    or item.review_mark != "ok" or not item.review_checked):
                 continue
             path = Path(item.output_path)
             if (path.suffix.lower() != '.png' or path.is_symlink()
