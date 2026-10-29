@@ -2305,16 +2305,32 @@ class RunResultsPage(QWidget):
             hook()
 
     def _export_paths(self):
+        """Only confirmed final outputs: a set member is a picture the owner accepted with «Ок»."""
+        return self._ready_paths(confirmed_only=True, require_finished=True)
+
+    def _review_paths(self):
+        """Every ready picture of this session, confirmed or not, also while a redo runs.
+
+        The PNG check exists to look at pictures the owner has not accepted yet; a
+        regeneration also clears a picture's «Ок» (the old one is kept as a version),
+        and such a picture must still be listed there (owner 2026-10-28). The check
+        page stays on screen while one picture is redone, so it is not gated by
+        ``session.running``.
+        """
+        return self._ready_paths(confirmed_only=False, require_finished=False)
+
+    def _ready_paths(self, *, confirmed_only: bool, require_finished: bool):
         """Only final outputs recorded by this session, never a folder scan."""
-        if self.session is None or self.session.running:
+        if self.session is None or (require_finished and self.session.running):
             return []
         paths, seen = [], set()
         for item in self.session.items:
             # A generated file is not a set member until the owner explicitly
             # accepts it.  Keeping merely successful or unchecked results here
             # made defects silently reappear in the export sets.
-            if (item.status is not RunItemStatus.SUCCEEDED or not item.output_path
-                    or item.review_mark != "ok" or not item.review_checked):
+            if item.status is not RunItemStatus.SUCCEEDED or not item.output_path:
+                continue
+            if confirmed_only and (item.review_mark != "ok" or not item.review_checked):
                 continue
             path = Path(item.output_path)
             if (path.suffix.lower() != '.png' or path.is_symlink()
