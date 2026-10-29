@@ -147,3 +147,39 @@ def test_key_like_pixels_the_engine_saw_as_a_mixture_are_not_deleted():
     edge = result.getpixel((20, 8))
     assert 60 <= edge[3] <= 190
     assert max(abs(a - b) for a, b in zip(edge[:3], (120, 80, 180))) <= 12
+
+
+def test_key_tint_cap_moves_the_edge_towards_the_subject_colour():
+    """Owner 2026-10-29 (rough_02/04): cutting only the key channel left the rim olive.
+
+    The cap may lead the key channel no more than the trusted neighbour, but it must reach
+    that by moving the whole colour towards the neighbour: dropping the blue alone turns the
+    rim green. The edge pixel below keeps a green excess of 15 with the old rule and 3 with
+    the fix (the trusted colour itself has 0).
+    """
+    from chroma_matting import _cap_key_tint
+
+    reference = np.array([110.0, 130.0, 160.0])      # a bluish-green leaf inside
+    tinted = np.array([110.0, 160.0, 210.0])         # its rim, still carrying the blue key
+    colour = np.zeros((10, 10, 3))
+    colour[:, :] = reference
+    colour[:, 2] = tinted
+    alpha = np.zeros((10, 10))
+    alpha[:, 2] = 0.5
+    alpha[:, 3:] = 1.0
+
+    capped = _cap_key_tint(colour, alpha, 2)
+    edge = capped[0][2]
+
+    def green_excess(pixel):
+        return pixel[1] - (pixel[0] + pixel[2]) / 2
+
+    # No green cast: the old rule left the rim 15 units greener than the leaf, the fix keeps it at the leaf's level.
+    assert green_excess(edge) <= green_excess(reference) + 5, \
+        f"the rim turned green: {green_excess(edge):.1f} against the leaf's {green_excess(reference):.1f}"
+    # The correction does something: the blue lead shrinks, and the colour moves towards the leaf.
+    tinted_lead = tinted[2] - max(tinted[0], tinted[1])
+    assert edge[2] - max(edge[0], edge[1]) < tinted_lead
+    assert np.linalg.norm(edge - reference) < np.linalg.norm(tinted - reference)
+    # A colour that is not key-tinted is left alone.
+    assert np.allclose(capped[:, 5], reference)
