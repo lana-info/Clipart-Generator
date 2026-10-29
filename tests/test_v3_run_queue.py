@@ -27,6 +27,7 @@ from v3_project_state import (
     route_for_mode,
 )
 from v3_run_queue import (
+    RunCompletionDialog,
     RunItemStatus,
     RunQueueError,
     RunQueueSession,
@@ -2395,3 +2396,48 @@ def test_edited_prompt_without_the_chroma_block_gets_it_back():
     assert with_chroma_block(plain, "blue", "clipart") == plain  # only once
     assert "fluffy edge" not in with_chroma_block("A duck.", "blue", "legacy")
     assert with_chroma_block("A duck.", "", "clipart") == "A duck."
+
+
+def test_regeneration_panel_counts_only_the_sent_pictures(tmp_path):
+    """AC-N2 (owner 2026-10-28): three regenerated pictures count as three, not as the whole batch."""
+    app = QApplication.instance() or QApplication([])
+    session = RunQueueSession(generation_request(tmp_path, count=47), ProjectMode.CLIPART)
+    for item in session.items:
+        item.status = RunItemStatus.SUCCEEDED
+        item.output_path = str(tmp_path / f'ready_{item.index}.png')
+    for item in session.items[:3]:
+        item.status = RunItemStatus.FAILED
+        item.output_path = ''  # a failed generation has no saved picture
+    session.handle_finished()
+    assert session.prepare_retry() is not None
+    assert session.active_order == [0, 1, 2] and session.regeneration
+    for index in session.active_order:
+        session.items[index].status = RunItemStatus.SUCCEEDED
+    session.handle_finished()
+    page = RunResultsPage(ProjectState(mode=ProjectMode.CLIPART))
+    page.set_session(session)
+    text = page._summary_text(session, session.counts())
+    assert 'Отправлено на перегенерацию: 3' in text
+    assert 'С ошибками: 0' in text
+    assert 'Обработано' not in text and 'Всего' not in text
+    dialog = RunCompletionDialog(page, session)
+    assert 'Отправлено на перегенерацию: 3' in dialog.summary_label.text()
+    dialog.close()
+    page.close()
+    app.processEvents()
+
+
+def test_first_run_panel_keeps_the_batch_numbers(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    session = RunQueueSession(generation_request(tmp_path, count=4), ProjectMode.CLIPART)
+    for item in session.items[:3]:
+        item.status = RunItemStatus.SUCCEEDED
+    session.items[3].status = RunItemStatus.FAILED
+    session.handle_finished()
+    assert not session.regeneration
+    page = RunResultsPage(ProjectState(mode=ProjectMode.CLIPART))
+    page.set_session(session)
+    text = page._summary_text(session, session.counts())
+    assert 'Обработано: 3' in text and 'Ошибки: 1' in text and 'Всего: 4' in text
+    page.close()
+    app.processEvents()

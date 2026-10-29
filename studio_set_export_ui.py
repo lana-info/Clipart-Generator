@@ -408,7 +408,7 @@ class SetExportDialog(QDialog):
 
     def __init__(self, paths, parent=None, *, membership=None, review_issues=None, quality_reports=None,
                  workspace=None, embedded=False, project_name='', name_translator=None,
-                 quality_loader=None):
+                 quality_loader=None, review_paths=None):
         super().__init__(parent)
         self.project_name = str(project_name or '')
         self.name_translator = name_translator
@@ -418,6 +418,11 @@ class SetExportDialog(QDialog):
 
         saved = validate_export_membership(membership or {})
         self.paths = list(dict.fromkeys(Path(path).resolve() for path in paths))
+        # The PNG check reviews every ready picture: a regeneration clears its «Ок» mark, and an
+        # unconfirmed or defect-marked picture must still be listed there (owner 2026-10-28).
+        # The sets keep only confirmed members (SET-0).
+        review_source = paths if review_paths is None else review_paths
+        self.review_paths = list(dict.fromkeys(Path(path).resolve() for path in review_source))
         for path in self.paths:
             key = str(path)
             if key not in saved:
@@ -427,7 +432,7 @@ class SetExportDialog(QDialog):
         self.saved_membership = saved
         self._review_issue_candidates = [dict(issue) for issue in (review_issues or ())]
         self.review_issues = list(self._review_issue_candidates)
-        allowed_paths = {str(path) for path in self.paths}
+        allowed_paths = {str(path) for path in self.review_paths}
         self.quality_reports = {}
         for report in quality_reports or ():
             raw_path = str(getattr(report, 'path', '') or '')
@@ -520,15 +525,16 @@ class SetExportDialog(QDialog):
         )
         self.preview_popup.hide()
         self._resolve_review_issues(self.saved_membership)
-        if quality_loader is not None and self.paths:
-            self._qc_total = self._qc_pending = len(self.paths)
+        if quality_loader is not None and self.review_paths:
+            self._qc_total = self._qc_pending = len(self.review_paths)
         self._refresh_summary()
         self._start_png_check()
 
     def _start_png_check(self):
         if not self._qc_pending:
             return
-        self._check_worker = _PngCheckWorker(self.paths, self._quality_loader, self, thumb_cache_dir(self.workspace))
+        self._check_worker = _PngCheckWorker(self.review_paths, self._quality_loader, self,
+                                             thumb_cache_dir(self.workspace))
         self._check_worker.item_ready.connect(self._png_checked)
         self._check_worker.finished.connect(self._png_check_finished)
         self._check_worker.start()
@@ -977,14 +983,20 @@ class SetExportDialog(QDialog):
         self.review_issues = unresolved
 
     def _path_is_active(self, path, membership=None):
+        """In a set, or a ready picture awaiting the owner's «Ок» — the check lists both."""
         source = self.saved_membership if membership is None else membership
         item = source.get(str(Path(path).resolve()))
+        if item is None:
+            return Path(path).resolve() in self.review_paths
         return bool(item and any(link.get('included') for link in item.get('memberships', ())))
 
     def _active_quality_blockers(self, membership=None):
+        # Only a picture that is actually in a set can block that set's export.
+        members = {str(path) for path in self.paths}
         return [
             report for path, report in self.quality_reports.items()
-            if report.status == 'block' and self._path_is_active(path, membership)
+            if report.status == 'block' and str(Path(path).resolve()) in members
+            and self._path_is_active(path, membership)
         ]
 
     def _refresh_quality_page(self):
@@ -998,10 +1010,10 @@ class SetExportDialog(QDialog):
         self.quality_list.clear()
         selected_row = -1
         status_labels = {'ok': 'Готово', 'review': 'Проверьте края', 'block': 'Не экспортировать'}
-        total = sum(str(path) in self.quality_reports for path in self.paths)
+        total = sum(str(path) in self.quality_reports for path in self.review_paths)
         problems = sum(
             self.quality_reports[str(path)].status != 'ok'
-            for path in self.paths if str(path) in self.quality_reports
+            for path in self.review_paths if str(path) in self.quality_reports
         )
         self.quality_filter_problems.setText(f'Нужно посмотреть ({problems})')
         self.quality_filter_all.setText(f'Все ({total})')
@@ -1010,7 +1022,7 @@ class SetExportDialog(QDialog):
             button.setProperty('variant', 'primary' if active else 'secondary')
             button.style().unpolish(button)
             button.style().polish(button)
-        for path in self.paths:
+        for path in self.review_paths:
             key = str(path)
             report = self.quality_reports.get(key)
             if report is None and self._qc_pending and not only_problems:

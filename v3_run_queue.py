@@ -724,6 +724,23 @@ class RunQueueSession(QObject):
             for status in RunItemStatus
         }
 
+    def stream_counts(self) -> dict[str, int]:
+        """Counts of the pictures this run or regeneration actually sent.
+
+        The owner 2026-10-28: after a regeneration of three pictures the panel
+        must report those three, not the whole batch of the project.
+        """
+        chosen = [self.items[index] for index in self.active_order if 0 <= index < len(self.items)]
+        return {
+            status.value: sum(item.status is status for item in chosen)
+            for status in RunItemStatus
+        }
+
+    @property
+    def regeneration(self) -> bool:
+        """True while the current stream is a retry/reprocess of part of the batch."""
+        return 0 < len(self.active_order) < len(self.items)
+
     @property
     def elapsed_seconds(self) -> int:
         end = self.finished_at if self.finished_at is not None else time.monotonic()
@@ -1753,13 +1770,22 @@ class RunCompletionDialog(QDialog):
         layout = QVBoxLayout(self)
         title = QLabel("Задание выполнено")
         title.setProperty("v3Title", True)
-        counts = session.counts()
-        self.summary_label = QLabel(
-            f"Обработано: {counts['succeeded']}\n"
-            f"С ошибками: {counts['failed']}\n"
-            f"Пропущено: {counts['cancelled']}\n"
-            f"Время: {format_elapsed_duration(session.elapsed_seconds)}"
-        )
+        counts = session.stream_counts()
+        if session.regeneration:
+            # Only the pictures this regeneration sent (owner 2026-10-28), never the whole batch.
+            sent = counts["succeeded"] + counts["failed"] + counts["cancelled"]
+            self.summary_label = QLabel(
+                f"Отправлено на перегенерацию: {sent}\n"
+                f"С ошибками: {counts['failed']}\n"
+                f"Время: {format_elapsed_duration(session.elapsed_seconds)}"
+            )
+        else:
+            self.summary_label = QLabel(
+                f"Обработано: {counts['succeeded']}\n"
+                f"С ошибками: {counts['failed']}\n"
+                f"Пропущено: {counts['cancelled']}\n"
+                f"Время: {format_elapsed_duration(session.elapsed_seconds)}"
+            )
         self.summary_label.setWordWrap(True)
         folder_label = QLabel(f"Папка результата: {session.output_dir}")
         folder_label.setWordWrap(True)
@@ -2279,16 +2305,32 @@ class RunResultsPage(QWidget):
             hook()
 
     def _export_paths(self):
+        """Only confirmed final outputs: a set member is a picture the owner accepted with «Ок»."""
+        return self._ready_paths(confirmed_only=True, require_finished=True)
+
+    def _review_paths(self):
+        """Every ready picture of this session, confirmed or not, also while a redo runs.
+
+        The PNG check exists to look at pictures the owner has not accepted yet; a
+        regeneration also clears a picture's «Ок» (the old one is kept as a version),
+        and such a picture must still be listed there (owner 2026-10-28). The check
+        page stays on screen while one picture is redone, so it is not gated by
+        ``session.running``.
+        """
+        return self._ready_paths(confirmed_only=False, require_finished=False)
+
+    def _ready_paths(self, *, confirmed_only: bool, require_finished: bool):
         """Only final outputs recorded by this session, never a folder scan."""
-        if self.session is None or self.session.running:
+        if self.session is None or (require_finished and self.session.running):
             return []
         paths, seen = [], set()
         for item in self.session.items:
             # A generated file is not a set member until the owner explicitly
             # accepts it.  Keeping merely successful or unchecked results here
             # made defects silently reappear in the export sets.
-            if (item.status is not RunItemStatus.SUCCEEDED or not item.output_path
-                    or item.review_mark != "ok" or not item.review_checked):
+            if item.status is not RunItemStatus.SUCCEEDED or not item.output_path:
+                continue
+            if confirmed_only and (item.review_mark != "ok" or not item.review_checked):
                 continue
             path = Path(item.output_path)
             if (path.suffix.lower() != '.png' or path.is_symlink()
@@ -2433,17 +2475,27 @@ class RunResultsPage(QWidget):
 
     @staticmethod
     def _summary_text(session: RunQueueSession, counts: dict[str, int]) -> str:
+        stream = session.stream_counts()
         if session.running:
             heading = "Обработка выполняется"
-        elif counts["failed"]:
+        elif stream["failed"]:
             heading = "Обработка завершена с ошибками"
-        elif counts["cancelled"]:
+        elif stream["cancelled"]:
             heading = "Обработка завершена не полностью"
         else:
             heading = "Обработка завершена успешно"
         # The folder path is on the «Открыть папку с результатами» button; the numbers stay in one line, and
         # «завершена успешно» is not repeated: no heading means everything went well.
         head = "" if heading == "Обработка завершена успешно" else f"{heading}\n"
+        if session.regeneration:
+            # The owner 2026-10-28: a regeneration reports only what it sent, never the whole batch.
+            sent = stream["succeeded"] + stream["failed"] + stream["cancelled"]
+            return (
+                f"{head}"
+                f"Отправлено на перегенерацию: {sent}   "
+                f"С ошибками: {stream['failed']}   "
+                f"Время: {format_elapsed_duration(session.elapsed_seconds)}"
+            )
         return (
             f"{head}"
             f"Обработано: {counts['succeeded']}   "

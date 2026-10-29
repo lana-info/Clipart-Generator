@@ -675,8 +675,6 @@ def test_png_check_keeps_its_page_and_selected_picture_when_a_file_changes(works
         Image.new('RGBA', (64, 64), (120, 80, 40, 255)).save(output)
         session.items[index].status = RunItemStatus.SUCCEEDED
         session.items[index].output_path = str(output)
-        # The owner pressed «Ок» on both pictures: only confirmed ones reach the PNG check (SET-0, 2026-10-28).
-        session.items[index].review_mark, session.items[index].review_checked = 'ok', True
         outputs.append(output)
     session.running = False
     controller.run_queue.session = session
@@ -703,6 +701,57 @@ def test_png_check_keeps_its_page_and_selected_picture_when_a_file_changes(works
     panel = controller.export_panel
     assert panel.stack.currentWidget() is panel.quality_page
     assert panel._current_quality_key() == selected
+
+
+def test_regenerated_picture_stays_in_the_png_check_list(workspace):
+    """AC-R1 (owner 2026-10-28): after «Перегенерировать» the picture appears among the PNG previews
+    again. The regenerated picture loses its «Ок» mark, so the check list must not be built from the
+    confirmed set members alone — sets stay confirmed-only, the review shows every ready picture."""
+    _, controller, _, _ = workspace
+    controller.brief.total.setValue(3)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    outputs = []
+    for index in range(3):
+        path = session.output_dir / f'flower_{index + 1:02d}_ready.png'
+        Image.new('RGBA', (64, 64), (120, 80, 40, 255)).save(path)
+        session.items[index].status = RunItemStatus.SUCCEEDED
+        session.items[index].output_path = str(path)
+        session.items[index].review_mark, session.items[index].review_checked = 'ok', True
+        outputs.append(path)
+    session.running = False
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._refresh_export()
+    wait_png_check(controller.export_panel)
+    panel = controller.export_panel
+    panel._show_quality_review()
+    keys = [panel.quality_list.item(row).data(Qt.ItemDataRole.UserRole)
+            for row in range(panel.quality_list.count())]
+    assert sorted(key for key in keys if key) == sorted(str(path.resolve()) for path in outputs)
+    # The regeneration keeps the old picture as a version and clears its marks (see studio_clipart_versions).
+    session.items[0].review_mark, session.items[0].review_checked = 'ok', False
+    Image.new('RGBA', (64, 64), (10, 20, 30, 255)).save(outputs[0])
+    controller._refresh_export()
+    wait_png_check(controller.export_panel)
+    panel = controller.export_panel
+    panel._show_quality_review()
+    listed = [panel.quality_list.item(row).data(Qt.ItemDataRole.UserRole)
+              for row in range(panel.quality_list.count())]
+    assert str(outputs[0].resolve()) in [key for key in listed if key]
+    assert panel.quality_list.count() == 3
+    # The unconfirmed picture is not a set member yet.
+    assert outputs[0].resolve() not in [Path(path) for path in panel.paths]
+    # While a redo runs the check page keeps the other ready pictures on screen instead of emptying.
+    session.running = True
+    session.items[0].status = RunItemStatus.PENDING
+    session.items[0].output_path = ''
+    controller._refresh_export()
+    assert len(controller.export_panel.review_paths) == 2
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    session.items[0].output_path = str(outputs[0])
+    session.running = False
 
 
 def test_second_redo_asked_while_one_runs_waits_in_a_queue_and_starts_after(workspace, monkeypatch):

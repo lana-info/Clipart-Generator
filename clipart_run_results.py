@@ -236,6 +236,7 @@ class ClipartRunResultsExtension:
         on_membership_saved, on_fix_requested,
         workspace: Path | None = None, embedded: bool = False,
         quality_loader: Callable[[Path], Any] | None = None,
+        review_paths: Sequence[Path] | None = None,
     ) -> Any | None:
         if not self.collections_enabled:
             return None
@@ -246,6 +247,7 @@ class ClipartRunResultsExtension:
             workspace=workspace, embedded=embedded,
             project_name=str(getattr(getattr(state, 'common', None), 'project_name', '') or ''),
             name_translator=_name_translator(), quality_loader=quality_loader,
+            review_paths=review_paths,
         )
         view.membership_saved.connect(on_membership_saved)
         view.fix_requested.connect(on_fix_requested)

@@ -622,6 +622,9 @@ class AutoClipartFlowController(ClipartFlowController):
     def _refresh_export(self):
         page = self.run_queue.page
         paths = page._export_paths()
+        # The PNG check lists every ready picture (an unconfirmed one, or one whose «Ок» was cleared by a
+        # regeneration, is exactly what the owner has to look at); sets keep only confirmed members.
+        review_paths = page._review_paths()
         page._seed_bundle_membership()
         membership = self.shell.state.data.export_membership
         existing = self.export_panel
@@ -630,7 +633,7 @@ class AutoClipartFlowController(ClipartFlowController):
         # An editor publishes new PNG bytes at the same path. Reusing the panel
         # must not also reuse a QC decision about the previous file.
         file_versions = []
-        for path in paths:
+        for path in review_paths:
             try:
                 stat = Path(path).stat()
                 file_versions.append((stat.st_ino, stat.st_size, stat.st_mtime_ns))
@@ -638,6 +641,7 @@ class AutoClipartFlowController(ClipartFlowController):
                 file_versions.append(None)
         review_issues = page._bundle_export_issues()
         if existing is not None and existing.paths == list(paths) \
+                and existing.review_paths == list(review_paths) \
                 and existing.saved_membership == membership \
                 and getattr(existing, '_file_versions', None) == file_versions \
                 and getattr(existing, '_review_issues', None) == review_issues:
@@ -660,6 +664,7 @@ class AutoClipartFlowController(ClipartFlowController):
         panel = extension.create_export_view(
             self.export_page, self.shell.state, paths,
             review_issues=review_issues,
+            review_paths=review_paths,
             quality_reports=(),
             workspace=session.workspace_root if session is not None else None,
             embedded=True,
