@@ -20,6 +20,11 @@ from urllib.parse import urlparse
 import rfc8785
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from delivery_signature import (
+    DeliveryPolicy,
+    DeliverySignatureError,
+    enforce_delivery_policy,
+)
 from license_client import LicenseClient, LicenseError, NoRedirectHandler
 from license_update_contract import LicenseUpdatePolicy
 
@@ -48,6 +53,7 @@ class UpdateRelease:
     download_url: str
     notes: str = ""
     correlation_id: str = ""
+    delivery_envelope: dict | None = None
 
 
 @contextmanager
@@ -161,9 +167,12 @@ class UpdateClient:
         download_directory: str | Path,
         platform_id: str = "windows-x64",
         timeout: int = 20,
+        delivery_public_keys: Mapping[str, str] | None = None,
+        delivery_policy: DeliveryPolicy | None = None,
     ) -> None:
         self.license_client = license_client
         self.lifecycle_policy = LicenseUpdatePolicy()
+        self.delivery_policy = delivery_policy or DeliveryPolicy()
         self.current_version = current_version
         if platform_id not in _PLATFORM_ARTIFACT:
             raise UpdateError("Эта платформа обновлений не поддерживается")
@@ -174,6 +183,10 @@ class UpdateClient:
         self.timeout = max(1, min(int(timeout), self.lifecycle_policy.timeout_seconds))
         self._public_keys = {
             name: _decode_public_key(value) for name, value in (public_keys or {}).items()
+        }
+        self._delivery_public_keys = {
+            name: _decode_public_key(value)
+            for name, value in (delivery_public_keys or {}).items()
         }
         _version(current_version)
 
@@ -274,7 +287,19 @@ class UpdateClient:
         self._validate_download_url(download_url)
         if not isinstance(notes, str) or len(notes) > 2000:
             raise UpdateError("Некорректное описание обновления")
-        return UpdateRelease(version, filename, size, sha256, download_url, notes, correlation_id)
+        delivery_envelope = item.get("delivery_manifest")
+        if delivery_envelope is not None and not isinstance(delivery_envelope, dict):
+            raise UpdateError("Сервер вернул повреждённый подписанный манифест")
+        return UpdateRelease(
+            version,
+            filename,
+            size,
+            sha256,
+            download_url,
+            notes,
+            correlation_id,
+            delivery_envelope,
+        )
 
     def _validate_download_url(self, value: str) -> None:
         base = urlparse(self.license_client._validated_base_url())
@@ -381,3 +406,37 @@ class UpdateClient:
                 yield artifact
         except OSError:
             raise UpdateError("Файл обновления не прошёл повторную проверку") from None
+
+    def verify_release_manifest(
+        self,
+        envelope: object,
+        release: UpdateRelease,
+        *,
+        expected_sha256: str | None = None,
+    ) -> dict | None:
+        """Verify the service-signed delivery manifest before applying an update.
+
+        The gate is active only while a delivery public key is pinned. With a
+        pinned key a missing, unknown or bad manifest signature refuses the
+        update, and the verified payload is bound to the exact release row
+        accepted by ``check`` and to the digest that was actually measured.
+        Returns ``None`` when the policy lets an unverified manifest through.
+        """
+        try:
+            payload = enforce_delivery_policy(
+                envelope, self._delivery_public_keys, self.delivery_policy,
+            )
+        except DeliverySignatureError as exc:
+            raise UpdateError(str(exc)) from exc
+        if payload is None:
+            return None
+        if (
+            payload.get("version") != release.version
+            or payload.get("filename") != release.filename
+            or payload.get("sha256") != release.sha256
+            or payload.get("download_url") != release.download_url
+        ):
+            raise UpdateError("Подписанный манифест не соответствует ревизии обновления")
+        if expected_sha256 is not None and payload.get("sha256") != expected_sha256:
+            raise UpdateError("Подписанный манифест не соответствует скачанному обновлению")
+        return payload
