@@ -20,7 +20,6 @@ from v3_project_state import (
 )
 from prompt_translation import (
     PromptTranslationBackend,
-    translate_prompt_fields,
 )
 
 

@@ -9,7 +9,7 @@ from studio_news_ui import StudioNewsPanel, StudioNewsController
 
 
 def test_plain_text_empty_and_cached_offline_news():
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     panel = StudioNewsPanel()
     assert panel.isHidden()
     item = dict(id='a'*32, title='<img src=x>', body='<b>Не HTML</b>', published_at='2026-09-23T12:00:00+00:00')

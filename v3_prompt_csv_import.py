@@ -15,7 +15,6 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QHeaderView,
-    QHBoxLayout,
     QLabel,
     QPushButton,
     QTableWidget,

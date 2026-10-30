@@ -49,7 +49,7 @@ from v3_project_state import (
 from studio_projects import MAX_SAVED_PROJECTS, ProjectStore
 from studio_project_documents import ProjectDocumentService
 from studio_catalog import CatalogEntry, ModuleAvailability, card_action
-from studio_catalog_ui import BUILTIN_CATALOG, StudioCatalogCard, catalog_artwork
+from studio_catalog_ui import BUILTIN_CATALOG, StudioCatalogCard
 from studio_workflow_registry import WorkflowRegistry, discover_workflows, core_project_state_extensions
 from studio_workflow_host import WorkflowHost
 from studio_module_access import authorize_module_run
@@ -57,7 +57,7 @@ from v3_localization import app_locale_from_settings
 from v3_lazy_loading import InitializationProgressOverlay, InitializationStage
 from v3_license import LicenseDialog, OnlineLicenseGate
 from license_client import LicenseError
-from v3_wizard import AppShell, MODE_TITLES, STEP_TITLES
+from v3_wizard import AppShell, MODE_TITLES
 from app_identity import APP_NAME, APP_STORAGE_NAME
 from config_schema import load_preferences, resolve_output_directory, save_preferences_atomic
 

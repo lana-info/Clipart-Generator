@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import ceil, floor, hypot
+from math import ceil, floor
 
 from io import BytesIO
 from html import escape
@@ -75,7 +75,6 @@ from background_mask import (
     MIN_SOFT_RADIUS,
     soft_feather_width,
     stamp_reach,
-    paint_mask_path,
     stamp_path_coverage,
     save_mask_png,
 )

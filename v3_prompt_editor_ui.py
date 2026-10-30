@@ -1037,7 +1037,7 @@ class PromptInputPage(ScrollableStepPage):
     def _preview(self, *_: Any) -> None:
         try:
             entries = self._generate_series(self._generator_data())
-        except PromptGeneratorError as error:
+        except PromptGeneratorError:
             self._generated_variants = []
             self.preview_label.setText("Заполните хотя бы одно поле конструктора.")
             self.create_series_button.setEnabled(False)

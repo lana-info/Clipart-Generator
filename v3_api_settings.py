@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
 from v3_components import ButtonVariant, V3Button
 from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS, ProviderCredentialStore
 from provider_clients import check_kie_balance, check_photoroom_balance
-from app_identity import APP_NAME, APP_STORAGE_NAME
+from app_identity import APP_STORAGE_NAME
 from network_security import HttpsOnlyRedirectHandler
 from runtime_settings import API_CONCURRENCY_CHOICES, normalize_api_concurrency
 from provider_balance import ProviderBalanceError, check_provider_balance

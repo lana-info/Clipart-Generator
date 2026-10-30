@@ -3,7 +3,6 @@ import json
 import os
 from contextlib import ExitStack
 from io import BytesIO
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.error import HTTPError
@@ -299,7 +298,7 @@ def test_regular_generation_never_opens_expired_task_dialog(tmp_path):
 def test_launch_dialog_pre_approval_skips_second_paid_question(tmp_path):
     from PyQt6.QtWidgets import QApplication, QMessageBox
 
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     previous = worker(tmp_path)
     add_record(previous, "old")
     approvals = expired_generation_retries(tmp_path, previous.settings, previous.generated_prompts)

@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import QApplication, QToolButton
 
 from main import WorkerThread
 from v3_processing_flow import (
-    ProcessingFilesPage,
     build_processing_run_request,
     install_processing_flow,
 )

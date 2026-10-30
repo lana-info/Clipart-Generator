@@ -4,3 +4,5 @@ uvicorn>=0.30.0
 pydantic>=2.8.0
 pytest>=8.0.0,<10.0.0
 pytest-timeout>=2.3
+# T-QUAL-0: статический гейт уровня ошибок (ruff check в CI, без autofix)
+ruff==0.17.3

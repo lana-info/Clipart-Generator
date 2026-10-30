@@ -16,7 +16,7 @@ def test_openrouter_is_secret_and_survives_store(tmp_path):
 
 
 def test_api_dialog_masks_and_saves_openrouter(monkeypatch):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     monkeypatch.setattr('v3_api_settings.load_credentials', lambda: {})
     saved = []
     monkeypatch.setattr('v3_api_settings.save_credentials', lambda values: saved.append(values))

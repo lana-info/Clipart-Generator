@@ -764,7 +764,7 @@ class ContourEditorDialog(QDialog):
 
     def _open_path(self, path: Path) -> None:
         try: rgba=_load_rgba(path)
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError):
             if hasattr(self, "canvas"):
                 self.status.setText("Не удалось открыть другой PNG. Текущие правки остались в редакторе.")
             else:

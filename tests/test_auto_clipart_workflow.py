@@ -1273,7 +1273,6 @@ def test_save_failure_journal_keeps_error_chain(workspace):
 
 
 def test_saved_recovery_preserves_upscale_completion_and_uses_no_prompt(workspace, tmp_path):
-    from pathlib import Path
     view, controller, _, worker = workspace
     prepare_launch(controller)
     session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
@@ -1768,7 +1767,7 @@ def test_the_recovery_menu_item_explains_itself_instead_of_vanishing(workspace):
     view, controller, _, worker = workspace
     controller.brief.total.setValue(3)
     prepare_launch(controller)
-    session = _ready_run(controller, 3, confirmed=(0, 1, 2))
+    _session = _ready_run(controller, 3, confirmed=(0, 1, 2))
     controller._refresh_more_menu()
     assert controller.more_recover_action.isVisible()
     assert not controller.more_recover_action.isEnabled()

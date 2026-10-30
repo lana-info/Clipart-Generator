@@ -1,4 +1,3 @@
-from pathlib import Path
 from types import SimpleNamespace
 
 from studio_clipart_review_ui import ImageReview

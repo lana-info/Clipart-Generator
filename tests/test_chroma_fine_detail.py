@@ -8,7 +8,6 @@ from PIL import Image, ImageDraw, ImageFilter
 
 from chroma_key import (
     KEY_COLORS,
-    ChromaKeyAmbiguousError,
     remove_chroma_key_automatic,
 )
 

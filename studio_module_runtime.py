@@ -20,10 +20,14 @@ from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping
 
 from studio_module_api import (
-    MODULE_API_VERSION, CapabilityBinding, CapabilityRequirement, CommandDeclaration,
-    DocumentTypeDeclaration, ModuleApiError, ModuleCapabilities, ModuleCapabilityContext,
-    ModuleCommand, ModuleContext, ModuleDocumentType, ModulePage, ModuleRegistration,
-    PageDeclaration,
+    MODULE_API_VERSION, CapabilityBinding, CapabilityRequirement, CommandDeclaration,  # noqa: F401 — публичная поверхность модуля (контракт ре-экспортов)
+    DocumentTypeDeclaration,  # noqa: F401 — публичная поверхность модуля (контракт ре-экспортов)
+    ModuleApiError, ModuleCapabilities, ModuleCapabilityContext,
+    ModuleCommand,  # noqa: F401 — публичная поверхность модуля (контракт ре-экспортов)
+    ModuleContext, ModuleDocumentType,  # noqa: F401 — публичная поверхность модуля (контракт ре-экспортов)
+    ModulePage,  # noqa: F401 — публичная поверхность модуля (контракт ре-экспортов)
+    ModuleRegistration,
+    PageDeclaration,  # noqa: F401 — публичная поверхность модуля (контракт ре-экспортов)
 )
 from studio_modules import ModulePackageError, ModuleStore
 

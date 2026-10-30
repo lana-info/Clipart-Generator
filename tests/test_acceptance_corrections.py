@@ -53,7 +53,7 @@ def test_openrouter_regular_key_limit_is_not_account_balance(monkeypatch):
 
 
 def test_palette_selection_and_modifier_limit():
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     dialog = ClipartBuilderDialog(ProjectState().clipart)
     first, second = dialog.palette_cards[:2]
     first['button'].click()
@@ -71,7 +71,7 @@ def test_palette_selection_and_modifier_limit():
 
 
 def test_legacy_custom_visual_values_survive_dropdown_migration():
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     data = ProjectState().clipart
     from studio_clipart_recipe import ClipartRecipe
     recipe = ClipartRecipe(theme="Лесные животные")
@@ -93,7 +93,7 @@ def test_legacy_custom_visual_values_survive_dropdown_migration():
 def test_home_refreshes_rights_and_keeps_saved_project(tmp_path):
     from license_client import LicenseAuthorization, ModuleEntitlement
     from v3_mode_selection import V3ApplicationView
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     now = datetime.now(timezone.utc)
     gate = Mock(status_text='active', verification_text='checked', current_authorization=None)
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey

@@ -42,6 +42,7 @@ from pinterest_pin_templates import (
     template_product_box,
 )
 from security_redaction import redact_text
+from v3_prompt_generator import PromptGeneratorError  # noqa: F401 — ребро зафиксировано в allowlist test_studio_dependency_architecture
 
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
 from v3_flow_runtime import CostEstimate, FlowRunRequest, safe_runtime_error as _safe_runtime_error
@@ -54,14 +55,12 @@ from v3_image_generation_runtime import (
 )
 from v3_flow_ui import ProjectDirectoryPage, ScrollableStepPage as _ScrollableStepPage
 from v3_project_state import (
-    CommonProjectData,
     GenerationData,
     ImageOperationData,
     MAX_SELECTED_FILES,
     PINTEREST_AI_SCENE_COUNT,
     PINTEREST_TEMPLATE_COUNT,
     PinterestPinData,
-    PinterestOperationData,
     PinterestModeData,
     PinterestPinResultData,
     ProjectMode,
@@ -69,7 +68,6 @@ from v3_project_state import (
     PromptGeneratorData,
     StepId,
 )
-from v3_prompt_generator import PromptGeneratorError
 from v3_image_processing_ui import ProcessingPipelineEditor
 from studio_workflow_host import WorkflowHost, workflow_host_for
 from v3_lazy_loading import LazyPageRegistry

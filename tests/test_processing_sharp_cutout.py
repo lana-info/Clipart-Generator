@@ -1,6 +1,5 @@
 """Batch cutout through the same recipe, worker and results used by Processing."""
 from io import BytesIO
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest

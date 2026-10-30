@@ -42,7 +42,7 @@ class Worker(QObject):
 
 @pytest.fixture
 def workspace(tmp_path, monkeypatch):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     now = datetime.now(timezone.utc)
     authorization = LicenseAuthorization('fixture', 'clipart-generator', 'fixture',
         now, now + timedelta(hours=1), module_entitlements=(

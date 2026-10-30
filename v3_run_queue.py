@@ -46,7 +46,7 @@ from provider_error_messages import friendly_provider_error
 from fal_model_catalog import is_fal_generation_model
 from v3_provider_registry import normalize_fal_upscale_factor
 from v3_project_state import ProjectMode, ProjectState, with_background_rule, with_chroma_block
-from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
+from v3_runtime_adapter import legacy_progress_stage
 from run_lifecycle import RunLifecycle
 from v3_transparency_preview import ClipartTransparencyPreview
 from studio_run_results_extension import RunResultsExtension

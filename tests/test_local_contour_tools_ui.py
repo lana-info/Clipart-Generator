@@ -1,6 +1,4 @@
 """Real Qt local selection, non-destructive drafts and alpha-only commits."""
-from concurrent.futures import CancelledError
-from dataclasses import replace
 from math import cos, sin, pi
 from threading import Event
 import time

@@ -641,7 +641,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             state.current_step_by_mode[ProjectMode.PROCESSING] = StepId.REVIEW_RUN
             shell = AppShell(state)
             factory = WorkerFactory()
-            controller = install_processing_flow(WorkflowHost(shell, 'processing', runtime_settings_provider=lambda: {}, worker_factory=factory, authorization_provider=lambda: None))
+            _controller = install_processing_flow(WorkflowHost(shell, 'processing', runtime_settings_provider=lambda: {}, worker_factory=factory, authorization_provider=lambda: None))
             shell.go_next()
             self.assertEqual(len(factory.workers), 1)
             self.assertTrue(factory.workers[0].started)
@@ -710,7 +710,7 @@ if __name__ == "__main__":
 
 def test_processing_cost_refresh_uses_live_fal_quote_and_resets_on_change():
     from decimal import Decimal
-    from v3_processing_flow import (ProcessingReviewRunPage, estimate_processing_cost,
+    from v3_processing_flow import (estimate_processing_cost,
                                     processing_fal_quantities)
     from v3_project_state import ImageOperationData
 

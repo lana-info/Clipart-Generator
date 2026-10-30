@@ -2,7 +2,6 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
 
 from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 from gpt25_provider import (

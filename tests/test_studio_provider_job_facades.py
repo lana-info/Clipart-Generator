@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import tempfile
 import threading
-from pathlib import Path
 
 import pytest
 
 from studio_job_api import JobRequest
 from studio_job_services import CoreJobService, JobLauncher
 from studio_module_runtime import ModuleRuntimeError, ModuleRuntimeHost
-from studio_modules import ModuleStore
 from studio_provider_api import ProviderOperationRequest, ProviderSubmissionUncertain
 from studio_provider_services import CoreProviderFacade, ProtectedProviderExecutor
 

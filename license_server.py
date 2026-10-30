@@ -3,7 +3,7 @@ import sqlite3
 import string
 from datetime import datetime, timedelta, timezone
 import os
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 

@@ -79,16 +79,14 @@ from visible_mark_cleanup import (
 from v3_api_settings import check_photoroom_balance as check_photoroom_balance_api
 from output_naming import (
     BatchOutputNameReservation,
-    generated_output_path,
     generated_subject,
     processed_output_path,
 )
-from api_credentials import EnvCredentialStore, ProviderCredentialStore, SECRET_CONFIG_KEYS
+from api_credentials import ProviderCredentialStore, SECRET_CONFIG_KEYS, EnvCredentialStore  # noqa: F401 — ре-экспорт, используют внешние модули
 from runtime_settings import build_runtime_settings
 from runtime_settings import normalize_kie_concurrency, normalize_provider_concurrency, normalize_api_concurrency
 from worker_runtime import launch_worker
-from run_modes import label_for as run_mode_label, worker_mode_for
-from run_validation import validate_inputs
+from run_modes import worker_mode_for
 from app_identity import APP_NAME, APP_STORAGE_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from v3_localization import app_locale_from_settings
 from release_contract import resolve_release_version
@@ -112,7 +110,6 @@ from fal_model_catalog import (
     is_fal_generation_model,
 )
 from midjourney_provider import (
-    MODEL_ID as MIDJOURNEY_MODEL_ID,
     imagine_payload as midjourney_imagine_payload,
     provider_for_model as midjourney_provider_for_model,
     status_url as midjourney_status_url,
@@ -176,7 +173,6 @@ from PyQt6.QtCore import (
     QThread,
     pyqtSignal,
     QTimer,
-    QEvent,
     QSize,
     QPoint,
     QRect,
@@ -6195,7 +6191,7 @@ class WorkerThread(QThread):
                         if not self._diagnostic_context.gpt25_post_started:
                             journal.update_status(marker, "cancelled")
                         raise
-                    except Exception as error:
+                    except Exception:
                         http_status = getattr(self._diagnostic_context, "last_http_status", None)
                         if (not self._diagnostic_context.gpt25_post_started
                                 or http_status in {400, 401, 402, 403, 404, 429}):

@@ -7,7 +7,6 @@ import os
 import platform
 import importlib.metadata
 from urllib.parse import urlparse
-import sys
 from pathlib import Path
 
 
