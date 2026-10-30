@@ -1070,6 +1070,11 @@ class SetExportDialog(QDialog):
             return Path(path).resolve() in self.review_paths
         return bool(item and any(link.get('included') for link in item.get('memberships', ())))
 
+    def _path_has_sets(self, path):
+        """The picture carries set records at all: only then can it be excluded or brought back."""
+        item = self.saved_membership.get(str(Path(path).resolve()))
+        return bool(item and item.get('memberships'))
+
     def _active_quality_blockers(self, membership=None):
         # Only a picture that is actually in a set can block that set's export.
         members = {str(path) for path in self.paths}
@@ -1122,8 +1127,9 @@ class SetExportDialog(QDialog):
             else:
                 status = status_labels[report.status]
             mark = {'bad_generation': 'Брак генерации', 'bad_cutout': 'Брак вырезания'}.get(self._marks.get(key, ''), '')
-            if mark and active:
-                status = mark if report.status == 'ok' else f'{status} · {mark}'
+            if mark:
+                # Owner 2026-10-30: an excluded picture keeps its mark in sight; the exclusion must not hide it.
+                status = mark if (active and report.status == 'ok') else f'{status} · {mark}'
             if key in getattr(self, '_edited', ()):
                 status += ' · промпт исправлен'
             note = self._notes.get(key)
@@ -1164,7 +1170,7 @@ class SetExportDialog(QDialog):
         self._refresh_quality_page()
 
     def _quality_icon(self, key, report, active, viewed):
-        """Thumbnail on the checkerboard with a status badge (⚠/✕) and a «viewed» tick; excluded files are dimmed."""
+        """Thumbnail on the checkerboard with the mark badge and a «viewed» tick; excluded files are dimmed."""
         size = self.QUALITY_THUMB
         picture = self._checker_pixmap(key, size, self._quality_background)
         canvas = QPixmap(size, size)
@@ -1172,7 +1178,8 @@ class SetExportDialog(QDialog):
         painter = QPainter(canvas)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if not picture.isNull():
-            painter.setOpacity(1.0 if active else 0.35)
+            # Owner 2026-10-30: an excluded picture keeps the mark readable, so the dimming is softer (0.35 → 0.55).
+            painter.setOpacity(1.0 if active else 0.55)
             painter.drawPixmap((size - picture.width()) // 2, (size - picture.height()) // 2, picture)
             painter.setOpacity(1.0)
         font = QFont(painter.font())
@@ -1196,16 +1203,18 @@ class SetExportDialog(QDialog):
             'bad_cutout': ('#a78bfa', 'В', '#140a2e'),
             'deleted': ('#8a97a8', '✕', '#101820'),
         }
-        if not active:
-            painter.setPen(QPen(QColor('#8ea3b8'), 2))
-            painter.setBrush(QColor('#2b3340'))
-            painter.drawEllipse(size - 24, 4, 18, 18)
-            painter.drawLine(size - 21, 19, size - 9, 7)
-        elif mark in state_badges:
+        if mark in state_badges:
             fill, glyph, ink = state_badges[mark]
             badge(size - 25, 3, fill, glyph, ink)
         elif self._needs_attention(key):
             badge(size - 25, 3, '#f59e0b', '!', '#1f1300')
+        if not active:
+            # Owner 2026-10-30: the exclusion gets its own small sign in the free corner so that it
+            # never hides the owner's mark («Ок»/«Брак…») — before, it replaced the mark badge.
+            painter.setPen(QPen(QColor('#8ea3b8'), 2))
+            painter.setBrush(QColor('#2b3340'))
+            painter.drawEllipse(3, 3, 18, 18)
+            painter.drawLine(6, 18, 18, 6)
         if key in getattr(self, '_edited', ()):  # a corrected prompt: pencil badge
             badge(3, size - 25, '#1b2636', '✎', '#e4edf6')
         if self._notes.get(key):  # a note is attached to the picture: its own badge
@@ -1242,6 +1251,7 @@ class SetExportDialog(QDialog):
         if report is not None:
             self._mark_quality_viewed(key, item, report, active)
         self._sync_mark_buttons(key)
+        self._sync_exclude_button(key, active)
         if report is None:
             self.quality_issue_title.setText('Выберите PNG')
             self.quality_picture.setToolTip('')
@@ -1255,6 +1265,10 @@ class SetExportDialog(QDialog):
         title = {'ok': '', 'review': 'Проверьте края', 'block': 'Не экспортировать'}[report.status]
         if not active:
             title = 'Исключено из наборов'
+        mark = {'bad_generation': 'Брак генерации', 'bad_cutout': 'Брак вырезания'}.get(self._marks.get(key, ''), '')
+        if mark:
+            # Owner 2026-10-30: the exclusion and the mark stand side by side instead of hiding each other.
+            title = mark if (active and report.status == 'ok') else f'{title} · {mark}'
         self.quality_issue_title.setText(title)
         messages = '\n'.join(f'• {issue.message}' for issue in report.issues)
         actions = '\n'.join(f'• {issue.action}' for issue in report.issues if issue.action)
@@ -1262,8 +1276,28 @@ class SetExportDialog(QDialog):
         self.quality_action_text.setText(('Что сделать:\n' + actions) if actions else '')
         # No visible captions (owner 2026-10-27); the explanation stays one hover away.
         self.quality_picture.setToolTip('\n'.join(part for part in (title, messages, actions) if part))
-        self.quality_fix_button.setEnabled(active and self.worker is None)
-        self.quality_exclude_button.setEnabled(active and self.worker is None)
+        # Owner 2026-10-30: fixing the picture does not depend on the sets — an excluded picture can be
+        # repaired and then brought back with the same row's button. Only a running export locks it.
+        self.quality_fix_button.setEnabled(self.worker is None)
+
+    def _sync_exclude_button(self, key, active):
+        """«Исключить из наборов» / «Вернуть в наборы» — one toggle button (owner 2026-10-30).
+
+        Before, the button switched itself off as soon as the picture was excluded and there was no
+        way back from this screen; the exclusion also hid every mark. Now the same button returns the
+        picture to all of its sets, and the mark stays visible either way.
+        """
+        in_sets = self._path_has_sets(key)
+        excluded = bool(key) and in_sets and not active
+        self.quality_exclude_button.setText('Вернуть в наборы' if excluded else 'Исключить из наборов')
+        if not in_sets:
+            # Nothing to exclude yet: the picture joins the sets only after «Ок» (SET-0, 2026-10-28).
+            self.quality_exclude_button.setToolTip('Картинка пока не в наборах: поставьте «Ок», и её можно будет исключить.')
+        elif active:
+            self.quality_exclude_button.setToolTip('Картинка не попадёт в ZIP-наборы. Файл на диске не удаляется.')
+        else:
+            self.quality_exclude_button.setToolTip('Вернуть картинку во все её наборы. Файл всё это время остаётся на диске.')
+        self.quality_exclude_button.setEnabled(in_sets and self.worker is None)
 
     def enable_marks(self, marks, edited=(), notes=None):
         """Show the quick marks; ``marks`` maps a PNG path to its current mark.
@@ -1388,13 +1422,14 @@ class SetExportDialog(QDialog):
             return
         path = str(item.data(Qt.ItemDataRole.UserRole) or '')
         report = self.quality_reports.get(path)
-        if not path or report is None or not self._path_is_active(path):
+        if not path or report is None:
             return
         if not self.embedded:
             self.done(QDialog.DialogCode.Rejected)
         self.fix_requested.emit(path)
 
     def _exclude_quality_selected(self):
+        """Take the picture out of every set, or bring it back into every set (one button, owner 2026-10-30)."""
         if self.worker is not None:
             return
         item = self.quality_list.currentItem()
@@ -1409,13 +1444,16 @@ class SetExportDialog(QDialog):
         entry = value.get(path)
         if entry is None:
             return
+        excluded = not any(link.get('included') for link in entry['memberships'])
         for link in entry['memberships']:
-            link['included'] = False
+            link['included'] = excluded  # excluded → back into every set; in sets → out of every set
         value = validate_export_membership(value)
         self.saved_membership = value
         self._resolve_review_issues(value)
         self.membership_saved.emit(value)
-        self.status.setText('Дизайн исключён из наборов. Файл на диске не удалён.')
+        self.status.setText('Дизайн возвращён во все свои наборы. Файл всё это время оставался на диске.'
+                            if excluded else
+                            'Дизайн исключён из наборов. Файл на диске не удалён.')
         self._refresh_summary()
         self._refresh_quality_page()
 
@@ -1467,7 +1505,16 @@ class SetExportDialog(QDialog):
         set_count = len(catalog)
         sets_word = 'набор' if set_count % 10 == 1 and set_count % 100 != 11 else (
             'набора' if set_count % 10 in (2, 3, 4) and set_count % 100 not in (12, 13, 14) else 'наборов')
-        self.summary_counts.setText(f'{count} {images_word} · {set_count} {sets_word}')
+        if count or not self.review_paths:
+            self.summary_counts.setText(f'{count} {images_word} · {set_count} {sets_word}')
+        else:
+            # Owner 2026-10-30: a finished run whose pictures are not confirmed yet read as «no pictures at all».
+            self.summary_counts.setText(
+                f'Готово картинок: {len(self.review_paths)} · в наборах: 0 · наборов: {set_count}')
+        if self.paths or not self.review_paths:
+            self.empty_hint.setText('Готовых PNG пока нет. Проект можно сохранить и продолжить позже.')
+        else:
+            self.empty_hint.setText('В наборы попадут только картинки, подтверждённые «Ок».')
         self.empty_hint.setVisible(not self.paths)
         self.new_set_button.setEnabled(bool(self.paths) and self.worker is None)
         if self._editing_set_id not in dict(catalog):
@@ -1492,7 +1539,7 @@ class SetExportDialog(QDialog):
             for path, report in self.quality_reports.items()
         )
         block_count = len(self._active_quality_blockers())
-        quality_issue_count = sum(self._needs_attention(str(path)) for path in self.paths)
+        quality_issue_count = sum(self._needs_attention(str(path)) for path in self.review_paths)
         self.quality_panel.setVisible(quality_issue_count > 0 or self._qc_pending > 0)
         self.review_quality_button.setVisible(not self._qc_pending)
         if self._qc_pending:
