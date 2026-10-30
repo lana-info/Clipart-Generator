@@ -183,3 +183,28 @@ def test_key_tint_cap_moves_the_edge_towards_the_subject_colour():
     assert np.linalg.norm(edge - reference) < np.linalg.norm(tinted - reference)
     # A colour that is not key-tinted is left alone.
     assert np.allclose(capped[:, 5], reference)
+
+
+def test_matting_keeps_bright_key_hued_details_the_engine_kept_opaque():
+    """Independent review 2026-10-29: the engine's contract preserves small key-hued details
+    inside the subject (a 1-px (0,100,220) dot stays opaque, test_chroma_key). The matting
+    trimap must not delete them again: _enclosed_shaded_key may only claim a SHADED sliver
+    (key channel <= 70% of the measured key, as shaded_key_pocket defines it). A bright
+    key-dominant speck is subject paint, and deleting it punches a hole in the subject.
+    """
+    source = Image.new("RGB", (40, 40), (0, 0, 255))
+    source.paste((185, 185, 185), (8, 8, 32, 32))
+    dots = [(16, 16), (20, 24), (24, 18)]
+    for y, x in dots:
+        source.putpixel((x, y), (0, 100, 220))
+    # The engine kept the whole square, dots included, opaque.
+    cutout = Image.new("RGBA", source.size, (0, 0, 255, 0))
+    cutout.paste(source.crop((8, 8, 32, 32)).convert("RGBA"), (8, 8))
+
+    result = matte_edges(source, cutout, "blue")
+
+    for y, x in dots:
+        assert result.getpixel((x, y)) == (0, 100, 220, 255), \
+            f"key-hued detail ({x},{y}) was deleted: {result.getpixel((x, y))}"
+    assert result.getpixel((12, 12)) == (185, 185, 185, 255)
+    assert result.getpixel((2, 2))[3] == 0

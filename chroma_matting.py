@@ -21,7 +21,13 @@ from PIL import Image
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
 
-from chroma_key import KEY_COLORS, chroma_gap, measure_chroma_background, shaded_key_pocket
+from chroma_key import (
+    KEY_COLORS,
+    SHADED_KEY_MAX_LEVEL,
+    chroma_gap,
+    measure_chroma_background,
+    shaded_key_pocket,
+)
 
 KEY_CHANNEL = {"red": 0, "green": 1, "blue": 2}
 KEY_DISTANCE = 45.0             # RGB distance to the measured key that is sure background
@@ -49,17 +55,20 @@ def _erode(mask: np.ndarray, size: int) -> np.ndarray:
     return cv2.erode(mask.astype(np.uint8), np.ones((size, size), np.uint8)) > 0
 
 
-def _enclosed_shaded_key(rgb: np.ndarray, engine_alpha: np.ndarray, channel: int) -> np.ndarray:
+def _enclosed_shaded_key(rgb: np.ndarray, engine_alpha: np.ndarray, channel: int, key: np.ndarray) -> np.ndarray:
     """Slivers of shaded key enclosed by the subject (dark gaps between leaves): key-dominant hue, at most ~5 px wide.
 
     Whatever the engine made of them (solid or a partial mixture), they are background: the subject is on every
     side. A sliver that touches the engine's transparent area is an edge and is left to the matting, as are wider
-    key-like patches (a blue flower).
+    key-like patches (a blue flower). "Shaded" means the same as in ``shaded_key_pocket``: the key channel at most
+    SHADED_KEY_MAX_LEVEL of the measured key's. A brighter key-dominant speck is a detail the engine deliberately
+    kept opaque (the owner's 1-px key-coloured detail contract), and deleting it here would punch a hole.
     """
     others = np.delete(rgb, channel, axis=2)
     key_lead = rgb[..., channel][..., None] - others
     candidate = ((engine_alpha > 0) & (rgb[..., channel] > DARK_KEY_RATIO * others.max(axis=2))
-                 & (key_lead.min(axis=2) > DARK_KEY_LEAD / 255.0))
+                 & (key_lead.min(axis=2) > DARK_KEY_LEAD / 255.0)
+                 & (rgb[..., channel] <= SHADED_KEY_MAX_LEVEL * key[channel]))
     if not candidate.any():
         return candidate
     mask = candidate.astype(np.uint8)
@@ -79,7 +88,7 @@ def _trimap(rgb: np.ndarray, engine_alpha: np.ndarray, channel: int, key: np.nda
     key_lead = rgb[..., channel][..., None] - np.delete(rgb, channel, axis=2)
     near_key = np.linalg.norm(rgb - key, axis=2) < KEY_DISTANCE / 255.0
     opaque = engine_alpha >= 255
-    shaded_key = _enclosed_shaded_key(rgb, engine_alpha, channel)
+    shaded_key = _enclosed_shaded_key(rgb, engine_alpha, channel, key)
     # A shade of the key in a thin gap is background even when the engine solved
     # coverage there; without this the closed-form solve would read the shade as
     # subject coverage and paint a film across the gap.
