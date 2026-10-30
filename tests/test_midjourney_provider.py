@@ -121,3 +121,114 @@ def test_model_is_visible_routed_to_atlascloud_and_keeps_the_ratio():
     assert generation_provider_id(MODEL_ID) == "atlascloud"
     assert "1:1" in model_spec(MODEL_ID).ratios and "21:9" in model_spec(MODEL_ID).ratios
     assert "0.086" in model_spec(MODEL_ID).pricing
+
+
+def test_worker_journals_the_paid_task_before_and_after_the_post():
+    """Владелец 2026-10-30: у платного запроса Midjourney должен быть журнал, как у остальных путей."""
+    import os
+
+    with tempfile.TemporaryDirectory(prefix="midjourney-journal-") as temp:
+        worker = _worker(temp)
+        worker._ensure_running = lambda: None
+        worker._wait_for_generation_launch_slot = lambda: None
+        journal = worker.gpt25_task_journals["atlascloud"]
+        seen = {}
+
+        def request(url, *, method, payload=None, headers=None, timeout=None):
+            if method == "POST":
+                # Перед отправкой в журнале уже стоит защитная запись «отправляю».
+                seen["markers"] = [task.request_id for task in journal.pending()
+                                   if task.request_id.startswith("unconfirmed_")]
+                return {"data": {"id": "pred-9", "status": "processing"}}
+            return {"data": {"status": "succeeded", "outputs": ["https://cdn.example/first.png"]}}
+
+        worker._request_json = request
+        url = worker._midjourney_generate_image("a red fox", MODEL_ID)
+        assert url == "https://cdn.example/first.png"
+        assert len(seen["markers"]) == 1, "перед платной отправкой не было защитной записи"
+        # Запись остаётся в журнале: она и защищает от повторной оплаты, и позволяет дожать задачу.
+        tasks = {task.request_id: task.status for task in journal.pending()}
+        assert tasks.get("pred-9") == "result_ready", tasks
+        assert list((os.path.join(temp, name) for name in os.listdir(temp) if name.startswith(".vibix_atlascloud"))), \
+            "журнал не создан на диске"
+
+
+def test_worker_refuses_a_second_charge_when_the_first_answer_was_lost():
+    """Ответ после платной отправки потерян — второй раз не отправляем (как у KIE/Fal/AtlasCloud)."""
+    with tempfile.TemporaryDirectory(prefix="midjourney-guard-") as temp:
+        worker = _worker(temp)
+        worker._ensure_running = lambda: None
+        worker._wait_for_generation_launch_slot = lambda: None
+        posts = []
+
+        def lost(url, *, method, payload=None, headers=None, timeout=None):
+            posts.append(method)
+            # Отправка действительно ушла и ответ не дошёл: статус неизвестен.
+            worker._diagnostic_context.gpt25_post_started = True
+            worker._diagnostic_context.last_http_status = 500
+            raise RuntimeError("соединение оборвалось после отправки")
+
+        worker._request_json = lost
+        try:
+            worker._midjourney_generate_image("a red fox", MODEL_ID)
+        except RuntimeError as error:
+            assert "оборвалось" in str(error)
+        else:  # pragma: no cover - the call above must raise
+            raise AssertionError("обрыв связи должен всплыть наружу")
+        assert posts == ["POST"]
+
+        # Новый запуск (как после перезапуска приложения) с тем же промптом: повторной оплаты нет.
+        again = _worker(temp)
+        again._ensure_running = lambda: None
+        again._wait_for_generation_launch_slot = lambda: None
+        calls = []
+        again._request_json = lambda url, **kwargs: calls.append(url) or {"data": {"id": "pred-1"}}
+        try:
+            again._midjourney_generate_image("a red fox", MODEL_ID)
+        except RuntimeError as error:
+            assert "двойного списания" in str(error)
+        else:  # pragma: no cover - the call above must raise
+            raise AssertionError("повторная платная отправка не должна была начаться")
+        assert calls == [], calls
+
+
+def test_worker_polls_a_saved_task_instead_of_paying_again():
+    """Журнал нашёл незавершённую задачу — продолжаем опрос, а не новую оплату."""
+    with tempfile.TemporaryDirectory(prefix="midjourney-resume-") as temp:
+        worker = _worker(temp)
+        worker._ensure_running = lambda: None
+        worker._wait_for_generation_launch_slot = lambda: None
+        posts = []
+
+        def half_lost(url, *, method, payload=None, headers=None, timeout=None):
+            if method == "POST":
+                posts.append(url)
+                return {"data": {"id": "pred-5", "status": "processing"}}
+            worker._diagnostic_context.last_http_status = 500
+            raise RuntimeError("связь пропала во время опроса")
+
+        worker._request_json = half_lost
+        try:
+            worker._midjourney_generate_image("a red fox", MODEL_ID)
+        except RuntimeError:
+            pass
+        assert len(posts) == 1
+
+        again = _worker(temp)                      # как после перезапуска приложения
+        again._ensure_running = lambda: None
+        again._wait_for_generation_launch_slot = lambda: None
+        calls = []
+
+        def request(url, *, method, payload=None, headers=None, timeout=None):
+            calls.append(method)
+            if method == "POST":
+                raise AssertionError("повторная оплата: POST не должен был уйти")
+            return {"data": {"status": "succeeded", "outputs": ["https://cdn.example/first.png"]}}
+
+        again._request_json = request
+        messages = []
+        again.progress.connect(messages.append)
+        url = again._midjourney_generate_image("a red fox", MODEL_ID)
+        assert url == "https://cdn.example/first.png"
+        assert calls == ["GET"], calls
+        assert any("продолжаем задачу pred-5" in message for message in messages), messages

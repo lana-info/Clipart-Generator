@@ -6033,26 +6033,54 @@ class WorkerThread(QThread):
         payload = midjourney_imagine_payload(prompt, ratio)
         headers = gpt25_request_headers("atlascloud", api_key)
         headers["Content-Type"] = "application/json"
-        self._wait_for_generation_launch_slot()
+        journal = self.gpt25_task_journals["atlascloud"]
+        operation = str(getattr(self._diagnostic_context, "stage", "") or "generation")
+        fingerprint = self._paid_task_fingerprint(payload)
         started = time.monotonic()
         self._diagnostic_context.model = str(model_id or "")
-        try:
-            result = self._request_json(midjourney_submit_url(), method="POST", payload=payload,
-                                        headers=headers, timeout=max(30, self.timeout))
-        except Exception as error:
-            self._emit_diagnostic(
-                "provider_task_failed", provider="atlascloud", model=model_id,
-                http_status=getattr(self._diagnostic_context, "last_http_status", None),
-                error_message=self._safe_error_text(error),
-                elapsed_ms=round((time.monotonic() - started) * 1000),
+        # Owner 2026-10-30: the same durable guard every other paid path has. A crash, a stop or a lost
+        # answer between the paid POST and the saved task id must not become a second charge — and a
+        # pending task found in the journal is polled again instead of being submitted once more.
+        with self._provider_lease("atlascloud"):
+            pending = self._claim_pending_task(
+                journal, operation, model_id, self._claimed_gpt25_task_ids["atlascloud"],
+                input_fingerprint=fingerprint, prefer_accepted=True,
             )
-            raise
-        try:
-            task_id = midjourney_submitted_task_id(result)
-        except Exception as error:
-            self._emit_diagnostic("provider_task_failed", provider="atlascloud", model=model_id,
-                                  error_message=self._safe_error_text(error))
-            raise
+            if pending is not None:
+                if pending.request_id.startswith("unconfirmed_"):
+                    raise RuntimeError(
+                        "Midjourney: результат предыдущей платной отправки неизвестен. "
+                        "Запрос не повторён во избежание двойного списания.")
+                task_id = pending.request_id
+                self.progress.emit(f"  Midjourney: продолжаем задачу {task_id}")
+            else:
+                self._wait_for_generation_launch_slot()
+                # A durable pre-submit marker: another paid POST is refused while it is unknown
+                # whether the previous one reached the provider.
+                marker = "unconfirmed_" + uuid.uuid4().hex
+                journal.upsert(marker, self._task_operation_key(operation), model_id, "submitting",
+                               input_fingerprint=fingerprint)
+                self._diagnostic_context.last_http_status = None
+                self._diagnostic_context.gpt25_post_started = False
+                try:
+                    result = self._request_json(midjourney_submit_url(), method="POST", payload=payload,
+                                                headers=headers, timeout=max(30, self.timeout))
+                    task_id = midjourney_submitted_task_id(result)
+                except Exception as error:
+                    http_status = getattr(self._diagnostic_context, "last_http_status", None)
+                    # Only a refusal that certainly reached no paid work clears the guard.
+                    if (not getattr(self._diagnostic_context, "gpt25_post_started", False)
+                            or http_status in {400, 401, 402, 403, 404, 429}):
+                        journal.update_status(marker, "failed")
+                    self._emit_diagnostic(
+                        "provider_task_failed", provider="atlascloud", model=model_id,
+                        http_status=http_status,
+                        error_message=self._safe_error_text(error),
+                        elapsed_ms=round((time.monotonic() - started) * 1000),
+                    )
+                    raise
+                journal.upsert(task_id, self._task_operation_key(operation), model_id, "submitted",
+                               input_fingerprint=fingerprint)
         self.progress.emit(f"  Task ID: {task_id}")
         deadline = time.time() + self.generation_wait_timeout
         while time.time() < deadline:
@@ -6062,15 +6090,20 @@ class WorkerThread(QThread):
             state, url = midjourney_task_result(status)
             if state == "completed":
                 if not url:
+                    journal.update_status(task_id, "failed")
                     raise RuntimeError("Midjourney завершил задачу без ссылки на изображение")
+                journal.update_status(task_id, "result_ready")
                 self._emit_diagnostic(
                     "stage_finished", provider="atlascloud", model=model_id, outcome="succeeded",
                     elapsed_ms=round((time.monotonic() - started) * 1000),
                 )
                 return url
             if state == "failed":
+                journal.update_status(task_id, "failed")
                 raise RuntimeError("Midjourney: задача завершилась ошибкой у провайдера")
+            journal.update_status(task_id, "processing")
             time.sleep(self.status_poll_interval)
+        journal.update_status(task_id, "timeout")
         raise RuntimeError("Midjourney: время ожидания истекло")
 
     def _gpt25_generate_image(self, prompt, model_id, references=None):
