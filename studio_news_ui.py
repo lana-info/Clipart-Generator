@@ -97,4 +97,6 @@ class StudioNewsController(QObject):
         self.closed = True
         self.timer.stop()
         if self.worker is not None:
-            self.worker.wait()  # HTTP timeouts remain bounded by the shared transport.
+            # Bounded by the shared transport, but a shutdown must never hang on it:
+            # wait briefly, then let the process exit without the window frozen.
+            self.worker.wait(2000)

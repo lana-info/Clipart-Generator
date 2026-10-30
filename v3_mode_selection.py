@@ -12,7 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QEvent, QEventLoop, QStandardPaths, QThread, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QEventLoop, QStandardPaths, QThread, QTimer, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -241,6 +241,15 @@ class ModeSelectionScreen(QWidget):
         self.all_projects_button.clicked.connect(self.all_projects_requested.emit)
         self.all_projects_button.setEnabled(False)
         self.all_projects_button.hide()
+        # Shown only when the startup module check did not finish in time; the window
+        # itself is never delayed by that check.
+        self.verification_note = QLabel()
+        self.verification_note.setProperty("v3Small", True)
+        self.verification_note.setStyleSheet(f"color:{tokens.warning};")
+        self.verification_note.setWordWrap(True)
+        self.verification_note.setAccessibleName("Проверка модулей")
+        self.verification_note.hide()
+        catalog_heading.addWidget(self.verification_note, 1)
         self._has_saved_projects = False
         self._has_recent_draft = False
         layout.addLayout(catalog_heading)
@@ -404,6 +413,13 @@ class ModeSelectionScreen(QWidget):
         self.license_verification_label.setText(safe_verification)
         self.license_verification_label.setAccessibleDescription(safe_verification)
 
+    def set_module_verification_note(self, note: str | None) -> None:
+        """Show a bounded warning under the header; empty text hides it again."""
+        safe_note = str(note or "").strip()[:200]
+        self.verification_note.setText(safe_note)
+        self.verification_note.setAccessibleDescription(safe_note)
+        self.verification_note.setVisible(bool(safe_note))
+
     def set_recent_project_summary(self, state: ProjectState | None) -> None:
         self._has_recent_draft = state is not None
         self.all_projects_button.setEnabled(self._has_saved_projects or self._has_recent_draft)
@@ -415,6 +431,14 @@ class ModeSelectionScreen(QWidget):
 # Verification threads are parentless and kept alive here until they finish: destroying a running
 # QThread aborts the process (found in review when the window is closed during verification).
 _RUNNING_VERIFY_THREADS: set = set()
+
+# A startup check that cannot finish (damaged store, locked files, exhausted disk) must never
+# hold the window hostage: after this bound the UI keeps working and the journal records
+# module_verification_timeout. The thread may still finish later and is reported as finished.
+MODULE_VERIFICATION_TIMEOUT_MS = 15_000
+MODULE_VERIFICATION_TIMEOUT_NOTE = (
+    "Проверка модулей не завершилась. Программа работает; проверка продолжается в фоне."
+)
 
 
 class _ModuleVerifyThread(QThread):
@@ -428,16 +452,21 @@ class _ModuleVerifyThread(QThread):
         self.durations_ms: dict[str, int] = {}
 
     def run(self) -> None:
-        for module_id in self.module_ids:
-            if self.isInterruptionRequested():
-                break
-            started = time.monotonic()
-            try:
-                self.store.verify_for_display(module_id)
-            except Exception:
-                pass
-            self.durations_ms[module_id] = int((time.monotonic() - started) * 1000)
-        self.verified.emit()
+        try:
+            for module_id in self.module_ids:
+                if self.isInterruptionRequested():
+                    break
+                started = time.monotonic()
+                try:
+                    self.store.verify_for_display(module_id)
+                except Exception:
+                    pass
+                self.durations_ms[module_id] = int((time.monotonic() - started) * 1000)
+        finally:
+            # The finished event must always be recorded, even if a store check
+            # raises something unexpected: a silent thread would leave the
+            # startup journal broken exactly like the reported hang.
+            self.verified.emit()
 
 
 # Header title of module pages that are not step shells (the screen name is the module id).
@@ -471,6 +500,9 @@ class V3ApplicationView(QWidget):
         self._exit_watchdog_seconds = exit_watchdog_seconds
         self._module_verifier: _ModuleVerifyThread | None = None
         self._verification_attempted: set[str] = set()
+        self._verification_started_at: float | None = None
+        self._verification_timeout_reported = False
+        self._startup_refresh_scheduled = False
         self._selection_intent = SelectionIntent.NEW_PROJECT
         self._recent_project: ProjectState | None = None
         self._runtime_settings_provider = runtime_settings_provider
@@ -602,6 +634,37 @@ class V3ApplicationView(QWidget):
         if self._update_controller is None:
             return False
         return self._update_controller.start_check()
+
+    def schedule_startup_status_refresh(self) -> None:
+        """Run the first status refresh after the window is shown, never before.
+
+        Showing the window must not depend on license/module status checks: the
+        refresh only updates labels and starts the background module verification.
+        """
+        if self._startup_refresh_scheduled:
+            return
+        self._startup_refresh_scheduled = True
+        QTimer.singleShot(0, self._run_startup_status_refresh)
+
+    def _run_startup_status_refresh(self) -> None:
+        started = time.monotonic()
+        try:
+            self.refresh_license_status()
+        except Exception as exc:
+            # A failed refresh must never abort the event loop or hide the window.
+            self._diagnostic_event(
+                "startup_status_refresh_failed",
+                "Не удалось обновить статус лицензии и модулей при запуске.",
+                severity="error",
+                outcome="failed",
+                details={"error_message": f"{type(exc).__name__}: {exc}"},
+            )
+            return
+        self._diagnostic_event(
+            "startup_status_refreshed",
+            "Статус лицензии и модулей обновлён.",
+            details={"elapsed_ms": int((time.monotonic() - started) * 1000)},
+        )
 
     def _ensure_module_updates_dialog(self):
         if self._module_delivery is None:
@@ -741,10 +804,10 @@ class V3ApplicationView(QWidget):
                 try:
                     installed = self._module_delivery.has_active_workflow(module_id)
                     if installed:
-                        # Full verification hashes every file: never on the GUI thread (hung
-                        # startups, owner diagnostics 2026-10-20). Use the cached verdict and
-                        # verify unknown modules in the background.
-                        verdict = self._module_delivery.store.cached_verification(module_id)
+                        # Never walk the module tree on the GUI thread: the in-memory
+                        # verdict is instant and unknown modules are checked in the
+                        # background (hung startups, owner diagnostics 2026-10-20/30).
+                        verdict = self._module_delivery.store.display_verdict(module_id)
                         if verdict is False:
                             installed, compatible = False, False
                         elif verdict is None:
@@ -1846,22 +1909,62 @@ class V3ApplicationView(QWidget):
         if not module_ids:
             return  # each module is verified once per session; no endless re-hash loop
         self._verification_attempted.update(module_ids)
+        self._verification_started_at = time.monotonic()
+        self._verification_timeout_reported = False
         thread = _ModuleVerifyThread(self._module_delivery.store, module_ids)
-        thread.verified.connect(self._module_verification_done)
+        thread.verified.connect(lambda t=thread: self._module_verification_done(t))
         _RUNNING_VERIFY_THREADS.add(thread)
         thread.finished.connect(lambda t=thread: _RUNNING_VERIFY_THREADS.discard(t))
         self._module_verifier = thread
+        self._diagnostic_event(
+            "module_verification_started",
+            "Начата фоновая проверка модулей.",
+            details={"modules": list(module_ids)},
+        )
+        # Watchdog: a check that cannot finish must never leave the window without its
+        # modules forever. The interface keeps working; the check may still finish later.
+        QTimer.singleShot(MODULE_VERIFICATION_TIMEOUT_MS,
+                          lambda: self._module_verification_timeout(thread))
         thread.start()
 
-    def _module_verification_done(self) -> None:
-        thread = self._module_verifier
+    def _module_verification_timeout(self, thread: _ModuleVerifyThread | None = None) -> None:
+        thread = thread or self._module_verifier
+        if thread is None or thread is not self._module_verifier:
+            return  # a stale timer from an earlier run
+        if self._verification_timeout_reported or not thread.isRunning():
+            return  # the finished handler reports a check that did complete
+        self._verification_timeout_reported = True
+        self._diagnostic_event(
+            "module_verification_timeout",
+            "Фоновая проверка модулей не завершилась за отведённое время.",
+            severity="warning",
+            outcome="failed",
+            details={
+                "elapsed_ms": self._verification_elapsed_ms(),
+                "modules": list(thread.module_ids),
+            },
+        )
+        self.mode_selection.set_module_verification_note(MODULE_VERIFICATION_TIMEOUT_NOTE)
+
+    def _verification_elapsed_ms(self) -> int:
+        if self._verification_started_at is None:
+            return 0
+        return int((time.monotonic() - self._verification_started_at) * 1000)
+
+    def _module_verification_done(self, thread: _ModuleVerifyThread | None = None) -> None:
+        thread = thread or self._module_verifier
         if thread is None:
             return
         self._diagnostic_event(
             "module_verification_finished",
             "Фоновая проверка модулей завершена.",
-            details={"duration_ms": dict(thread.durations_ms)},
+            details={
+                "duration_ms": dict(thread.durations_ms),
+                "elapsed_ms": self._verification_elapsed_ms(),
+                "timed_out": self._verification_timeout_reported,
+            },
         )
+        self.mode_selection.set_module_verification_note(None)
         self.refresh_license_status()
 
     def _arm_exit_watchdog(self) -> None:

@@ -52,6 +52,7 @@ _ALLOWED_DETAILS = {
     "current_version",
     "decision",
     "downloaded_bytes",
+    "duration_ms",
     "color_mode",
     "elapsed_ms",
     "enabled_stages",
@@ -71,6 +72,7 @@ _ALLOWED_DETAILS = {
     "mode",
     "model",
     "model_routes",
+    "modules",
     "operation_type",
     "parameters",
     "poll_attempt",
@@ -87,9 +89,11 @@ _ALLOWED_DETAILS = {
     "stage",
     "status",
     "task",
+    "timed_out",
     "total_bytes",
     "trim_mode",
     "uploaded_bytes",
+    "visible",
     "width",
 }
 _SECRET_KEYS = {"api_key", "license_key", "token", "proof", "password", "secret"}

@@ -22,11 +22,32 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 MAX_PACKAGE_BYTES = 64 * 1024 * 1024
 MAX_FILES = 512
 MAX_MANIFEST_BYTES = 128 * 1024
+# A fingerprint walk must never run without a bound: a link/junction cycle or a
+# damaged store would otherwise keep a startup verification thread spinning.
+MAX_TREE_ENTRIES = MAX_FILES * 2
 _IDENTIFIER = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 
 
 class ModulePackageError(ValueError):
     pass
+
+
+def _is_link(path: Path) -> bool:
+    """True for symlinks and Windows directory junctions; both can form cycles."""
+    if path.is_symlink():
+        return True
+    isjunction = getattr(os.path, "isjunction", None)
+    if isjunction is None:
+        return False
+    try:
+        return bool(isjunction(path))
+    except OSError:
+        return True  # unreadable reparse-point state: treat the entry as unsafe
+
+
+def _raise_tree_error(error: OSError) -> None:
+    """Abort a fingerprint walk on an unreadable directory (fail closed)."""
+    raise ModulePackageError("Installed module tree cannot be read") from error
 
 
 def _version(value: str) -> tuple[int, int, int]:
@@ -335,28 +356,60 @@ class ModuleStore:
         return self._verified_version(module_id, state["active"])
 
     def _tree_signature(self, path: Path) -> str:
-        """Cheap fingerprint (names, sizes, mtimes; no file reads) of an installed version."""
+        """Bounded, cycle-safe fingerprint (names, sizes, mtimes; no file reads).
+
+        Never descends into links or junctions, refuses a tree larger than the
+        package limits, and reports an unreadable entry as an error instead of a
+        partial fingerprint: a wrong "unchanged" verdict is worse than none.
+        """
         digest = hashlib.sha256()
-        for root, dirs, files in os.walk(path):
-            dirs.sort()
+        visited = 0
+        for root, dirs, files in os.walk(path, onerror=_raise_tree_error, followlinks=False):
+            dirs[:] = sorted(name for name in dirs if not _is_link(Path(root) / name))
             for name in sorted(files):
                 item = Path(root) / name
-                info = item.stat()
+                if _is_link(item):
+                    raise ModulePackageError("Unsafe installed module tree link")
+                visited += 1
+                if visited > MAX_TREE_ENTRIES:
+                    raise ModulePackageError("Installed module tree exceeds entry limit")
+                try:
+                    info = item.stat()
+                except OSError as exc:
+                    raise ModulePackageError("Installed module tree cannot be read") from exc
                 digest.update(f"{item.relative_to(path)}|{info.st_size}|{info.st_mtime_ns}\n".encode())
         return digest.hexdigest()
 
     def cached_verification(self, module_id: str) -> bool | None:
         """Last full-verification verdict for the active version, or None if unknown/changed.
 
-        For DISPLAY only. Loading code still calls verified_active_path() (full check).
+        Walks the installed tree, so it is NOT for the GUI thread: the window uses
+        display_verdict() and full verification runs in a background thread. An
+        unreadable or oversized tree reports None ("unknown") instead of raising.
         """
         state = self.state(module_id)
         if not state["enabled"] or not state["active"]:
             return True
         version = state["active"]
         entry = self._display_verdicts.get((module_id, version))
-        signature = self._tree_signature(self._module_dir(module_id) / version)
+        try:
+            signature = self._tree_signature(self._module_dir(module_id) / version)
+        except (OSError, ValueError):
+            return None
         return entry[1] if entry is not None and entry[0] == signature else None
+
+    def display_verdict(self, module_id: str) -> bool | None:
+        """In-memory verdict for the active version; never walks the installed tree.
+
+        Safe for the GUI thread. None means "not verified yet in this session" and
+        queues the module for the background full check; the loader still calls
+        verified_active_path() before any package code runs.
+        """
+        state = self.state(module_id)
+        if not state["enabled"] or not state["active"]:
+            return True
+        entry = self._display_verdicts.get((module_id, state["active"]))
+        return None if entry is None else entry[1]
 
     def verify_for_display(self, module_id: str) -> bool:
         """Run the full verification (slow; call off the GUI thread) and remember the verdict."""
