@@ -1576,3 +1576,151 @@ def test_reopened_project_journals_refused_regeneration_and_keeps_pictures(works
     assert all(item.review_mark == 'bad_generation' and not item.versions for item in restored.items)
     assert not restored.running
     assert 'KIE API Key' in resumed.run_queue.page.summary_label.text()
+
+
+def _ready_run(controller, count, confirmed=()):
+    """A finished run whose first ``count`` pictures are on disk; the listed indexes carry «Ок»."""
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    for index, item in enumerate(session.items[:count]):
+        output = session.output_dir / f'ready_{index}.png'
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+        image.save(output)
+        item.status = RunItemStatus.SUCCEEDED
+        item.output_path = str(output)
+    for index in confirmed:
+        session.items[index].review_mark, session.items[index].review_checked = 'ok', True
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    controller.save_timer.stop()
+    return session
+
+
+def test_export_step_shows_ready_pictures_that_are_not_confirmed_yet(workspace):
+    """Владелец 2026-10-30: «Готовых PNG пока нет» при готовых картинках — неправда, и счётчик «Не помечено «Ок»» молчал.
+
+    Before: the counters were computed over confirmed set members only, so a finished run with nothing
+    confirmed yet showed «0 изображений · 0 наборов», the «no ready PNG» hint and no reminder at all.
+    """
+    view, controller, _, worker = workspace
+    controller.brief.total.setValue(3)
+    prepare_launch(controller)
+    _ready_run(controller, 3, confirmed=())
+
+    controller._refresh_export()
+    wait_png_check(controller.export_panel)
+    panel = controller.export_panel
+    assert len(panel.review_paths) == 3 and not panel.paths  # nothing confirmed: sets stay empty by the owner's rule
+    assert panel.summary_counts.text() == 'Готово картинок: 3 · в наборах: 0 · наборов: 0'
+    assert not panel.empty_hint.isHidden()
+    assert panel.empty_hint.text() == 'В наборы попадут только картинки, подтверждённые «Ок».'
+    assert not panel.quality_panel.isHidden()
+    assert panel.quality_summary_label.text() == 'Не помечено «Ок»: 3'
+    assert not panel.export_button.isEnabled()  # nothing to export until «Ок» is placed
+
+
+def test_replan_reuses_a_ready_picture_that_is_not_marked_ok_yet(workspace, monkeypatch):
+    """Владелец 2026-10-30: готовая картинка без «Ок» не выбрасывается и не просит второй оплаты.
+
+    Before: reuse looked at confirmed set members, so an unconfirmed ready picture was dropped — the app
+    walked to the launch step and offered a new paid run for a file already on disk.
+    """
+    view, controller, _, factory = workspace
+    controller.brief.total.setValue(20)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    # the hero survives the reduction below, so it is the picture the replan has to keep
+    ready_id = next(item['id'] for item in controller.brief.object_editor.items if item['role'] == 'hero')
+    ready_item = next(item for item in session.items if item.payload['object_id'] == ready_id)
+    output = session.output_dir / 'retained_ready.png'
+    Image.new('RGBA', (64, 64), (0, 0, 0, 0)).save(output)
+    for item in session.items:
+        item.status = RunItemStatus.FAILED
+    ready_item.status = RunItemStatus.SUCCEEDED
+    ready_item.output_path = str(output)
+    # the owner has not looked at it yet: no «Ок»
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    controller.save_timer.stop()
+
+    assert view.continue_saved_project(view._active_project_id)
+    resumed = view.shell.workflow_controller('auto-clipart')
+    resumed.save_timer.stop()
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    for _ in range(5):
+        resumed.navigate(-1)
+    editor = resumed.brief.object_editor
+    while len(editor.items) > 1:
+        editor.list.setCurrentRow(len(editor.items) - 1)
+        editor.remove()
+    assert editor.items[0]['id'] == ready_id
+    for _ in range(4):
+        resumed.navigate(1)
+    view.shell.next_button.click()
+
+    retained = resumed.run_queue.session
+    assert retained is not None, 'приложение ушло на шаг запуска вместо переиспользования готовой картинки'
+    assert retained.items[0].status is RunItemStatus.SUCCEEDED
+    assert retained.items[0].output_path == str(output)
+    assert resumed.shell.state.current_step is StepId.RESULTS
+    factory.assert_not_called()
+
+
+def test_replan_keeps_unconfirmed_pictures_beside_confirmed_ones(workspace, monkeypatch):
+    """Смешанный случай: подтверждённая и неподтверждённая готовые картинки остаются целыми, без ложного провала."""
+    view, controller, _, factory = workspace
+    controller.brief.total.setValue(20)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    keep_ids = [item['id'] for item in controller.brief.object_editor.items[:2]]
+    kept = [item for item in session.items if item.payload['object_id'] in keep_ids]
+    assert len(kept) == 2
+    outputs = {}
+    for item in session.items:
+        item.status = RunItemStatus.FAILED
+    for position, item in enumerate(kept):
+        output = session.output_dir / f'kept_{position}.png'
+        Image.new('RGBA', (64, 64), (0, 0, 0, 0)).save(output)
+        item.status = RunItemStatus.SUCCEEDED
+        item.output_path = str(output)
+        outputs[item.payload['object_id']] = str(output)
+    # the owner confirmed only the first picture before the replan
+    kept[0].review_mark, kept[0].review_checked = 'ok', True
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    controller.save_timer.stop()
+
+    assert view.continue_saved_project(view._active_project_id)
+    resumed = view.shell.workflow_controller('auto-clipart')
+    resumed.save_timer.stop()
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    for _ in range(5):
+        resumed.navigate(-1)
+    editor = resumed.brief.object_editor
+    while len(editor.items) > 2:
+        editor.list.setCurrentRow(len(editor.items) - 1)
+        editor.remove()
+    for _ in range(4):
+        resumed.navigate(1)
+    view.shell.next_button.click()
+
+    retained = resumed.run_queue.session
+    assert retained is not None and len(retained.items) == 2
+    by_object = {item.payload['object_id']: item for item in retained.items}
+    for object_id, path in outputs.items():
+        item = by_object[object_id]
+        assert item.status is RunItemStatus.SUCCEEDED, 'готовая картинка объявлена провалом'
+        assert item.output_path == path
+        assert 'недоступен' not in (item.short_message or '')
+    assert by_object[kept[0].payload['object_id']].review_checked
+    assert not by_object[kept[1].payload['object_id']].review_checked  # «Ок» was never placed; the mark travels as it was
+    factory.assert_not_called()
