@@ -11162,16 +11162,24 @@ def create_authorized_v3_application_window(
                 "Лицензия проверена при запуске.",
                 outcome="success",
             )
-        refresh = getattr(window, "refresh_license_status", None)
-        if callable(refresh):
-            _refresh_started = time.monotonic()
-            refresh()
-            if journal is not None:
-                journal.record(
-                    "startup_status_refreshed",
-                    "Статус лицензии и модулей обновлён.",
-                    details={"refresh_ms": int((time.monotonic() - _refresh_started) * 1000)},
-                )
+        # The window is shown without waiting for any status check. When the view
+        # supports it, the first refresh runs in the event loop right after show()
+        # and records its own startup_status_refreshed event; otherwise the status
+        # is refreshed here (tests and simple windows).
+        schedule = getattr(window, "schedule_startup_status_refresh", None)
+        if callable(schedule):
+            schedule()
+        else:
+            refresh = getattr(window, "refresh_license_status", None)
+            if callable(refresh):
+                _refresh_started = time.monotonic()
+                refresh()
+                if journal is not None:
+                    journal.record(
+                        "startup_status_refreshed",
+                        "Статус лицензии и модулей обновлён.",
+                        details={"elapsed_ms": int((time.monotonic() - _refresh_started) * 1000)},
+                    )
         return window
 
 
@@ -11530,5 +11538,21 @@ if __name__ == "__main__":
         sys.exit(0)
     install_diagnostic_exception_hook(getattr(window, "_diagnostic_journal", None))
     window.show()
+    # Startup timing evidence: these two events separate a window that never
+    # became visible from a stall after it did (owner diagnostics 2026-10-30).
+    journal = getattr(window, "_diagnostic_journal", None)
+    if journal is not None:
+        journal.record(
+            "application_window_shown",
+            "Окно приложения показано.",
+            outcome="success" if window.isVisible() else "failed",
+            details={"visible": bool(window.isVisible())},
+        )
     QTimer.singleShot(1200, window.start_update_check)
+    if journal is not None:
+        journal.record(
+            "application_event_loop_started",
+            "Запущен цикл обработки событий интерфейса.",
+            outcome="success",
+        )
     sys.exit(app.exec())

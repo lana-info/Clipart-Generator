@@ -53,4 +53,6 @@ class StudioUpcomingController(QObject):
         self.closed = True
         self.timer.stop()
         if self.worker is not None:
-            self.worker.wait()  # Shared transport has bounded HTTP timeouts.
+            # Bounded by the shared transport, but a shutdown must never hang on it:
+            # wait briefly, then let the process exit without the window frozen.
+            self.worker.wait(2000)

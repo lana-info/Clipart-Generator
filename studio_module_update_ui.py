@@ -502,4 +502,6 @@ class ModuleUpdatesDialog(QDialog):
         self._shutting_down = True
         if self.worker is not None:
             self.worker.cancel()
-            self.worker.wait()
+            # Bounded: a transfer stuck in the network layer must not freeze the
+            # window while the application is closing.
+            self.worker.wait(2000)
