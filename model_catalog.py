@@ -43,7 +43,7 @@ _MODEL_ROWS = (
     ("atlascloud/gpt-image-2.5-sunburst", "AtlasCloud — GPT Image 2.5 Sunburst", "text_to_image"),
     ("piapi/gpt-image-2.5-sunburst", "PiAPI — GPT Image 2.5 Sunburst", "text_to_image"),
     ("piapi/gpt-image-2.5", "PiAPI — GPT Image 2.5 (бюджетный, авторазмер)", "text_to_image"),
-    ("piapi/midjourney", "PiAPI — Midjourney (не проверено живым запросом)", "text_to_image"),
+    ("atlascloud/midjourney-v8.2", "AtlasCloud — Midjourney V8.2", "text_to_image"),
     ("gpt4o-image", "KIE — GPT‑4o Image", "text_to_image"),
     ("gpt-image/1.5-text-to-image", "KIE — GPT Image 1.5 (Text→Image)", "text_to_image"),
     ("gpt-image-2", "KIE — GPT Image 2", "text_to_image"),
@@ -80,8 +80,9 @@ _CAPABILITIES = {
     "atlascloud/gpt-image-2.5-sunburst": {"ratios": {"1:1", "2:3", "3:2"}, "resolutions": {"1K"}, "reference_compatible_text": True},
     "piapi/gpt-image-2.5-sunburst": {"ratios": {"1:1", "2:3", "3:2"}, "resolutions": {"1K"}, "reference_compatible_text": True},
     "piapi/gpt-image-2.5": {"ratios": {"auto"}, "resolutions": {"auto"}, "reference_compatible_text": True},
-    # Owner 2026-10-30: connected without a paid check, so the price string stays cautious.
-    "piapi/midjourney": {"ratios": {"1:1", "2:3", "3:2"}, "pricing": "цена у провайдера (не проверена)"},
+    # Verified on the provider's model page 2026-10-30: one job is $0.086 and returns four pictures.
+    "atlascloud/midjourney-v8.2": {"ratios": {"1:1", "9:16", "16:9", "4:3", "3:4", "2:3", "3:2", "9:21", "21:9"},
+                                   "pricing": "$0.086 за задание (4 картинки)"},
     "fal-ai/ideogram/v3": {
         "ratios": {"1:1", "3:4", "4:3", "9:16", "16:9"},
         "pricing": "Turbo $0.03 / Balanced $0.06 / Quality $0.09",
@@ -181,7 +182,7 @@ MODEL_SPECS = MappingProxyType({
 GENERATION_MODELS = tuple(MappingProxyType({"id": i, "label": l, "type": t}) for i, l, t in _MODEL_ROWS)
 GENERATION_MODEL_META = MappingProxyType({model_id: next(row for row in GENERATION_MODELS if row["id"] == model_id) for model_id in MODEL_SPECS})
 SUPPORTED_GENERATION_MODEL_IDS = frozenset(row[0] for row in _MODEL_ROWS)
-VISIBLE_GENERATION_MODEL_IDS = frozenset({"atlascloud/gpt-image-2.5-sunburst", "piapi/gpt-image-2.5-sunburst", "piapi/gpt-image-2.5", "piapi/midjourney", "atlascloud/gpt-image-2.5-flare", "piapi/gpt-image-2.5-flare", "fal-ai/flux/schnell", "fal-ai/ideogram/v3", "fal-ai/ideogram/v3/generate-transparent", "fal-ai/recraft/v4/text-to-image", "ideogram/v4/fast", "fal-ai/flux-2/klein/4b", "fal-ai/kling-image/o3/text-to-image", "bria/fibo-gen-1.5/text-to-image", "gpt-image/1.5-text-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "gpt-image/1.5-image-to-image", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
+VISIBLE_GENERATION_MODEL_IDS = frozenset({"atlascloud/gpt-image-2.5-sunburst", "piapi/gpt-image-2.5-sunburst", "piapi/gpt-image-2.5", "atlascloud/midjourney-v8.2", "atlascloud/gpt-image-2.5-flare", "piapi/gpt-image-2.5-flare", "fal-ai/flux/schnell", "fal-ai/ideogram/v3", "fal-ai/ideogram/v3/generate-transparent", "fal-ai/recraft/v4/text-to-image", "ideogram/v4/fast", "fal-ai/flux-2/klein/4b", "fal-ai/kling-image/o3/text-to-image", "bria/fibo-gen-1.5/text-to-image", "gpt-image/1.5-text-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "gpt-image/1.5-image-to-image", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
 REFERENCE_MODEL_SHORTLIST = frozenset({"gpt-image/1.5-image-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
 PROCESSING_PRICING = MappingProxyType({"topaz/image-upscale": "40 credits / $0.20", "recraft/crisp-upscale": "0.5 credits / $0.0025", "recraft/remove-background": "1 credit / $0.005"})
 
