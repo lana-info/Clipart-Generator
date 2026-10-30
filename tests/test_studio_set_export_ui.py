@@ -1364,3 +1364,23 @@ def test_sorting_by_a_set_keeps_every_mark_with_its_picture(images):
     assert [dialog.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
             for row in range(dialog.table.rowCount())] == [str(path) for path in dialog.paths]
     dialog.reject()
+
+
+def test_double_click_on_a_picture_opens_its_transparency_editor(images):
+    """Владелец 2026-10-30: двойной клик по картинке на странице наборов открывает её редактор прозрачности."""
+    dialog = SetExportDialog(images)
+    asked = []
+    dialog.fix_requested.connect(asked.append)
+    row = 1
+    dialog.table.cellDoubleClicked.emit(row, 0)
+    assert asked == [str(Path(dialog.table.item(row, 0).data(Qt.ItemDataRole.UserRole)).resolve())]
+    # После сортировки двойной клик берёт картинку из самой строки, а не по её номеру.
+    dialog.table.item(0, 1).setCheckState(Qt.CheckState.Checked)
+    dialog.table.item(1, 1).setCheckState(Qt.CheckState.Unchecked)
+    dialog._manual_changed()
+    dialog._sort_column_by_marks(1)
+    asked.clear()
+    expected = str(Path(dialog.table.item(0, 0).data(Qt.ItemDataRole.UserRole)).resolve())
+    dialog.table.cellDoubleClicked.emit(0, 0)
+    assert asked == [expected]
+    dialog.reject()
