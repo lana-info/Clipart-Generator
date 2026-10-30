@@ -10,7 +10,7 @@
 
 Тесты: `test_upscale_redo_starts_from_the_picture_before_the_stage`, `test_upscale_redo_explains_the_way_out_when_the_input_is_gone`, `test_upscale_redo_uses_the_saved_input_for_one_picture`, `test_redo_menu_has_three_variants_with_the_full_path_in_the_tip`, `test_upscale_input_line_is_recorded_for_the_redo`, `test_the_picture_entering_the_upscale_is_kept_for_the_redo`; подвыборка «апскейл + очередь + метки + автоклипарт + экспорт наборов + обработка» — **412 passed**.
 
-`ветка codex/feature-upscale-redo-20261030 · слито в develop/3.2: нет · в сборке: нет · опубликовано: нет`
+`ветка codex/feature-upscale-redo-20261030 → PR #148 · слито в develop/3.2: да (8c69efd) · в сборке: нет · опубликовано: нет`
 
 ## Fal-апскейл возвращал картинки без прозрачности (2026-10-30)
 
