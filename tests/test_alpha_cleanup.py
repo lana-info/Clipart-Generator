@@ -137,3 +137,24 @@ def test_islands_can_be_left_alone_entirely():
     alpha = _disc()
     alpha[190:193, 190:193] = 1.0
     assert clean_alpha_array(alpha, island_min_gap=None)[190:193, 190:193].min() == 1.0
+
+
+def _ragged_hard_disc(size=160, centre=80, radius=60.0, wobble=1.6, teeth=24, blur=0.7):
+    """A hard edge with the generator's pixel-level raggedness: a jagged circle, softly antialiased."""
+    import cv2
+    yy, xx = np.mgrid[0:size, 0:size]
+    angle = np.arctan2(yy - centre, xx - centre)
+    border = radius + wobble * np.sign(np.sin(angle * teeth))
+    disc = (np.hypot(xx - centre, yy - centre) <= border).astype(np.float32)
+    return cv2.GaussianBlur(disc, (0, 0), blur)
+
+
+def test_straighten_flag_off_keeps_the_alpha_as_it_was():
+    """The delivery cut keeps the matte it was given: ``straighten=False`` skips the step."""
+    from alpha_cleanup import _straighten_hard_contours, clean_alpha_array
+    hard = _ragged_hard_disc()
+    straight = clean_alpha_array(hard, island_min_gap=None)
+    as_is = clean_alpha_array(hard, island_min_gap=None, straighten=False)
+    assert not np.array_equal(straight, as_is)          # the step does something by default
+    # The straightened result equals the flag-on path applied over the untouched one.
+    assert np.allclose(straight, _straighten_hard_contours(clean_alpha_array(hard, island_min_gap=None, straighten=False)))
