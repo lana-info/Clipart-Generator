@@ -1290,22 +1290,59 @@ def test_running_png_check_is_one_neutral_line_without_a_second_check_button(ima
     dialog.close()
 
 
-def test_header_click_marks_and_clears_the_whole_column(images):
-    """SET-2 (owner 2026-10-28): one click on a set's header marks the whole column, the next clears it."""
+def test_column_tick_marks_and_clears_the_whole_column(images):
+    """SET-2 (owner 2026-10-28) moved onto the ✓ glyph (owner 2026-10-30): the title must never mark.
+
+    A stray click on the column name used to tick every picture in it at once — the owner asked to stop
+    that and give mass marking its own small glyph, which also shows whether the column is marked.
+    """
     dialog = SetExportDialog(images)
     dialog._show_manual_editor()
     column = 1
-    # A partly marked column: the first click fills the gaps, the next one clears the whole column.
+    header = dialog.table.horizontalHeader()
+    # Часть столбца отмечена: значок показывает это состояние.
     dialog.table.item(0, column).setCheckState(Qt.CheckState.Unchecked)
-    dialog._column_header_clicked(column)
+    assert not dialog._column_all_marked(column)
+    # Название столбца ничего не отмечает — только запоминает столбец.
+    marks_before = [dialog.table.item(row, column).checkState() for row in range(dialog.table.rowCount())]
+    header.sectionClicked.emit(column)
+    assert [dialog.table.item(row, column).checkState() for row in range(dialog.table.rowCount())] == marks_before
+    assert dialog._editing_set_id is not None
+    # Значок ✓ заполняет пропуски, второе нажатие снимает весь столбец; значок следует за состоянием.
+    header.marks_clicked.emit(column)
     assert all(dialog.table.item(row, column).checkState() == Qt.CheckState.Checked
                for row in range(dialog.table.rowCount()))
-    dialog._column_header_clicked(column)
+    assert dialog._column_all_marked(column)
+    header.marks_clicked.emit(column)
     assert all(dialog.table.item(row, column).checkState() == Qt.CheckState.Unchecked
                for row in range(dialog.table.rowCount()))
+    assert not dialog._column_all_marked(column)
     assert all(not [link for link in item['memberships'] if link['included']]
                for item in dialog.saved_membership.values())
     dialog.reject()
+
+
+def test_column_sort_arrows_order_by_marks_both_ways(images):
+    """Владелец 2026-10-30: стрелка ⇅ в заголовке сортирует по отметкам этого столбца и переключает порядок."""
+    dialog = SetExportDialog(images)
+    dialog._show_manual_editor()
+    column = 1
+    set_id = dialog._set_columns[column - 1][0]
+    for row in range(dialog.table.rowCount()):          # чистое состояние: ничего не отмечено
+        dialog.table.item(row, column).setCheckState(Qt.CheckState.Unchecked)
+    dialog.table.item(0, column).setCheckState(Qt.CheckState.Checked)
+    dialog._manual_changed()
+    header = dialog.table.horizontalHeader()
+    header.sort_clicked.emit(column)
+    assert dialog._sort_set_id == set_id and not dialog._sort_descending
+    order = [dialog.table.item(row, 0).text() for row in range(dialog.table.rowCount())]
+    assert order[0] == images[0].name and order[1:] == [images[1].name, images[2].name]  # отмеченная сверху
+    header.sort_clicked.emit(column)
+    assert dialog._sort_descending
+    order = [dialog.table.item(row, 0).text() for row in range(dialog.table.rowCount())]
+    assert order[-1] == images[0].name                                  # неотмеченные сверху
+    dialog.reject()
+
 
 
 def test_sorting_by_a_set_keeps_every_mark_with_its_picture(images):
