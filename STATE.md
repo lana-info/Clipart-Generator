@@ -10,7 +10,7 @@
 
 Тесты: `test_recoverable_fills_empty_positions_and_attaches_orphan_files` (обновлён под новое правило), прежние тесты восстановления и автоклипарта — 76 passed.
 
-`ветка codex/feature-attach-folder-files-20261030 · слито в develop/3.2: нет · в сборке: нет · опубликовано: нет`
+`ветка codex/feature-attach-folder-files-20261030 → PR #161 · слито в develop/3.2: да (da08939) · в сборке: нет · опубликовано: нет`
 
 ## Картинка с браком уходит из наборов сразу (2026-10-30)
 
