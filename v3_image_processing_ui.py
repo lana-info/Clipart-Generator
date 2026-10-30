@@ -30,6 +30,8 @@ from v3_provider_registry import (
     LOCAL_REMBG_PROFILE_OPTIONS,
     LOCAL_REMBG_PROFILE_MODELS,
     TOPAZ_UPSCALE_FACTORS,
+    BRIA_HINT_TEXT,
+    BRIA_UPSCALE_MODEL_IDS,
     processing_provider_options,
     provider_visible_controls,
 )
@@ -603,6 +605,10 @@ class ProcessingPipelineEditor(QScrollArea):
         self.chroma_subject_note.setMaximumWidth(600)
         self.chroma_subject_note.setProperty("v3Subtitle", True)
         stage_forms["remove_background"].addRow("", self.chroma_subject_note)
+        self.bria_upscale_note = QLabel(BRIA_HINT_TEXT)
+        self.bria_upscale_note.setWordWrap(True)
+        self.bria_upscale_note.setProperty("v3Subtitle", True)
+        stage_forms["upscale_after"].addRow("", self.bria_upscale_note)
         operations_group.layout().activate()
 
     def _add_stage_section(self, key: str, title: str) -> QFormLayout:
@@ -927,6 +933,11 @@ class ProcessingPipelineEditor(QScrollArea):
         self.chroma_subject_note.setVisible(
             self.show_background_controls and operations.remove_background
             and operations.remove_background_provider == "local_chroma_key"
+        )
+        self.bria_upscale_note.setVisible(
+            operations.upscale_after
+            and operations.upscale_after_provider == "fal"
+            and operations.fal_upscale_after_model in BRIA_UPSCALE_MODEL_IDS
         )
 
     def _refresh_white_background_method(self) -> None:
