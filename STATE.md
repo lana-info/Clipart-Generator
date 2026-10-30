@@ -6,7 +6,7 @@
 
 Тест: `test_double_click_on_a_picture_opens_its_transparency_editor` (в том числе после сортировки); подвыборка «экспорт наборов + автоклипарт + метки» — **208 passed**.
 
-`ветка codex/feature-double-click-editor-20261030 · слито в develop/3.2: нет · в сборке: нет · опубликовано: нет`
+`ветка codex/feature-double-click-editor-20261030 → PR #156 · слито в develop/3.2: да (13d5078) · в сборке: нет · опубликовано: нет`
 
 ## Midjourney: платный запрос теперь в журнале (2026-10-30)
 
