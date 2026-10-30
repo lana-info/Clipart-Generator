@@ -32,6 +32,7 @@ from v3_provider_registry import (
     FAL_UPSCALE_MODEL_OPTIONS, KIE_MODEL_OPTIONS, processing_provider_options,
     CHROMA_KEY_COLOR_OPTIONS, CHROMA_SUBJECT_PROFILE_OPTIONS,
     upscale_model_preserves_alpha, normalize_fal_upscale_factor,
+    BRIA_HINT_TEXT, BRIA_UPSCALE_MODEL_IDS,
 )
 
 
@@ -489,6 +490,10 @@ class AutoClipartFlowController(ClipartFlowController):
             self.upscale_provider.addItem(label, value)
         form.addRow("Апскейл PNG", self.upscale_provider)
         form.addRow("Модель апскейла", self.upscale_model)
+        self.bria_upscale_note = QLabel(BRIA_HINT_TEXT)
+        self.bria_upscale_note.setWordWrap(True)
+        self.bria_upscale_note.setProperty("v3Subtitle", True)
+        form.addRow("", self.bria_upscale_note)
         form.addRow("Масштаб", self.upscale_scale)
         self.generation_page.add_widget(panel)
         self._refresh_upscale_controls()
@@ -582,6 +587,10 @@ class AutoClipartFlowController(ClipartFlowController):
         finally:
             for control, previous in zip(controls, blocked):
                 control.blockSignals(previous)
+        self.bria_upscale_note.setVisible(
+            provider == "fal"
+            and self.upscale_model.currentData() in BRIA_UPSCALE_MODEL_IDS
+        )
 
     def _upscale_provider_changed(self):
         if self.is_busy():

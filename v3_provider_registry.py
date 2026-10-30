@@ -193,6 +193,19 @@ FAL_UPSCALE_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Topaz Precision", FAL_TOPAZ_PRECISION_MODEL_ID),
     ("Recraft Crisp 4× — без прозрачности", FAL_RECRAFT_CRISP_MODEL_ID),
 )
+# Владелец, 2026-10-30 (аудит краёв): деградация клипарта с альфой атрибуирована
+# Fal Bria x4 на апскейле ПОСЛЕ подготовки прозрачного фона (внутренние дыры
+# альфы 26.78% -> 31.24%, серые разводы); локальный Real-ESRGAN чист
+# (0.07%/0.66%). Подсказка показывается при выборе любой Bria-модели апскейла.
+BRIA_UPSCALE_MODEL_IDS: Final[tuple[str, ...]] = (
+    FAL_BRIA_UPSCALE_MODEL_ID,
+    FAL_BRIA_INCREASE_RESOLUTION_MODEL_ID,
+)
+BRIA_HINT_TEXT: Final[str] = (
+    "Bria ×4 — модель для фотографий: на клипарте с мягкими краями "
+    "(акварель, пух, тонкие штрихи) может „вымывать“ полупрозрачные места "
+    "и оставлять серые разводы. Для клипарта рекомендуем Local Real-ESRGAN."
+)
 FAL_BIREFNET_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Общая — Light", "General Use (Light)"),
     ("Общая — Light 2K", "General Use (Light 2K)"),
