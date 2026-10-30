@@ -8,7 +8,7 @@
 
 **Правка.** `main.py`, ветка Fal в `_run_upscale_pass`: перед подготовкой непрозрачной копии сохраняется матте исходника (`_transparent_alpha_channel`), после скачивания результата возвращается тем же `_restore_upscaled_alpha`, что и на локальном пути. Тест `test_fal_after_upscale_returns_the_transparency_it_flattened` (Fal, `bria/increase-resolution`, 4×) без правки падает: `AssertionError: 255 != 0 : прозрачность потеряна`. Материалы на её файлах (без платных запросов, только её собственные PNG): `docs/ui/3.2/fal-upscale-alpha/` — листы «до/после» и `demo_fix.py`.
 
-`ветка codex/fix-fal-upscale-alpha-20261030 · слито в develop/3.2: нет · в сборке: нет · опубликовано: нет`
+`ветка codex/fix-fal-upscale-alpha-20261030 → PR #145 · слито в develop/3.2: да (328f7cc) · в сборке: нет · опубликовано: нет`
 
 ## Проверка PNG: сетка грузится втрое быстрее, не теряет место, пропавший файл можно вернуть (2026-10-30)
 
