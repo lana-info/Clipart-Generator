@@ -10,7 +10,7 @@
 
 Тесты: `test_column_tick_marks_and_clears_the_whole_column` (в том числе «название не отмечает»), `test_column_sort_arrows_order_by_marks_both_ways`; подвыборка «экспорт наборов + автоклипарт + метки» — **207 passed**.
 
-`ветка codex/feature-sets-table-controls-20261030 · слито в develop/3.2: нет · в сборке: нет · опубликовано: нет`
+`ветка codex/feature-sets-table-controls-20261030 → PR #152 · слито в develop/3.2: да (2e7e87a) · в сборке: нет · опубликовано: нет`
 
 ## «Переделать выбранные»: три варианта обработки, «Апскейл заново» (2026-10-30)
 
