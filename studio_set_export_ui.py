@@ -937,6 +937,8 @@ class SetExportDialog(QDialog):
         )
         self.table.viewport().installEventFilter(self)
         self.table.itemChanged.connect(self._manual_changed)
+        # Owner 2026-10-30: a double click on a picture opens its transparency editor.
+        self.table.cellDoubleClicked.connect(self._table_row_double_clicked)
         layout.addWidget(self.table, 1)
 
         header = _SetsHeader(self.table)
@@ -1118,7 +1120,8 @@ class SetExportDialog(QDialog):
                 )
             for row, path in enumerate(self._ordered_paths()):
                 name = QTableWidgetItem(path.name)
-                name.setToolTip(path.name)
+                # Owner 2026-10-30: the hint tells about the double click that opens the transparency editor.
+                name.setToolTip(f'{path.name}\nДвойной клик — редактор прозрачности этой картинки')
                 # Background mode: never decode a PNG here; icons appear once the worker primed them.
                 pixmap = (self._scaled_pixmap(path, 44) if self._quality_loader is None or not self._qc_pending
                           else self._primed_pixmap(path, 44))
@@ -1842,6 +1845,19 @@ class SetExportDialog(QDialog):
         self._hide_preview()
         self._refresh_summary()
         self.stack.setCurrentWidget(self.summary_page)
+
+    def _table_row_double_clicked(self, row, _column):
+        """Double click on a picture asks the module to open its transparency editor (owner 2026-10-30).
+
+        The same request the «Редактировать прозрачность» button sends; the picture is taken from the row
+        itself, so a sorted table cannot send the wrong one.
+        """
+        if self.worker is not None:
+            return
+        holder = self.table.item(row, 0)
+        key = str(holder.data(Qt.ItemDataRole.UserRole) if holder is not None else '')
+        if key:
+            self.fix_requested.emit(key)
 
     def _show_preview(self, item, global_pos=None):
         if item is None or item.column() != 0:
