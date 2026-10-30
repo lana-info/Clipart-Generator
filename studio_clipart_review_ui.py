@@ -204,7 +204,10 @@ class ReviewStrip(QFrame):
         self.regenerate_button.setToolTip("Новая платная генерация этой картинки; цена и модель — в подтверждении")
         self.autocut_button = V3Button("Убрать фон", ButtonVariant.SECONDARY)
         self.autocut_button.setToolTip("Заново вырезать фон автоматически: бесплатно, прежняя картинка сохранится как версия")
-        self.persistent_actions = (self.regenerate_button, self.autocut_button)
+        self.upscale_button = V3Button("Апскейл заново", ButtonVariant.SECONDARY)
+        self.upscale_button.setToolTip(
+            "Повторный апскейл вырезанной картинки, затем очистка края → резкость → обрезка → сохранение PNG")
+        self.persistent_actions = (self.regenerate_button, self.autocut_button, self.upscale_button)
         self.actions = (self.method_label, self.method, self.try_button, self.prompt_button,
                         self.brush_button, self.to_generation_button, self.cancel_button,
                         self.compare_button, self.keep_button, self.restore_button)
@@ -678,10 +681,21 @@ class ImageReview:
         self.redo_selected_button = V3Button("Переделать выбранные", ButtonVariant.SECONDARY)
         self.redo_selected_button.setToolTip("Выделите строки в списке (Ctrl или Shift для нескольких)")
         redo_menu = QMenu(self.redo_selected_button)
-        self.redo_generate_action = redo_menu.addAction("Перегенерировать (платно, цена в подтверждении)")
+        # Owner 2026-10-30: short labels; the full path each action repeats lives in the hover tip.
+        self.redo_generate_action = redo_menu.addAction("Перегенерировать")
+        self.redo_generate_action.setToolTip(
+            "Новая генерация картинки, затем весь путь обработки: удаление фона → апскейл → очистка края → "
+            "резкость → обрезка → сохранение PNG.\nПрежняя картинка станет версией.")
         self.redo_generate_action.triggered.connect(self.regenerate_selected_rows)
-        self.redo_cutout_action = redo_menu.addAction("Вырезать фон заново (бесплатно)")
+        self.redo_cutout_action = redo_menu.addAction("Удалить фон заново")
+        self.redo_cutout_action.setToolTip(
+            "Повторное вырезание из сгенерированной картинки, затем апскейл → очистка края → резкость → "
+            "обрезка → сохранение PNG.")
         self.redo_cutout_action.triggered.connect(self.cutout_selected_rows)
+        self.redo_upscale_action = redo_menu.addAction("Апскейл заново")
+        self.redo_upscale_action.setToolTip(
+            "Повторный апскейл вырезанной картинки, затем очистка края → резкость → обрезка → сохранение PNG.")
+        self.redo_upscale_action.triggered.connect(self.upscale_redo_selected_rows)
         self.redo_selected_button.setMenu(redo_menu)
         buttons.addWidget(self.recreate_button)
         buttons.addWidget(self.redo_selected_button)
@@ -837,6 +851,33 @@ class ImageReview:
         self._chain_started = False
         self.flow.run_queue.reprocess_selected(rows, DEFAULT_CUTOUT[2])
 
+    def upscale_redo_selected_rows(self):
+        """«Апскейл заново»: repeat the upscale stage from the picture that entered it (owner 2026-10-30)."""
+        session = self.session
+        page = self.flow.run_queue.page
+        if session is None or session.running or self.flow.is_busy():
+            return
+        chosen = page.queue.selected_rows()
+        rows = session.upscale_redoable_indices(chosen)
+        if not rows:
+            QMessageBox.information(page, "Апскейл заново",
+                "Выделите картинки в списке. Нужна сохранённая картинка до апскейла: её нет у добавленных "
+                "вручную файлов, а также если она уже удалена очисткой рабочих файлов.\n"
+                "В этом случае перегенерируйте картинку или удалите фон заново — апскейл выполнится вновь.")
+            return
+        skipped = len(chosen) - len(rows)
+        message = f"Апскейл заново: {len(rows)}?" + (f"\nБез картинки до апскейла, пропущены: {skipped}." if skipped else "")
+        message += "\nГенерация и удаление фона не выполняются. Текущие картинки станут версиями и их можно вернуть."
+        if self._paid_upscale():
+            message += "\nАпскейл платный; стоимость не рассчитана."
+        if QMessageBox.question(page, "Апскейл заново", message,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        self._pending_cutout = []
+        self._chain_started = False
+        self.flow.run_queue.upscale_redo_selected(rows)
+
     def _paid_upscale(self):
         settings = self.session.request.settings
         return bool(settings.get("upscale_after")) and provider_requires_cost(
@@ -930,6 +971,7 @@ class ImageReview:
         strip.to_generation_button.clicked.connect(lambda: self._set_mark("bad_generation"))
         strip.regenerate_button.clicked.connect(lambda: self._redo_from_editor("regenerate"))
         strip.autocut_button.clicked.connect(lambda: self._redo_from_editor("cutout"))
+        strip.upscale_button.clicked.connect(lambda: self._redo_from_editor("upscale"))
         strip.cancel_button.clicked.connect(self._cancel_preview)
         strip.compare_button.clicked.connect(self._compare)
         strip.keep_button.clicked.connect(self._keep_preview)
@@ -953,6 +995,8 @@ class ImageReview:
         editor = self._editor
         if kind == "regenerate":
             self.flow._regenerate_from_png_check(path)
+        elif kind == "upscale":
+            self.flow._upscale_redo_from_png_check(path)
         else:
             self.flow._cutout_from_png_check(path)
         if self.flow.is_busy() and editor is not None:
@@ -1183,6 +1227,37 @@ class ImageReview:
             if item.output_path and str(Path(item.output_path).resolve()) == target:
                 self._pending_cutout = []
                 started = self.flow.run_queue.reprocess_selected([index], CUTOUT_METHODS[2][2])
+                self._chain_started = False
+                return started
+        return None
+
+    def upscale_redo_unavailable_reason(self, path):
+        """Why «Апскейл заново» cannot start for this picture (empty when it can)."""
+        session = self.session
+        if session is None:
+            return "Нет открытого проекта."
+        if session.running or self._job is not None or self.flow.is_busy():
+            return "Дождитесь окончания текущей работы и повторите."
+        target = str(Path(path).resolve())
+        for index, item in enumerate(session.items):
+            if item.output_path and str(Path(item.output_path).resolve()) == target:
+                if not session.upscale_redoable_indices([index]):
+                    return ("Не найдена сохранённая картинка до апскейла (у добавленных вручную файлов её нет, "
+                            "или она удалена очисткой рабочих файлов). Перегенерируйте картинку или удалите фон "
+                            "заново — апскейл выполнится вновь.")
+                return ""
+        return "Картинка не найдена в проекте."
+
+    def upscale_redo_path(self, path):
+        """«Апскейл заново» for one picture: repeat the upscale stage from the saved picture before it."""
+        session = self.session
+        if session is None or session.running or self._job is not None or self.flow.is_busy():
+            return None
+        target = str(Path(path).resolve())
+        for index, item in enumerate(session.items):
+            if item.output_path and str(Path(item.output_path).resolve()) == target:
+                self._pending_cutout = []
+                started = self.flow.run_queue.upscale_redo_selected([index])
                 self._chain_started = False
                 return started
         return None

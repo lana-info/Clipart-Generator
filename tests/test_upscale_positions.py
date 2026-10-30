@@ -572,5 +572,45 @@ class UpscalePositionTests(unittest.TestCase):
             self.assertFalse(getattr(worker._item_context, "manual_transparency_required", False),
                              "картинка не должна требовать ручного удаления фона")
 
+    def test_the_picture_entering_the_upscale_is_kept_for_the_redo(self):
+        """Владелец 2026-10-30: вход апскейла сохраняется рядом с запуском — из него работает «Апскейл заново»."""
+        with tempfile.TemporaryDirectory(prefix="clipart-upscale-input-") as temp_dir:
+            temp_path = Path(temp_dir)
+            source_path = temp_path / "source.png"
+            image = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+            ImageDraw.Draw(image).ellipse((4, 4, 27, 27), fill=(180, 70, 100, 255))
+            image.save(source_path, format="PNG")
+            settings = processing_settings(
+                upscale=False,
+                upscale_after=True,
+                upscale_after_provider="local_realesrgan",
+                local_realesrgan_after_scale=2,
+                remove_bg=False,
+            )
+            worker = main.WorkerThread(
+                "mode2_process", temp_dir, settings, selected_files=[str(source_path)],
+            )
+            lines = []
+            worker.progress.connect(lines.append)
+
+            def fake_pass(self_, *, current_path, current_url, raw_dir, idx, prefix, step_name, **kwargs):
+                target = os.path.join(raw_dir, f"{prefix}_upscaled_{idx:03d}.png")
+                with Image.open(current_path) as picture:
+                    picture.convert("RGBA").resize(
+                        (picture.width * 2, picture.height * 2), Image.Resampling.NEAREST,
+                    ).save(target, format="PNG")
+                return target, None, True
+
+            worker._run_upscale_pass = types.MethodType(fake_pass, worker)
+            worker._mode2_process_files(emit_final=False)
+
+            kept = sorted(temp_path.rglob("*_upscale_input_*.png"))
+            self.assertEqual(len(kept), 1, "картинка до апскейла не сохранена")
+            with Image.open(kept[0]) as saved:
+                alpha = saved.convert("RGBA").getchannel("A")
+                self.assertIn("A", saved.getbands())
+                self.assertEqual(alpha.getextrema()[0], 0, "матте во входе апскейла потерян")
+            self.assertTrue(any("Вход апскейла:" in line for line in lines), lines)
+
 if __name__ == "__main__":
     unittest.main()

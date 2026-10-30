@@ -854,7 +854,9 @@ class AutoClipartFlowController(ClipartFlowController):
         if not queue or self.is_busy() or (session is not None and session.running):
             return
         kind, path = queue.pop(0)
-        (self._regenerate_from_png_check if kind == "regenerate" else self._cutout_from_png_check)(path)
+        handler = {"regenerate": self._regenerate_from_png_check,
+                   "upscale": self._upscale_redo_from_png_check}.get(kind, self._cutout_from_png_check)
+        handler(path)
 
     def _regenerate_from_png_check(self, path):
         """Start the confirmed paid re-creation of one picture; the PNG check stays on screen with a progress line."""
@@ -877,6 +879,18 @@ class AutoClipartFlowController(ClipartFlowController):
         # Owner 2026-10-28: a refusal used to be silent («ничего не произошло»); say why.
         reason = self.review.cutout_unavailable_reason(path) or "Запуск не начался. Повторите позже."
         QMessageBox.information(self.brief, "Убрать фон", reason)
+
+    def _upscale_redo_from_png_check(self, path):
+        """Repeat the upscale of one picture; generation and background removal are not run again (owner 2026-10-30)."""
+        if self.review is None or self._queue_redo("upscale", path):
+            return
+        if self.review.upscale_redo_path(path) is not None:
+            self._regen_return = [str(path), False]
+            self._redo_kind = "Апскейл"
+            self._show_redo_progress()
+            return
+        reason = self.review.upscale_redo_unavailable_reason(path) or "Запуск не начался. Повторите позже."
+        QMessageBox.information(self.brief, "Апскейл заново", reason)
 
     def _show_redo_progress(self):
         """Owner 2026-10-28: the PNG check stays on screen while a picture is redone; it only shows that work goes on."""
@@ -1189,6 +1203,7 @@ class AutoClipartFlowController(ClipartFlowController):
              "editor_output_path": item.editor_output_path or "",
              "paid_completed_stages": list(item.paid_history_stages()),
              "stage_statuses": item.saved_stages(), "source_path": item.source_path or "",
+             "cutout_path": item.cutout_path or "",
              **review_fields(item)}
             for item in session.items
         ]
@@ -1331,6 +1346,7 @@ class AutoClipartFlowController(ClipartFlowController):
             item.output_path = row["output_path"] or None
             item.editor_output_path = row.get("editor_output_path", "")
             item.source_path = row.get("source_path", "")
+            item.cutout_path = row.get("cutout_path", "")
             item.attempts = row["attempts"]
             item.stage_statuses = dict(row.get("stage_statuses", {}))
             item.paid_completed_stages = tuple(row.get("paid_completed_stages", ()))

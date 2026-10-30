@@ -332,7 +332,8 @@ class FakeFlow:
         page = RunResultsPage(state)
         page.set_session(session)
         self.run_queue = SimpleNamespace(session=session, page=page, reprocess_selected=Mock(return_value=None),
-                                         regenerate_selected=Mock(return_value=None))
+                                         regenerate_selected=Mock(return_value=None),
+                                         upscale_redo_selected=Mock(return_value=None))
         self.shell = SimpleNamespace(mark_dirty=lambda: None, state=state)
 
     def _save_run(self):
@@ -1108,3 +1109,86 @@ def test_size_and_rating_panels_keep_minimal_height(tmp_path):
         assert content.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Fixed
         assert dock.height() <= content.sizeHint().height() + dock.titleBarWidget().sizeHint().height() + 12
     editor.close()
+
+
+def test_upscale_redo_starts_from_the_picture_before_the_stage(tmp_path):
+    """Владелец 2026-10-30: «Апскейл заново» повторяет апскейл из сохранённой картинки до него.
+
+    Генерация и удаление фона не запускаются: сохранённый вход уже несёт матте, поэтому конвейеру
+    велено переиспользовать его (skip_remover_for_alpha), а не вырезать заново.
+    """
+    session = generation_session(tmp_path)
+    cutout = png(Path(session.transient_dir) / "gen_upscale_input_000.png")
+    session.items[0].cutout_path = str(cutout)
+    controller = Mock()
+    controller.is_busy.return_value = False
+    controller.worker = None
+    support = RunQueueSupport.__new__(RunQueueSupport)
+    support.controller = controller
+    support.session = session
+    started = []
+    support._start_worker = lambda _worker, request: started.append(request) or request
+
+    support.upscale_redo_selected([0])
+
+    assert started, "повтор апскейла не запустился"
+    request = started[0]
+    assert request.mode == "mode2_process"
+    assert request.generated_prompts == []                      # никакой генерации
+    assert request.selected_files == [str(cutout.resolve())]     # вход — картинка до апскейла
+    assert request.settings["skip_remover_for_alpha"] is True    # вырезание не повторяем
+    assert request.settings["overwrite_existing"] is True        # прежняя картинка станет версией
+    controller.before_replace_outputs.assert_called_once_with([0], "upscale_redo")
+    assert session.items[0].status is RunItemStatus.PENDING
+    assert session.items[0].stage_statuses == {"generation": "complete", "background_removal": "complete"}
+
+    # Картинка без сохранённого входа не берётся: запускать нечего.
+    session.running = False
+    session.items[1].cutout_path = ""
+    controller.reset_mock()
+    started.clear()
+    assert support.session.upscale_redoable_indices([1]) == []
+    support.upscale_redo_selected([1])
+    assert started == [] and not controller.before_replace_outputs.called
+
+
+
+
+def test_upscale_redo_explains_the_way_out_when_the_input_is_gone(tmp_path):
+    """Владелец 2026-10-30: нет картинки до апскейла — сказать честно и предложить перегенерировать или вырезать заново."""
+    review, editor, session, flow = open_review(tmp_path)
+    path = session.items[0].output_path
+    reason = review.upscale_redo_unavailable_reason(path)
+    assert "картинка до апскейла" in reason
+    assert "Перегенерируйте" in reason and "удалите фон заново" in reason
+    assert "не найдена в проекте" in review.upscale_redo_unavailable_reason(tmp_path / "unknown.png").lower()
+    editor.deleteLater()
+
+
+def test_upscale_redo_uses_the_saved_input_for_one_picture(tmp_path):
+    """Кнопка «Апскейл заново» у картинки запускает повтор этапа с сохранённой картинкой до него."""
+    review, editor, session, flow = open_review(tmp_path)
+    path = session.items[1].output_path
+    session.items[1].cutout_path = str(png(Path(session.transient_dir) / "gen_upscale_input_001.png"))
+    assert review.upscale_redo_unavailable_reason(path) == ""
+    flow.run_queue.upscale_redo_selected = Mock(return_value=object())
+    assert review.upscale_redo_path(path) is not None
+    flow.run_queue.upscale_redo_selected.assert_called_once_with([1])
+    editor.deleteLater()
+
+
+def test_redo_menu_has_three_variants_with_the_full_path_in_the_tip(tmp_path):
+    """Владелец 2026-10-30: короткие подписи, полный путь — в подсказке; третий пункт — «Апскейл заново»."""
+    review, editor, session, flow = open_review(tmp_path)
+    assert review.redo_generate_action.text() == "Перегенерировать"
+    assert review.redo_cutout_action.text() == "Удалить фон заново"
+    assert review.redo_upscale_action.text() == "Апскейл заново"
+    assert "весь путь обработки" in review.redo_generate_action.toolTip()
+    assert "апскейл → очистка края" in review.redo_cutout_action.toolTip()
+    assert "Повторный апскейл вырезанной картинки" in review.redo_upscale_action.toolTip()
+    assert "цена" not in review.redo_generate_action.toolTip().lower()
+    assert "платно" not in review.redo_cutout_action.toolTip().lower()
+    # Кнопка у самой картинки на месте и не скрыта.
+    assert review.strip.upscale_button.text() == "Апскейл заново"
+    assert review.strip.upscale_button in review.strip.persistent_actions
+    editor.deleteLater()
