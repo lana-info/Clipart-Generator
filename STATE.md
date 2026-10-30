@@ -10,7 +10,7 @@
 
 Тесты (моки HTTP, ни одного платного запроса): `test_worker_journals_the_paid_task_before_and_after_the_post`, `test_worker_refuses_a_second_charge_when_the_first_answer_was_lost`, `test_worker_polls_a_saved_task_instead_of_paying_again`; подвыборка провайдеров (Midjourney + GPT 2.5 + Fal + KIE) — **196 passed**.
 
-`ветка codex/feature-midjourney-journal-20261030 · слито в develop/3.2: нет · в сборке: нет · опубликовано: нет`
+`ветка codex/feature-midjourney-journal-20261030 → PR #154 · слито в develop/3.2: да (d2203aa) · в сборке: нет · опубликовано: нет`
 
 ## Страница наборов: значки в заголовках вместо кнопок и нажатия на название (2026-10-30)
 
