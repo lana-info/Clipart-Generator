@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import Event
 from uuid import uuid4
 
-from PyQt6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, QSizeF, QThread, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, QThread, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QImage, QImageReader, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QDialog, QFileDialog, QFrame,
@@ -375,6 +375,78 @@ class _CheckerPreview(QLabel):
         super().mouseReleaseEvent(event)
 
 
+class _SetsHeader(QHeaderView):
+    """Set columns: «✓» marks the whole column, «✎» renames or deletes, «⇅» sorts (owner 2026-10-30).
+
+    The title is a label only: owner 2026-10-30 asked to stop marking on it — a stray click used to tick
+    every picture at once. Each action has its own small glyph on the right, and the tick shows the state.
+    """
+
+    marks_clicked = pyqtSignal(int)
+    pencil_clicked = pyqtSignal(int)
+    sort_clicked = pyqtSignal(int)
+
+    GLYPH = 16
+
+    def __init__(self, parent=None):
+        super().__init__(Qt.Orientation.Horizontal, parent)
+        self.setSectionsClickable(True)
+        self.setHighlightSections(False)
+        self.setSectionsMovable(False)
+        self.setToolTip("✓ — отметить или снять весь столбец; ✎ — переименовать или удалить набор; "
+                        "⇅ — сортировка по отметкам")
+        self.marked_state = None  # callable(column) -> bool, set by the dialog
+
+    def _glyph_rects(self, index):
+        right = self.sectionViewportPosition(index) + self.sectionSize(index)
+        height = max(self.GLYPH, self.height() - 10)
+        sort_rect = QRect(right - 10 - self.GLYPH, 5, self.GLYPH, height)
+        pencil_rect = QRect(sort_rect.left() - 4 - self.GLYPH, 5, self.GLYPH, height)
+        marks_rect = QRect(pencil_rect.left() - 4 - self.GLYPH, 5, self.GLYPH, height)
+        return marks_rect, pencil_rect, sort_rect
+
+    def _column_marked(self, index):
+        if not callable(self.marked_state):
+            return False
+        try:
+            return bool(self.marked_state(index))
+        except Exception:
+            return False
+
+    def paintSection(self, painter, rect, index):
+        super().paintSection(painter, rect, index)
+        if index <= 0:
+            return
+        marks_rect, pencil_rect, sort_rect = self._glyph_rects(index)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        font = QFont(painter.font())
+        font.setPixelSize(14)
+        painter.setFont(font)
+        painter.setPen(QColor('#24cabb') if self._column_marked(index) else QColor('#8ea3b8'))
+        painter.drawText(marks_rect, int(Qt.AlignmentFlag.AlignCenter), '✓')
+        painter.setPen(QColor('#24cabb'))
+        painter.drawText(pencil_rect, int(Qt.AlignmentFlag.AlignCenter), '✎')
+        painter.drawText(sort_rect, int(Qt.AlignmentFlag.AlignCenter), '⇅')
+        painter.restore()
+
+    def mousePressEvent(self, event):
+        point = event.position().toPoint()
+        index = self.logicalIndexAt(point)
+        if index > 0:
+            marks_rect, pencil_rect, sort_rect = self._glyph_rects(index)
+            if marks_rect.contains(point):
+                self.marks_clicked.emit(index)
+                return
+            if pencil_rect.contains(point):
+                self.pencil_clicked.emit(index)
+                return
+            if sort_rect.contains(point):
+                self.sort_clicked.emit(index)
+                return
+        super().mousePressEvent(event)
+
+
 class SetExportDialog(QDialog):
     busy_changed = pyqtSignal()
     membership_saved = pyqtSignal(object)
@@ -485,6 +557,7 @@ class SetExportDialog(QDialog):
         self._notes = {}
         # Owner 2026-10-28: «отметки наверх» — the table can be ordered by one set's marks.
         self._sort_set_id = None
+        self._sort_descending = False
         self._marks_enabled = False
         self._quality_page_base_text = ''
         self.exported = []
@@ -626,7 +699,9 @@ class SetExportDialog(QDialog):
         heading.addWidget(self.new_set_button)
         layout.addLayout(heading)
         self._build_membership_table(layout)
-        actions = QHBoxLayout()
+        # Owner 2026-10-30: one row of column actions above the table is gone — rename, delete and the
+        # sort order now live in the column headers (✎ and ⇅). The widgets below stay hidden so the
+        # long-standing code paths that drive them keep working untouched.
         self.rename_set_button = QPushButton('Переименовать набор')
         self.rename_set_button.setProperty('v3Button', True)
         self.rename_set_button.setProperty('variant', 'secondary')
@@ -635,19 +710,9 @@ class SetExportDialog(QDialog):
         self.delete_set_button.setProperty('v3Button', True)
         self.delete_set_button.setProperty('variant', 'secondary')
         self.delete_set_button.clicked.connect(self._delete_current_set)
-        actions.addWidget(self.rename_set_button)
-        actions.addWidget(self.delete_set_button)
-        # Owner 2026-10-28: sorting by a column's marks; the header click marks the whole column,
-        # so the order lives on its own compact control next to the set actions.
-        self.sort_sets_button = QPushButton('⇅ Отметки наверх')
-        self.sort_sets_button.setProperty('v3Button', True)
-        self.sort_sets_button.setProperty('variant', 'secondary')
-        self.sort_sets_button.setToolTip('Поднять строки с отметкой выбранного набора вверх')
-        self.sort_sets_menu = QMenu(self.sort_sets_button)
-        self.sort_sets_button.setMenu(self.sort_sets_menu)
-        actions.addWidget(self.sort_sets_button)
-        actions.addStretch(1)
-        layout.addLayout(actions)
+        for retired in (self.rename_set_button, self.delete_set_button):
+            retired.hide()
+            layout.addWidget(retired)
         self.issue_panel = QFrame()
         self.issue_panel.setProperty('v3Card', True)
         self.issue_panel.setProperty('state', 'warning')
@@ -874,8 +939,15 @@ class SetExportDialog(QDialog):
         self.table.itemChanged.connect(self._manual_changed)
         layout.addWidget(self.table, 1)
 
-        self.table.horizontalHeader().setSectionsClickable(True)
-        self.table.horizontalHeader().sectionClicked.connect(self._column_header_clicked)
+        header = _SetsHeader(self.table)
+        header.marks_clicked.connect(self._marks_glyph_clicked)
+        header.pencil_clicked.connect(self._column_pencil_menu)
+        header.sort_clicked.connect(self._sort_column_by_marks)
+        header.marked_state = self._column_all_marked
+        self.table.setHorizontalHeader(header)
+        header.setSectionsClickable(True)
+        # A click on the title only remembers the column (owner 2026-10-30: the title must never mark).
+        header.sectionClicked.connect(self._choose_set_column)
         self.table.currentCellChanged.connect(lambda _row, column, *_: self._choose_set_column(column))
 
     def _choose_set_column(self, column):
@@ -930,7 +1002,10 @@ class SetExportDialog(QDialog):
         return list(catalog.items())
 
     def _ordered_paths(self):
-        """The table order: rows carrying the chosen set's mark first, the rest after them."""
+        """The table order: rows carrying the chosen set's mark first, the rest after them.
+
+        The header arrows flip the direction (owner 2026-10-30): «отмеченные сверху» / «неотмеченные сверху».
+        """
         if not self._sort_set_id:
             return list(self.paths)
         marked, rest = [], []
@@ -938,28 +1013,60 @@ class SetExportDialog(QDialog):
             links = {link['set_id']: link for link in self.saved_membership[str(path)]['memberships']}
             target = marked if links.get(self._sort_set_id, {}).get('included') else rest
             target.append(path)
-        return marked + rest
+        return (rest + marked) if self._sort_descending else (marked + rest)
 
-    def _refresh_sort_menu(self):
-        self.sort_sets_menu.clear()
-        restore = self.sort_sets_menu.addAction('Исходный порядок')
-        restore.triggered.connect(lambda: self._set_sort(None))
-        restore.setEnabled(self._sort_set_id is not None)
-        self.sort_sets_menu.addSeparator()
-        for set_id, title in self._set_catalog():
-            action = self.sort_sets_menu.addAction(title)
-            action.setCheckable(True)
-            action.setChecked(set_id == self._sort_set_id)
-            action.triggered.connect(lambda _checked=False, chosen=set_id: self._set_sort(chosen))
-
-    def _set_sort(self, set_id):
-        self._sort_set_id = set_id
+    def _set_sort(self, set_id, *, descending=None):
+        """Sort by one set's marks; without a set the original order comes back (owner 2026-10-30)."""
+        if set_id is None:
+            self._sort_set_id, self._sort_descending = None, False
+        else:
+            self._sort_descending = bool(descending)
+            self._sort_set_id = set_id
         self._rebuild_manual_table()
 
-    def _column_header_clicked(self, column):
-        """A click on a set's header marks or clears the whole column (owner 2026-10-28)."""
+    def _sort_column_by_marks(self, column):
+        """⇅ in a column header: marked rows on top; the same arrows on the same column flip it."""
+        if self.worker is not None or not 1 <= column <= len(self._set_columns):
+            return
+        set_id = self._set_columns[column - 1][0]
+        descending = not self._sort_descending if set_id == self._sort_set_id else False
+        self._set_sort(set_id, descending=descending)
+        title = dict(self._set_columns).get(set_id, '')
+        self.status.setText(f'Сортировка по набору «{title}»: '
+                            + ('неотмеченные сверху.' if descending else 'отмеченные сверху.'))
+
+    def _column_pencil_menu(self, column):
+        """✎ in a column header: rename or delete this very column's set (owner 2026-10-30)."""
+        if self.worker is not None or not 1 <= column <= len(self._set_columns):
+            return
+        self._choose_set_column(column)
+        if self._editing_set_id is None:
+            return
+        menu = QMenu(self.table)
+        rename = menu.addAction('Переименовать набор…')
+        delete = menu.addAction('Удалить набор…')
+        chosen = menu.exec(QCursor.pos())
+        if chosen is rename:
+            self._rename_current_set()
+        elif chosen is delete:
+            self._delete_current_set()
+
+    def _marks_glyph_clicked(self, column):
+        """«✓» in a column header marks or clears the whole column.
+
+        Owner 2026-10-28 asked for mass marking; owner 2026-10-30 moved it off the title onto this glyph,
+        so an accidental click on the name can no longer tick every picture.
+        """
         self._choose_set_column(column)
         self._toggle_column_marks(column)
+
+    def _column_all_marked(self, column):
+        """Whether every selectable cell of this column is ticked: the state the ✓ glyph shows."""
+        if not 1 <= column <= len(self._set_columns) or self.table.rowCount() == 0:
+            return False
+        states = [self.table.item(row, column).checkState()
+                  for row in range(self.table.rowCount()) if self.table.item(row, column) is not None]
+        return bool(states) and all(state == Qt.CheckState.Checked for state in states)
 
     def _toggle_column_marks(self, column):
         if self.worker is not None or not 1 <= column <= len(self._set_columns):
@@ -978,13 +1085,14 @@ class SetExportDialog(QDialog):
         finally:
             self.table.blockSignals(False)
         self._manual_changed()
+        self.table.horizontalHeader().viewport().update()
         title = dict(self._set_columns).get(self._set_columns[column - 1][0], '')
         self.status.setText(f'Столбец «{title}»: '
                             + ('все отметки сняты.' if target == Qt.CheckState.Unchecked else 'отмечены все изображения.'))
 
     def _rebuild_manual_table(self):
+        self.table.horizontalHeader().viewport().update()  # the ✓ glyph follows the column state
         self._set_columns = self._set_catalog()
-        self._refresh_sort_menu()
         self.table.blockSignals(True)
         try:
             self.table.clear()
