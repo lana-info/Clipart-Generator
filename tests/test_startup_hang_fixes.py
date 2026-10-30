@@ -197,6 +197,11 @@ def test_module_verification_timeout_is_recorded_and_window_keeps_working(tmp_pa
     events = [event["event"] for event in journal.read_events()]
     assert "module_verification_timeout" in events
     assert view.mode_selection.verification_note.text() == vms.MODULE_VERIFICATION_TIMEOUT_NOTE
+    timeout_event = [event for event in journal.read_events()
+                     if event["event"] == "module_verification_timeout"][0]
+    stacks = tmp_path / "diagnostics" / "module-verification-timeout-stacks.txt"
+    assert timeout_event["details"]["filename"] == "module-verification-timeout-stacks.txt"
+    assert stacks.is_file() and "Thread 0x" in stacks.read_text(encoding="utf-8")
 
     class FinishedThread(RunningThread):
         durations_ms = {"patterns": 120}
@@ -376,6 +381,28 @@ def test_startup_window_watchdog_stays_silent_when_the_window_shows(tmp_path):
     time.sleep(0.2)
     assert exits == []
     assert [event["event"] for event in journal.read_events()] == []
+    journal.close()
+
+
+def test_startup_window_watchdog_saves_a_thread_stack_snapshot_on_timeout(tmp_path):
+    """The next repeat must name the stuck call without a memory dump."""
+    from startup_watchdog import STACK_SNAPSHOT_FILENAME, StartupWindowWatchdog
+
+    journal = DiagnosticJournal(tmp_path, app_version="3.2.53")
+    watchdog = StartupWindowWatchdog(
+        timeout_seconds=1.0, journal=journal, retry_enabled=False,
+        executable="Vibix Images.exe", exit_process=lambda code: None,
+        launcher=lambda argv, **kwargs: None,
+    )
+    watchdog._started_at = time.monotonic() - 31
+    watchdog._on_timeout()
+    snapshot = tmp_path / "diagnostics" / STACK_SNAPSHOT_FILENAME
+    assert snapshot.is_file()
+    text = snapshot.read_text(encoding="utf-8")
+    assert "Thread 0x" in text                      # faulthandler writes every thread
+    assert "test_startup_window_watchdog_saves_a_thread_stack_snapshot_on_timeout" in text
+    events = [event for event in journal.read_events() if event["event"] == "startup_window_timeout"]
+    assert events and events[0]["details"]["filename"] == STACK_SNAPSHOT_FILENAME
     journal.close()
 
 

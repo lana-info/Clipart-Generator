@@ -27,6 +27,7 @@ DEFAULT_EVENT_MAX_BYTES = 16 * 1024
 DEFAULT_SESSION_MAX_EVENTS = 5_000
 DEFAULT_PRIORITY_EVENT_RESERVE = 1_024
 MAX_SESSIONS = 3
+DEFAULT_STACK_SNAPSHOT_FILENAME = "startup-timeout-stacks.txt"
 
 _TERMINAL_EVENTS = frozenset(
     {
@@ -594,6 +595,27 @@ class DiagnosticJournal:
             Path(temporary).unlink(missing_ok=True)
             raise
         return target
+
+    def save_thread_stacks(self, filename: str = DEFAULT_STACK_SNAPSHOT_FILENAME) -> str | None:
+        """Save every Python thread's stack next to the journal; never raise.
+
+        A startup or verification timeout cannot be diagnosed by the journal alone:
+        the interface thread's last Python frame names the call it is stuck in.
+        Returns the saved file name, or None when stacks cannot be written.
+        """
+        safe_name = Path(str(filename)).name[:64]
+        if not re.fullmatch(r"[a-z0-9._-]{1,64}", safe_name):
+            return None
+        try:
+            import faulthandler
+
+            self.directory.mkdir(parents=True, exist_ok=True)
+            target = self.directory / safe_name
+            with target.open("w", encoding="utf-8") as handle:
+                faulthandler.dump_traceback(file=handle, all_threads=True)
+            return safe_name
+        except Exception:
+            return None
 
     def close(self) -> None:
         if self._dropped_events:

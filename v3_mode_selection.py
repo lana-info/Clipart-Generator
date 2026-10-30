@@ -1934,17 +1934,31 @@ class V3ApplicationView(QWidget):
         if self._verification_timeout_reported or not thread.isRunning():
             return  # the finished handler reports a check that did complete
         self._verification_timeout_reported = True
+        details: dict[str, Any] = {
+            "elapsed_ms": self._verification_elapsed_ms(),
+            "modules": list(thread.module_ids),
+        }
+        # A stack snapshot names where the check is stuck; the journal alone cannot.
+        stacks_filename = self._verification_stack_snapshot()
+        if stacks_filename:
+            details["filename"] = stacks_filename
         self._diagnostic_event(
             "module_verification_timeout",
             "Фоновая проверка модулей не завершилась за отведённое время.",
             severity="warning",
             outcome="failed",
-            details={
-                "elapsed_ms": self._verification_elapsed_ms(),
-                "modules": list(thread.module_ids),
-            },
+            details=details,
         )
         self.mode_selection.set_module_verification_note(MODULE_VERIFICATION_TIMEOUT_NOTE)
+
+    def _verification_stack_snapshot(self) -> str | None:
+        saver = getattr(self._diagnostic_journal, "save_thread_stacks", None)
+        if not callable(saver):
+            return None
+        try:
+            return saver("module-verification-timeout-stacks.txt")
+        except Exception:
+            return None
 
     def _verification_elapsed_ms(self) -> int:
         if self._verification_started_at is None:
