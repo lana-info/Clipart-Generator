@@ -41,8 +41,10 @@ class ModelCatalogTests(unittest.TestCase):
             self.assertTrue(label.startswith(expected_prefix), label)
 
     def test_catalog_is_immutable_and_preserves_visible_snapshot(self):
-        self.assertEqual(len(GENERATION_MODELS), 38)
-        self.assertEqual(len(VISIBLE_GENERATION_MODEL_IDS), 23)
+        # A new model joins the catalog consciously, one at a time: 39 models with Midjourney
+        # connected through PiAPI for the owner on 2026-10-30 (not verified live yet).
+        self.assertEqual(len(GENERATION_MODELS), 39)
+        self.assertEqual(len(VISIBLE_GENERATION_MODEL_IDS), 24)
         self.assertEqual(model_spec("gpt-image-2").resolutions, {"1K", "2K", "4K"})
         with self.assertRaises(TypeError):
             MODEL_SPECS["new-model"] = model_spec("gpt-image-2")

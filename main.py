@@ -111,6 +111,14 @@ from fal_model_catalog import (
     fal_generation_payload,
     is_fal_generation_model,
 )
+from midjourney_provider import (
+    MODEL_ID as MIDJOURNEY_MODEL_ID,
+    image_url as midjourney_image_url,
+    imagine_payload as midjourney_imagine_payload,
+    provider_for_model as midjourney_provider_for_model,
+    task_id as midjourney_task_id,
+    task_state as midjourney_task_state,
+)
 from gpt25_provider import (
     InlineImageResult as Gpt25InlineImage,
     result_retention_elapsed as gpt25_result_retention_elapsed,
@@ -5884,6 +5892,10 @@ class WorkerThread(QThread):
         normalized_model = self._select_generation_model(reference_items)
         if gpt25_provider_for_model(normalized_model):
             return self._gpt25_generate_image(prompt, normalized_model, reference_items)
+        if midjourney_provider_for_model(normalized_model):
+            with self._provider_lease("piapi"):
+                self._set_provider_diagnostic_context("generation", "piapi", normalized_model)
+                return self._midjourney_generate_image(prompt, normalized_model)
         if is_fal_generation_model(normalized_model):
             with self._provider_lease("fal"):
                 self._set_provider_diagnostic_context(
@@ -5955,6 +5967,63 @@ class WorkerThread(QThread):
             model = self.reference_generation_model if references else self.text_generation_model
             models.add(str(model or "").strip())
         return models
+
+    def _midjourney_generate_image(self, prompt, model_id):
+        """Midjourney through the PiAPI task API: one imagine task, then its image URL.
+
+        Not verified live (owner 2026-10-30: connect without a paid check). The request shape
+        follows the provider's documented unified task API and the poll endpoint the GPT Image
+        path already uses; a rejected request is not billed, so a wrong field shows up as the
+        provider's own error instead of a silent charge. Midjourney answers an imagine with a
+        2x2 grid of four variants — that grid is the picture of this item for now.
+        """
+        api_key = str(getattr(self, "piapi_api_key", "") or "").strip()
+        if not api_key:
+            raise RuntimeError("Не задан ключ PiAPI для Midjourney")
+        ratio, _resolution = self._get_generation_profile(False)
+        payload = midjourney_imagine_payload(prompt, ratio)
+        headers = gpt25_request_headers("piapi", api_key)
+        headers["Content-Type"] = "application/json"
+        self._wait_for_generation_launch_slot()
+        started = time.monotonic()
+        self._diagnostic_context.model = str(model_id or "")
+        submit_url = "https://api.piapi.ai/api/v1/task"
+        try:
+            result = self._request_json(submit_url, method="POST", payload=payload,
+                                        headers=headers, timeout=max(30, self.timeout))
+        except Exception as error:
+            self._emit_diagnostic(
+                "provider_task_failed", provider="piapi", model=model_id,
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message=self._safe_error_text(error),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
+            raise
+        task_id = midjourney_task_id(result)
+        if not task_id:
+            self._emit_diagnostic("provider_task_failed", provider="piapi", model=model_id,
+                                  error_message="Midjourney не вернул task_id")
+            raise RuntimeError("Midjourney не вернул Task ID")
+        self.progress.emit(f"  Task ID: {task_id}")
+        deadline = time.time() + self.generation_wait_timeout
+        while time.time() < deadline:
+            self._ensure_running()
+            status = self._request_json(f"https://api.piapi.ai/api/v1/task/{task_id}",
+                                        method="GET", headers=headers, timeout=30)
+            state = midjourney_task_state(status)
+            if state == "completed":
+                url = midjourney_image_url(status)
+                if not url:
+                    raise RuntimeError("Midjourney завершил задачу без ссылки на изображение")
+                self._emit_diagnostic(
+                    "stage_finished", provider="piapi", model=model_id, outcome="succeeded",
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
+                return url
+            if state == "failed":
+                raise RuntimeError("Midjourney: задача завершилась ошибкой у провайдера")
+            time.sleep(self.status_poll_interval)
+        raise RuntimeError("Midjourney: время ожидания истекло")
 
     def _gpt25_generate_image(self, prompt, model_id, references=None):
         """Journal an asynchronous paid request and poll without reposting on recovery."""
