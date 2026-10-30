@@ -451,6 +451,8 @@ class SetExportDialog(QDialog):
         self._viewed_quality = set()
         self._marks = {}
         self._notes = {}
+        # Owner 2026-10-28: «отметки наверх» — the table can be ordered by one set's marks.
+        self._sort_set_id = None
         self._marks_enabled = False
         self._quality_page_base_text = ''
         self.exported = []
@@ -603,6 +605,15 @@ class SetExportDialog(QDialog):
         self.delete_set_button.clicked.connect(self._delete_current_set)
         actions.addWidget(self.rename_set_button)
         actions.addWidget(self.delete_set_button)
+        # Owner 2026-10-28: sorting by a column's marks; the header click marks the whole column,
+        # so the order lives on its own compact control next to the set actions.
+        self.sort_sets_button = QPushButton('⇅ Отметки наверх')
+        self.sort_sets_button.setProperty('v3Button', True)
+        self.sort_sets_button.setProperty('variant', 'secondary')
+        self.sort_sets_button.setToolTip('Поднять строки с отметкой выбранного набора вверх')
+        self.sort_sets_menu = QMenu(self.sort_sets_button)
+        self.sort_sets_button.setMenu(self.sort_sets_menu)
+        actions.addWidget(self.sort_sets_button)
         actions.addStretch(1)
         layout.addLayout(actions)
         self.issue_panel = QFrame()
@@ -832,7 +843,7 @@ class SetExportDialog(QDialog):
         layout.addWidget(self.table, 1)
 
         self.table.horizontalHeader().setSectionsClickable(True)
-        self.table.horizontalHeader().sectionClicked.connect(self._choose_set_column)
+        self.table.horizontalHeader().sectionClicked.connect(self._column_header_clicked)
         self.table.currentCellChanged.connect(lambda _row, column, *_: self._choose_set_column(column))
 
     def _choose_set_column(self, column):
@@ -886,8 +897,62 @@ class SetExportDialog(QDialog):
                 catalog.setdefault(link['set_id'], link['title'])
         return list(catalog.items())
 
+    def _ordered_paths(self):
+        """The table order: rows carrying the chosen set's mark first, the rest after them."""
+        if not self._sort_set_id:
+            return list(self.paths)
+        marked, rest = [], []
+        for path in self.paths:
+            links = {link['set_id']: link for link in self.saved_membership[str(path)]['memberships']}
+            target = marked if links.get(self._sort_set_id, {}).get('included') else rest
+            target.append(path)
+        return marked + rest
+
+    def _refresh_sort_menu(self):
+        self.sort_sets_menu.clear()
+        restore = self.sort_sets_menu.addAction('Исходный порядок')
+        restore.triggered.connect(lambda: self._set_sort(None))
+        restore.setEnabled(self._sort_set_id is not None)
+        self.sort_sets_menu.addSeparator()
+        for set_id, title in self._set_catalog():
+            action = self.sort_sets_menu.addAction(title)
+            action.setCheckable(True)
+            action.setChecked(set_id == self._sort_set_id)
+            action.triggered.connect(lambda _checked=False, chosen=set_id: self._set_sort(chosen))
+
+    def _set_sort(self, set_id):
+        self._sort_set_id = set_id
+        self._rebuild_manual_table()
+
+    def _column_header_clicked(self, column):
+        """A click on a set's header marks or clears the whole column (owner 2026-10-28)."""
+        self._choose_set_column(column)
+        self._toggle_column_marks(column)
+
+    def _toggle_column_marks(self, column):
+        if self.worker is not None or not 1 <= column <= len(self._set_columns):
+            return
+        states = [self.table.item(row, column).checkState() for row in range(self.table.rowCount())]
+        if not states:
+            return
+        target = (Qt.CheckState.Unchecked if all(state == Qt.CheckState.Checked for state in states)
+                  else Qt.CheckState.Checked)
+        self.table.blockSignals(True)
+        try:
+            for row in range(self.table.rowCount()):
+                cell = self.table.item(row, column)
+                if cell.flags() & Qt.ItemFlag.ItemIsUserCheckable:
+                    cell.setCheckState(target)
+        finally:
+            self.table.blockSignals(False)
+        self._manual_changed()
+        title = dict(self._set_columns).get(self._set_columns[column - 1][0], '')
+        self.status.setText(f'Столбец «{title}»: '
+                            + ('все отметки сняты.' if target == Qt.CheckState.Unchecked else 'отмечены все изображения.'))
+
     def _rebuild_manual_table(self):
         self._set_columns = self._set_catalog()
+        self._refresh_sort_menu()
         self.table.blockSignals(True)
         try:
             self.table.clear()
@@ -911,7 +976,7 @@ class SetExportDialog(QDialog):
                 self.table.horizontalHeader().setSectionResizeMode(
                     column, QHeaderView.ResizeMode.ResizeToContents
                 )
-            for row, path in enumerate(self.paths):
+            for row, path in enumerate(self._ordered_paths()):
                 name = QTableWidgetItem(path.name)
                 name.setToolTip(path.name)
                 # Background mode: never decode a PNG here; icons appear once the worker primed them.
@@ -948,8 +1013,12 @@ class SetExportDialog(QDialog):
         value = validate_export_membership(self.saved_membership)
         if not self._set_columns:
             return value
-        for row, path in enumerate(self.paths):
-            key = str(path)
+        for row in range(self.table.rowCount()):
+            # The row's picture is taken from the row itself: the table may be sorted by a column.
+            holder = self.table.item(row, 0)
+            key = str(holder.data(Qt.ItemDataRole.UserRole) if holder is not None else '')
+            if not key or key not in value:
+                continue
             existing = {link['set_id']: link for link in value[key]['memberships']}
             memberships = []
             for column, (set_id, title) in enumerate(self._set_columns, 1):

@@ -1188,3 +1188,42 @@ def test_running_png_check_is_one_neutral_line_without_a_second_check_button(ima
     dialog._refresh_summary(rebuild=False)
     assert not dialog.review_quality_button.isHidden() or not dialog.quality_panel.isVisible()
     dialog.close()
+
+
+def test_header_click_marks_and_clears_the_whole_column(images):
+    """SET-2 (owner 2026-10-28): one click on a set's header marks the whole column, the next clears it."""
+    dialog = SetExportDialog(images)
+    dialog._show_manual_editor()
+    column = 1
+    # A partly marked column: the first click fills the gaps, the next one clears the whole column.
+    dialog.table.item(0, column).setCheckState(Qt.CheckState.Unchecked)
+    dialog._column_header_clicked(column)
+    assert all(dialog.table.item(row, column).checkState() == Qt.CheckState.Checked
+               for row in range(dialog.table.rowCount()))
+    dialog._column_header_clicked(column)
+    assert all(dialog.table.item(row, column).checkState() == Qt.CheckState.Unchecked
+               for row in range(dialog.table.rowCount()))
+    assert all(not [link for link in item['memberships'] if link['included']]
+               for item in dialog.saved_membership.values())
+    dialog.reject()
+
+
+def test_sorting_by_a_set_keeps_every_mark_with_its_picture(images):
+    """SET-3 (owner 2026-10-28): rows with the chosen set's mark rise, and the marks stay with their files."""
+    dialog = SetExportDialog(images)
+    dialog._show_manual_editor()
+    set_id = dialog._set_catalog()[0][0]
+    dialog.table.item(1, 1).setCheckState(Qt.CheckState.Checked)
+    dialog.table.item(0, 1).setCheckState(Qt.CheckState.Unchecked)
+    dialog._set_sort(set_id)
+    keys = [dialog.table.item(row, 0).data(Qt.ItemDataRole.UserRole) for row in range(dialog.table.rowCount())]
+    assert keys[0] == str(images[1])                      # the marked picture is on top
+    assert dialog.table.item(0, 1).checkState() == Qt.CheckState.Checked
+    membership = dialog._membership()
+    assert membership[str(images[1])]['memberships'][0]['included'] is True
+    assert membership[str(images[0])]['memberships'][0]['included'] is False
+    assert len(membership) == len(images)
+    dialog._set_sort(None)                                # «Исходный порядок»
+    assert [dialog.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+            for row in range(dialog.table.rowCount())] == [str(path) for path in dialog.paths]
+    dialog.reject()
