@@ -13,7 +13,7 @@
 
 Тесты: `test_png_grid_keeps_the_place_while_a_picture_is_being_redone`, `test_a_done_picture_whose_file_vanished_can_be_brought_back`, `test_the_recovery_menu_item_explains_itself_instead_of_vanishing`; подвыборка «проверка PNG + экспорт наборов + автоклипарт + метки + восстановление» — **211 passed**.
 
-`ветка codex/fix-png-check-speed-20261030 · слито в develop/3.2: нет · в сборке: нет · опубликовано: нет`
+`ветка codex/fix-png-check-speed-20261030 → PR #141 · слито в develop/3.2: да (cb9da4a) · в сборке: нет · опубликовано: нет`
 
 ## Старт: зависание без окна, фоновая проверка модулей не завершалась (2026-10-30) {#startup-hang-20261030}
 
