@@ -1525,7 +1525,13 @@ class RunQueueSession(QObject):
         return request
 
     def upscale_redoable_indices(self, indices) -> list[int]:
-        """Finished items whose picture as it entered the upscale stage is still on disk (owner 2026-10-30)."""
+        """Items whose picture as it entered the upscale stage is still on disk (owner 2026-10-30).
+
+        A cancelled picture counts too: a stopped redo leaves every row «отменено» while its
+        saved upscale input stays on disk, so «Апскейл заново» can simply repeat the stage
+        (live acceptance 2026-10-30: every press said «Выделите картинки в списке» although
+        rows were highlighted).
+        """
         if (self.running or getattr(self.request, "queue_items", None)
                 or not getattr(self.request, "generated_prompts", None)):
             return []
@@ -1535,7 +1541,7 @@ class RunQueueSession(QObject):
                 continue
             item = self.items[index]
             source = Path(item.cutout_path) if item.cutout_path else None
-            if (item.status in {RunItemStatus.SUCCEEDED, RunItemStatus.FAILED}
+            if (item.status in {RunItemStatus.SUCCEEDED, RunItemStatus.FAILED, RunItemStatus.CANCELLED}
                     and source is not None and _is_within(source, self.transient_dir)
                     and not source.is_symlink() and source.is_file()):
                 chosen.append(index)

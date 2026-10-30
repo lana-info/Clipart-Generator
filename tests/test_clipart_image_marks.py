@@ -8,7 +8,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PIL import Image
-from PyQt6.QtWidgets import QApplication, QSizePolicy
+from PyQt6.QtWidgets import QApplication, QMessageBox, QSizePolicy
 
 from studio_auto_clipart_state import AutoClipartStateExtension
 from studio_clipart_versions import (
@@ -1191,4 +1191,116 @@ def test_redo_menu_has_three_variants_with_the_full_path_in_the_tip(tmp_path):
     # Кнопка у самой картинки на месте и не скрыта.
     assert review.strip.upscale_button.text() == "Апскейл заново"
     assert review.strip.upscale_button in review.strip.persistent_actions
+    editor.deleteLater()
+
+
+def stopped_redo_session(tmp_path):
+    """Состояние владельца 2026-10-30 (живая приёмка, экран «Результаты»).
+
+    Повтор апскейла начался и был остановлен через секунду: все строки списка «отменены»
+    (баннер «Обработано: 0 Ошибки: 0 Пропущено: 30 Всего: 30»), но сохранённая картинка
+    до апскейла осталась на диске у каждой строки.
+    """
+    session = generation_session(tmp_path)
+    for index, item in enumerate(session.items):
+        item.cutout_path = str(png(Path(session.transient_dir) / f"gen_upscale_input_{index:03d}.png"))
+    session.prepare_upscale_redo(list(range(len(session.items))))
+    session.handle_cancelled_terminal()
+    assert session.counts()["cancelled"] == len(session.items)
+    return session
+
+
+def test_a_cancelled_picture_with_a_saved_input_can_be_upscaled_again(tmp_path):
+    """После остановки повтора строки «отменены», но вход апскейла сохранён: «Апскейл заново»
+    берёт его так же, как у успешных и ошибочных картинок (владелец 2026-10-30)."""
+    session = stopped_redo_session(tmp_path)
+    inputs = [item.cutout_path for item in session.items]
+    assert session.items[1].status is RunItemStatus.CANCELLED
+    controller = Mock()
+    controller.is_busy.return_value = False
+    controller.worker = None
+    support = RunQueueSupport.__new__(RunQueueSupport)
+    support.controller = controller
+    support.session = session
+    started = []
+    support._start_worker = lambda _worker, request: started.append(request) or request
+
+    support.upscale_redo_selected([1])
+
+    assert started, "сохранённый вход отменённой картинки не взят в повторный апскейл"
+    request = started[0]
+    assert request.mode == "mode2_process" and request.generated_prompts == []
+    assert request.selected_files == [str(Path(inputs[1]).resolve())]
+    assert session.items[1].status is RunItemStatus.PENDING
+    assert session.items[1].short_message == "Ожидает повторного апскейла."
+    controller.before_replace_outputs.assert_called_once_with([1], "upscale_redo")
+
+
+def test_upscale_redo_on_selected_rows_after_a_stopped_redo_runs_from_the_saved_inputs(tmp_path, monkeypatch):
+    """Живая приёмка 2026-10-30: строки выделены («Пропущено: 30» после остановки), нажатие
+    «Апскейл заново» в меню «Переделать выбранные» запускает повтор именно для выделенной
+    картинки, а не отвечает «Выделите картинки в списке»."""
+    review, editor, session, flow = open_review(tmp_path)
+    for index, item in enumerate(session.items):
+        item.cutout_path = str(png(Path(session.transient_dir) / f"gen_upscale_input_{index:03d}.png"))
+    session.prepare_upscale_redo([0, 1])
+    session.handle_cancelled_terminal()
+    assert session.counts()["cancelled"] == 2
+    page = flow.run_queue.page
+    page.queue.clearSelection()
+    page.queue.item(1).setSelected(True)
+    assert page.queue.selected_rows() == [1]  # строки выделены (и «Переделать выбранные» активна)
+    dialogs = []
+    monkeypatch.setattr(QMessageBox, "information",
+                        lambda *args: dialogs.append(str(args[2])) or QMessageBox.StandardButton.Ok)
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+    flow.run_queue.upscale_redo_selected = Mock(return_value=object())
+
+    review.upscale_redo_selected_rows()
+
+    flow.run_queue.upscale_redo_selected.assert_called_once_with([1])
+    assert dialogs == [], "владелец получает «Выделите…» при выделенных строках"
+    editor.deleteLater()
+
+
+def test_selected_rows_without_a_saved_input_get_an_honest_upscale_redo_refusal(tmp_path, monkeypatch):
+    """Выделенные строки без сохранённого входа: отказ называет причину (нет картинки до апскейла),
+    не смешивая «нет входа» с «ничего не выделено» (владелец 2026-10-30)."""
+    review, editor, session, flow = open_review(tmp_path)
+    page = flow.run_queue.page
+    session.items[0].status = RunItemStatus.CANCELLED  # незавершённая строка тоже без сохранённого входа
+    for row in (0, 1):
+        page.queue.item(row).setSelected(True)
+    assert page.queue.selected_rows() == [0, 1]
+    dialogs = []
+    monkeypatch.setattr(QMessageBox, "information",
+                        lambda *args: dialogs.append(str(args[2])) or QMessageBox.StandardButton.Ok)
+    flow.run_queue.upscale_redo_selected = Mock(return_value=object())
+
+    review.upscale_redo_selected_rows()
+
+    flow.run_queue.upscale_redo_selected.assert_not_called()
+    assert len(dialogs) == 1
+    message = dialogs[0]
+    assert "нет сохранённой картинки до апскейла" in message
+    assert "Выделите" not in message, "при выделенных строках нельзя звать выделять их снова"
+    assert "перегенерируйте" in message.lower() and "удалите фон заново" in message.lower()
+    editor.deleteLater()
+
+
+def test_empty_selection_still_asks_to_select_rows_for_upscale_redo(tmp_path, monkeypatch):
+    """Пустое выделение: подсказка «Выделите картинки в списке» остаётся на месте."""
+    review, editor, session, flow = open_review(tmp_path)
+    page = flow.run_queue.page
+    page.queue.clearSelection()
+    dialogs = []
+    monkeypatch.setattr(QMessageBox, "information",
+                        lambda *args: dialogs.append(str(args[2])) or QMessageBox.StandardButton.Ok)
+    flow.run_queue.upscale_redo_selected = Mock(return_value=object())
+
+    review.upscale_redo_selected_rows()
+
+    flow.run_queue.upscale_redo_selected.assert_not_called()
+    assert len(dialogs) == 1 and "Выделите картинки в списке" in dialogs[0]
     editor.deleteLater()
