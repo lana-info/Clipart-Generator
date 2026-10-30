@@ -253,6 +253,51 @@ jobs:
             --executable "dist\Vibix Images\Vibix Images.exe" `
             --checksum "release\$env:INSTALLER_BASENAME.sha256" @profileArgs
 
+      - name: Verify installer Authenticode signature (guarded skip)
+        env:
+          SIGNING_CERT: ${{ secrets.WINDOWS_AUTHENTICODE_PFX }}
+          SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_AUTHENTICODE_PFX_PASSWORD }}
+        shell: powershell
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERT)) {
+            Write-Host "SKIP: Windows Authenticode certificate is not configured (secrets WINDOWS_AUTHENTICODE_PFX / WINDOWS_AUTHENTICODE_PFX_PASSWORD are absent)."
+            Write-Host "SKIP consequence: the installer stays unsigned and is delivered with its SHA-256 sidecar only; SmartScreen will show an unsigned-publisher warning until the owner provisions the OV/EV certificate and re-runs this step."
+            exit 0
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "windows-signing.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:SIGNING_CERT))
+          & signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
+            /f "$pfxPath" /p "$env:SIGNING_CERT_PASSWORD" "release\$env:INSTALLER_BASENAME.exe"
+          if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
+          & signtool verify /pa /all "release\$env:INSTALLER_BASENAME.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Installer is not signed after signtool sign (exit code $LASTEXITCODE)" }
+          $status = (Get-AuthenticodeSignature -FilePath "release\$env:INSTALLER_BASENAME.exe").Status
+          if ($status -ne "Valid") { throw "Installer Authenticode status after signing: $status" }
+          Write-Host "SIGNED: installer verified as Authenticode-signed."
+
+      - name: Sign release delivery manifest (guarded skip)
+        env:
+          RELEASE_MANIFEST_SIGNING_KEY: ${{ secrets.RELEASE_MANIFEST_SIGNING_KEY }}
+        shell: powershell
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_MANIFEST_SIGNING_KEY)) {
+            Write-Host "SKIP: delivery signing key is not configured (secret RELEASE_MANIFEST_SIGNING_KEY is absent)."
+            Write-Host "SKIP consequence: the delivery manifest stays unsigned; clients accept it in legacy mode until a delivery public key is pinned in the application."
+            exit 0
+          }
+          $manifestPath = "release\delivery-manifest-$env:APP_VERSION-windows-x64.json"
+          $envelopePath = "release\delivery-manifest-$env:APP_VERSION-windows-x64.signed.json"
+          @{
+            product_id = "clipart-generator"
+            latest_version = $env:APP_VERSION
+            platform = "windows-x64"
+            filename = "$env:INSTALLER_BASENAME.exe"
+            sha256 = $env:INSTALLER_SHA256
+          } | ConvertTo-Json -Compress | Out-File -FilePath $manifestPath -Encoding ascii
+          python delivery_signature.py sign `
+            --payload $manifestPath --key-id delivery-v1 --output $envelopePath
+          if ($LASTEXITCODE -ne 0) { throw "Delivery manifest signing failed (exit code $LASTEXITCODE)" }
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -264,6 +309,7 @@ jobs:
             release/${{ env.INSTALLER_BASENAME }}.sha256
             release/VERSION.txt
             release/build-provenance.json
+            release/delivery-manifest-*.json
             release/ui-evidence/*.png
             release/ui-evidence/*.json
 
@@ -361,6 +407,61 @@ jobs:
       - name: Write build provenance
         run: python -m build_provenance
 
+      - name: Apple notarization (guarded skip)
+        env:
+          APPLE_ID: ${{ secrets.APPLE_NOTARIZATION_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARIZATION_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_NOTARIZATION_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_APP_SPECIFIC_PASSWORD:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; then
+            echo "SKIP: Apple notarization credentials are not configured (secrets APPLE_NOTARIZATION_APPLE_ID, APPLE_NOTARIZATION_APP_SPECIFIC_PASSWORD, APPLE_NOTARIZATION_TEAM_ID are absent)."
+            echo "SKIP consequence: the ZIP stays ad-hoc signed without notarization; new macOS machines will show a Gatekeeper warning until the owner joins Apple Developer Program and provisions the notarization credentials."
+            exit 0
+          fi
+          # Submit the archived app, wait for the Apple verdict, staple the
+          # ticket onto the app bundle and rebuild the ZIP so the published
+          # digest sidecar covers the notarized bytes.
+          staging="$RUNNER_TEMP/notarize-staging"
+          rm -rf "$staging"
+          mkdir -p "$staging"
+          ditto -x -k "release/$ARCHIVE_BASENAME.zip" "$staging"
+          xcrun notarytool submit "release/$ARCHIVE_BASENAME.zip" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$staging/Vibix Images.app"
+          xcrun stapler validate "$staging/Vibix Images.app"
+          ditto -c -k --sequesterRsrc --keepParent "$staging/Vibix Images.app" "release/$ARCHIVE_BASENAME.zip"
+          unzip -t "release/$ARCHIVE_BASENAME.zip"
+          hash="$(shasum -a 256 "release/$ARCHIVE_BASENAME.zip" | awk '{print $1}')"
+          printf '%s  %s.zip\n' "$hash" "$ARCHIVE_BASENAME" > "release/$ARCHIVE_BASENAME.sha256"
+          echo "INSTALLER_SHA256=$hash" >> "$GITHUB_ENV"
+          echo "NOTARIZED: archive stapled, validated and digest sidecar refreshed."
+
+      - name: Sign release delivery manifest (guarded skip)
+        env:
+          RELEASE_MANIFEST_SIGNING_KEY: ${{ secrets.RELEASE_MANIFEST_SIGNING_KEY }}
+          MANIFEST_PLATFORM: ${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_MANIFEST_SIGNING_KEY:-}" ]; then
+            echo "SKIP: delivery signing key is not configured (secret RELEASE_MANIFEST_SIGNING_KEY is absent)."
+            echo "SKIP consequence: the delivery manifest stays unsigned; clients accept it in legacy mode until a delivery public key is pinned in the application."
+            exit 0
+          fi
+          manifest_path="release/delivery-manifest-$APP_VERSION-$MANIFEST_PLATFORM.json"
+          envelope_path="release/delivery-manifest-$APP_VERSION-$MANIFEST_PLATFORM.signed.json"
+          printf '{"product_id":"clipart-generator","latest_version":"%s","platform":"%s","filename":"%s.zip","sha256":"%s"}\n' \
+            "$APP_VERSION" "$MANIFEST_PLATFORM" "$ARCHIVE_BASENAME" "$INSTALLER_SHA256" \
+            > "$manifest_path"
+          python delivery_signature.py sign \
+            --payload "$manifest_path" --key-id delivery-v1 --output "$envelope_path"
+          test -s "$envelope_path"
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -372,6 +473,7 @@ jobs:
             release/VibixImages-macOS-*.sha256
             release/VERSION.txt
             release/build-provenance.json
+            release/delivery-manifest-*.json
             release/ui-evidence/*.png
             release/ui-evidence/*.json
             release/extracted-evidence/*.json

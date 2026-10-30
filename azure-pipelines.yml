@@ -122,6 +122,52 @@ steps:
       Copy-Item -LiteralPath $setupPath, $checksumPath, 'release/VERSION.txt', 'release/build-provenance.json' -Destination $staging
     displayName: Validate and stage installer artifact
 
+  - powershell: |
+      if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERT)) {
+        Write-Host "SKIP: Windows Authenticode certificate is not configured (secret-linked variables SIGNING_CERT / SIGNING_CERT_PASSWORD are absent)."
+        Write-Host "SKIP consequence: the installer stays unsigned and is delivered with its SHA-256 sidecar only; SmartScreen will show an unsigned-publisher warning until the owner provisions the OV/EV certificate and re-runs this step."
+        exit 0
+      }
+      $pfxPath = Join-Path $env:AGENT_TEMPDIRECTORY 'windows-signing.pfx'
+      [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:SIGNING_CERT))
+      & signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
+        /f "$pfxPath" /p "$env:SIGNING_CERT_PASSWORD" '.\release\VibixImages-Setup-${{ parameters.appVersion }}.exe'
+      if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
+      & signtool verify /pa /all '.\release\VibixImages-Setup-${{ parameters.appVersion }}.exe'
+      if ($LASTEXITCODE -ne 0) { throw "Installer is not signed after signtool sign (exit code $LASTEXITCODE)" }
+      $status = (Get-AuthenticodeSignature -FilePath '.\release\VibixImages-Setup-${{ parameters.appVersion }}.exe').Status
+      if ($status -ne 'Valid') { throw "Installer Authenticode status after signing: $status" }
+      Write-Host "SIGNED: installer verified as Authenticode-signed."
+    displayName: Verify installer Authenticode signature (guarded skip)
+    env:
+      SIGNING_CERT: $(SIGNING_CERT)
+      SIGNING_CERT_PASSWORD: $(SIGNING_CERT_PASSWORD)
+
+  - powershell: |
+      if ([string]::IsNullOrWhiteSpace($env:RELEASE_MANIFEST_SIGNING_KEY)) {
+        Write-Host "SKIP: delivery signing key is not configured (secret-linked variable RELEASE_MANIFEST_SIGNING_KEY is absent)."
+        Write-Host "SKIP consequence: the delivery manifest stays unsigned; clients accept it in legacy mode until a delivery public key is pinned in the application."
+        exit 0
+      }
+      $version = '${{ parameters.appVersion }}'
+      $manifestPath = "release\delivery-manifest-$version-windows-x64.json"
+      $envelopePath = "release\delivery-manifest-$version-windows-x64.signed.json"
+      $hash = (Get-FileHash -LiteralPath "release\VibixImages-Setup-$version.exe" -Algorithm SHA256).Hash
+      @{
+        product_id = 'clipart-generator'
+        latest_version = $version
+        platform = 'windows-x64'
+        filename = "VibixImages-Setup-$version.exe"
+        sha256 = $hash
+      } | ConvertTo-Json -Compress | Out-File -FilePath $manifestPath -Encoding ascii
+      python delivery_signature.py sign `
+        --payload $manifestPath --key-id delivery-v1 --output $envelopePath
+      if ($LASTEXITCODE -ne 0) { throw "Delivery manifest signing failed (exit code $LASTEXITCODE)" }
+      Copy-Item -LiteralPath $manifestPath, $envelopePath -Destination '$(Build.ArtifactStagingDirectory)'
+    displayName: Sign release delivery manifest (guarded skip)
+    env:
+      RELEASE_MANIFEST_SIGNING_KEY: $(RELEASE_MANIFEST_SIGNING_KEY)
+
   - task: PublishPipelineArtifact@1
     displayName: Publish Windows installer
     inputs:
