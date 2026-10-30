@@ -51,10 +51,16 @@ def test_archive_matches_by_prompt_and_prefers_the_projects_own_record(tmp_path)
     assert archived_outputs([{"broken": True}, None], prompts, tmp_path) == {}
 
 
-def test_recoverable_only_fills_pictures_that_are_not_done(tmp_path):
-    png(tmp_path / "a_01_ready.png")
+def test_recoverable_fills_empty_positions_and_attaches_orphan_files(tmp_path):
+    """Правило владельца 2026-10-30: подтягиваем и пустые позиции, и ничейные файлы из папки."""
+    first = png(tmp_path / "a_01_ready.png")
     png(tmp_path / "b_02_ready.png")
-    items = [SimpleNamespace(done=True), SimpleNamespace(done=False)]
-    found = recoverable(items, [{}, {}], [], tmp_path, is_done=lambda item: item.done)
-    assert list(found) == [1]
-    assert recoverable([SimpleNamespace(done=True)], [{}], [], tmp_path, is_done=lambda item: item.done) == {}
+    other = png(tmp_path / "c_03_ready.png")
+    items = [
+        SimpleNamespace(done=True, output_path=str(first)),   # 0: уже показывает этот самый файл
+        SimpleNamespace(done=False, output_path=""),          # 1: позиция без картинки — заполняем
+        SimpleNamespace(done=True, output_path=str(tmp_path / "old_c_03_ready.png")),  # 2: картинка другая
+    ]
+    found = recoverable(items, [{}, {}, {}], [], tmp_path, is_done=lambda item: item.done)
+    assert found == {1: Path(tmp_path / "b_02_ready.png").resolve(), 2: other.resolve()}
+    assert 0 not in found, "файл, который уже показан позицией, подключать не нужно"

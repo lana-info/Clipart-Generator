@@ -1329,16 +1329,28 @@ class AutoClipartFlowController(ClipartFlowController):
         if session is None or not found or self.is_busy():
             return
         page = self.run_queue.page
+        replacing = [index for index in found if session.items[index].output_path]
+        message = f"В папке результата найдено готовых PNG: {len(found)}.\n\nПодключить их к набору? " \
+                  "Новая генерация не запускается, платных запросов нет, файлы не изменяются."
+        if replacing:
+            message += (f"\n\nУ картинок с номерами из этого списка уже есть своя картинка ({len(replacing)}): "
+                        "прежняя станет версией и её можно вернуть через «Историю версий».")
         if QMessageBox.question(
-                page, "Вернуть готовые файлы",
-                f"В папке результата найдено готовых PNG: {len(found)}.\n\nПодключить их к набору? "
-                "Новая генерация не запускается, платных запросов нет, файлы не изменяются.",
+                page, "Вернуть готовые файлы", message,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes) != QMessageBox.StandardButton.Yes:
             return
+        from studio_clipart_versions import keep_version
         from v3_run_queue import RunItemStatus
         for index, path in found.items():
             item = session.items[index]
+            if item.output_path:
+                # Owner 2026-10-30: attaching a file to a position that already has a picture must not
+                # lose that picture — it becomes a version first (History can bring it back).
+                try:
+                    keep_version(item, session.output_dir)
+                except (OSError, ValueError):
+                    continue  # версию сохранить нельзя — картинку не трогаем, чтобы ничего не потерять
             item.status = RunItemStatus.SUCCEEDED
             item.output_path = str(path)
             item.editor_output_path = ""

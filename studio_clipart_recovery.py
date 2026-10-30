@@ -71,11 +71,28 @@ def archived_outputs(previous_runs, prompts, output_dir) -> dict[int, Path]:
     return result
 
 
+def _current_output(item) -> Path | None:
+    raw = str(getattr(item, "output_path", "") or "")
+    return Path(raw).resolve(strict=False) if raw else None
+
+
 def recoverable(session_items, prompts, previous_runs, output_dir, *, is_done) -> dict[int, Path]:
-    """What can be reconnected: positions without a finished picture, with a finished PNG on disk."""
-    wanted = [index for index, item in enumerate(session_items) if not is_done(item)]
-    if not wanted:
-        return {}
+    """What can be reconnected from the result folder.
+
+    Two cases (owner 2026-10-30):
+    * a position without a finished picture (an interrupted or replanned run) — filled as before;
+    * a ready PNG that belongs to no position at all — the files the owner sees in her folder and calls
+      her latest results. It becomes the picture of its own position; the module keeps the previous
+      picture of that position as a version before replacing it.
+    """
     found = dict(scan_ready_outputs(output_dir, len(session_items)))
     found.update(archived_outputs(previous_runs, prompts, output_dir))  # the project's own record wins
-    return {index: found[index] for index in wanted if index in found}
+    result: dict[int, Path] = {}
+    for index, item in enumerate(session_items):
+        path = found.get(index)
+        if path is None:
+            continue
+        if is_done(item) and _current_output(item) == Path(path).resolve(strict=False):
+            continue  # the position already shows this very file: nothing to attach
+        result[index] = path
+    return result
