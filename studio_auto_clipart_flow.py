@@ -1247,9 +1247,16 @@ class AutoClipartFlowController(ClipartFlowController):
     def _refresh_more_menu(self):
         page = self.run_queue.page
         found = self._recoverable_outputs()
-        self.more_recover_action.setVisible(bool(found))
-        if found:
-            self.more_recover_action.setText(f"Вернуть готовые файлы ({len(found)})")
+        # Owner 2026-10-30: the item used to vanish when there was nothing to attach, so the owner
+        # hunted for a menu entry that was not there. It stays, with the reason it does nothing.
+        self.more_recover_action.setVisible(True)
+        self.more_recover_action.setText(
+            f"Вернуть готовые файлы ({len(found)})" if found else "Вернуть готовые файлы")
+        self.more_recover_action.setEnabled(bool(found))
+        self.more_recover_action.setToolTip(
+            "Подключить готовые PNG из папки результата к этому запуску. Новая генерация не запускается, "
+            "платных запросов нет." if found
+            else "Подключать нечего: у каждой картинки запуска есть свой готовый PNG.")
         if self.review is not None:
             trash = self.review.trash_button
             self.more_trash_action.setText(trash.text())
@@ -1262,9 +1269,17 @@ class AutoClipartFlowController(ClipartFlowController):
         if session is None or session.running:
             return {}
         prompts = [PromptEntry.from_value(item.payload).to_dict() for item in session.items]
+
+        def is_done(item):
+            # Owner 2026-10-30: a recorded path is not a picture. A file removed or moved away (working
+            # cleanup, an interrupted redo) left the position showing nothing in the PNG check and
+            # offering nothing in «Вернуть готовые файлы» — one cause for «картинок нет и вернуть нечем».
+            return (item.status is RunItemStatus.SUCCEEDED and bool(item.output_path)
+                    and Path(item.output_path).is_file())
+
         return recoverable(
             session.items, prompts, self.shell.state.data.automatic.get("previous_runs", []),
-            session.output_dir, is_done=lambda item: item.status is RunItemStatus.SUCCEEDED and bool(item.output_path))
+            session.output_dir, is_done=is_done)
 
     def _refresh_recovery(self):
         found = self._recoverable_outputs() if hasattr(self, "recover_row") else {}

@@ -1724,3 +1724,53 @@ def test_replan_keeps_unconfirmed_pictures_beside_confirmed_ones(workspace, monk
     assert by_object[kept[0].payload['object_id']].review_checked
     assert not by_object[kept[1].payload['object_id']].review_checked  # «Ок» was never placed; the mark travels as it was
     factory.assert_not_called()
+
+
+def test_a_done_picture_whose_file_vanished_can_be_brought_back(workspace, monkeypatch):
+    """Владелец 2026-10-30: файл картинки пропал — её нет ни в сетке, ни в «Вернуть готовые файлы».
+
+    A recorded path is not a picture: the recovery used to treat «succeeded with a path» as done, so a
+    file removed or moved away left the position unreachable from both screens.
+    """
+    view, controller, _, worker = workspace
+    controller.brief.total.setValue(3)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    gone = session.output_dir / 'flower_01_ready.png'   # the recorded picture, already removed from disk
+    kept = session.output_dir / 'flower_02_ready_2.png'  # another ready picture of that position on disk
+    for path, position in ((kept, 1),):
+        Image.new('RGBA', (64, 64), (120, 80, 40, 255)).save(path)
+    for index, item in enumerate(session.items):
+        item.status = RunItemStatus.CANCELLED
+    session.items[1].status = RunItemStatus.SUCCEEDED
+    session.items[1].output_path = str(gone)            # the file is not there any more
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    controller.save_timer.stop()
+
+    controller._refresh_more_menu()
+    assert controller.more_recover_action.isEnabled()
+    assert controller.more_recover_action.text() == 'Вернуть готовые файлы (1)'
+    assert controller._recoverable_outputs().keys() == {1}
+    asked = []
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: asked.append(args[2]) or QMessageBox.StandardButton.Yes)
+    controller.recover_results()
+    assert session.items[1].output_path == str(kept.resolve())
+    assert session.items[1].status is RunItemStatus.SUCCEEDED
+    assert not session.items[1].review_checked  # back as «Не проверено»
+
+
+def test_the_recovery_menu_item_explains_itself_instead_of_vanishing(workspace):
+    """Владелец 2026-10-30: «кнопка есть, пункта нет» — пункт теперь всегда на месте и говорит, почему выключен."""
+    view, controller, _, worker = workspace
+    controller.brief.total.setValue(3)
+    prepare_launch(controller)
+    session = _ready_run(controller, 3, confirmed=(0, 1, 2))
+    controller._refresh_more_menu()
+    assert controller.more_recover_action.isVisible()
+    assert not controller.more_recover_action.isEnabled()
+    assert controller.more_recover_action.text() == 'Вернуть готовые файлы'
+    assert 'Подключать нечего' in controller.more_recover_action.toolTip()
