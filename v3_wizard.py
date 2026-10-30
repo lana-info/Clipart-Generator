@@ -544,6 +544,10 @@ class AppShell(QWidget):
             widget = item.widget()
             if widget is not None:
                 widget.hide()
+                # T-QUAL-5: deferred deletion needs a running event loop; while the
+                # old controls stay parented they shadow the live step controls in
+                # findChild (PyQt6 >= 6.10 returns the oldest match), so detach now.
+                widget.setParent(None)
                 widget.deleteLater()
         self.step_labels.clear()
 
