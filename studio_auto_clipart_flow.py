@@ -691,8 +691,7 @@ class AutoClipartFlowController(ClipartFlowController):
             stale = getattr(self, "_marks_listener", None)
             if stale in self.review.marks_listeners:
                 self.review.marks_listeners.remove(stale)
-            self._marks_listener = lambda: panel.enable_marks(self.review.marks_by_path(), self.review.edited_paths(),
-                               self.review.notes_by_path())
+            self._marks_listener = lambda: self._marks_changed_on_export(panel)
             self.review.marks_listeners.append(self._marks_listener)
             panel.mark_requested.connect(self.review.mark_output)
             panel.prompt_requested.connect(lambda path: self.review.edit_prompt_for(path, panel))
@@ -701,6 +700,28 @@ class AutoClipartFlowController(ClipartFlowController):
         if keep_view is not None:
             panel._select_path = keep_view
             panel._show_quality_review()
+
+    def _marks_changed_on_export(self, panel):
+        """A mark change shows on the export step at once (owner 2026-10-30).
+
+        Marks move a picture in or out of the sets (SET-0), but the sets table used to keep a row of a
+        picture just marked as a defect until the owner left the step and came back. Badges are refreshed
+        right away; the table is rebuilt only when the confirmed list really changed (deferred, because
+        this runs from inside the review's own listener loop).
+        """
+        if self.review is None or panel is None:
+            return
+        panel.enable_marks(self.review.marks_by_path(), self.review.edited_paths(),
+                           self.review.notes_by_path())
+        session = self.run_queue.session
+        if session is None or self.export_panel is not panel:
+            return
+        try:
+            confirmed = [Path(path).resolve() for path in self.run_queue.page._export_paths()]
+        except Exception:
+            return
+        if confirmed != list(panel.paths):
+            QTimer.singleShot(0, self._refresh_export)
 
     def navigate(self, direction):
         if self.is_busy():

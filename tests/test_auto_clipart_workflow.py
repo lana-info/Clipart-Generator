@@ -1774,3 +1774,34 @@ def test_the_recovery_menu_item_explains_itself_instead_of_vanishing(workspace):
     assert not controller.more_recover_action.isEnabled()
     assert controller.more_recover_action.text() == 'Вернуть готовые файлы'
     assert 'Подключать нечего' in controller.more_recover_action.toolTip()
+
+
+def test_a_picture_marked_as_a_defect_leaves_the_sets_at_once(workspace):
+    """Владелец 2026-10-30: на странице наборов видны картинки, помеченные браком.
+
+    A confirmed «Ок» picture that is then marked as a defect stops being a set member (SET-0). The
+    sets table used to keep its row until the owner left the step and came back.
+    """
+    view, controller, _, worker = workspace
+    controller.brief.total.setValue(3)
+    prepare_launch(controller)
+    session = _ready_run(controller, 3, confirmed=(0, 1, 2))
+    controller._refresh_export()
+    wait_png_check(controller.export_panel)
+    panel = controller.export_panel
+    assert len(panel.paths) == 3
+
+    defect = str(Path(session.items[1].output_path).resolve())
+    controller.review.mark_output(defect, "bad_generation")
+    controller.save_timer.stop()
+    import time
+    deadline = time.monotonic() + 5
+    while defect in [str(path) for path in panel.paths] and time.monotonic() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.01)
+    panel = controller.export_panel or panel
+
+    assert defect not in [str(path) for path in panel.paths], "картинка с браком осталась в наборах"
+    assert len(panel.paths) == 2
+    # В проверке PNG она остаётся — там владелец её и видит (правило 2026-10-28).
+    assert defect in [str(path) for path in panel.review_paths]
