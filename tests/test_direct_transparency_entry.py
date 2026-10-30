@@ -35,8 +35,15 @@ def digest(path):
 
 
 def entry(shell):
+    # The live stepper control only: a whole-tree findChild can match stale
+    # buttons from previous refreshes (they stay parented until a running event
+    # loop processes the deferred deletion), and PyQt6 >= 6.10 returns the
+    # oldest match, which disabled all entry assertions on developer machines.
     from v3_components import V3Button
-    return shell.findChild(V3Button,'directTransparencyButton')
+    matches = [label for label in shell.step_labels
+               if isinstance(label, V3Button) and label.objectName() == 'directTransparencyButton']
+    assert len(matches) == 1, 'the stepper must show exactly one live transparency control'
+    return matches[0]
 
 
 def test_left_entry_only_enables_for_available_png_and_never_runs_worker(tmp_path,app):
