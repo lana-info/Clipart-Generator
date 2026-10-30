@@ -687,6 +687,76 @@ def test_quality_fix_action_emits_exact_png_path(images):
     assert requested == [str(images[0].resolve())]
 
 
+def test_excluded_picture_can_be_brought_back_and_keeps_its_mark(images):
+    """Владелец 2026-10-30: исключение не тупик — та же кнопка возвращает картинку, а метка остаётся на виду.
+
+    Before the fix the excluded picture showed only the crossed circle, its mark («Брак вырезания»)
+    never appeared, the button switched itself off and there was no way back from this screen.
+    """
+    from studio_alpha_qc import AlphaQcReport
+    key = str(images[0].resolve())
+    membership = _membership_for_sets([images[0]], ['Мини', 'Полный'])
+    report = AlphaQcReport(key, 'ok', (), width=32, height=32)
+    dialog = SetExportDialog([images[0]], membership=membership, quality_reports=[report])
+    saved = []
+    dialog.membership_saved.connect(saved.append)
+    dialog.enable_marks({key: 'bad_cutout'})
+    dialog._show_quality_review()
+    dialog.quality_list.setCurrentRow(0)
+    assert dialog.quality_exclude_button.text() == 'Исключить из наборов'
+    assert dialog.quality_fix_button.isEnabled()
+
+    dialog.quality_exclude_button.click()
+    assert all(not link['included'] for link in saved[-1][key]['memberships'])
+    assert not dialog._path_is_active(key)
+    assert dialog._marks[key] == 'bad_cutout'  # the mark itself stays untouched by the exclusion
+    assert 'Исключено из наборов · Брак вырезания' in dialog.quality_list.item(0).toolTip()
+    assert dialog.quality_exclude_button.isEnabled()          # the way back is on screen
+    assert dialog.quality_exclude_button.text() == 'Вернуть в наборы'
+    assert dialog.quality_fix_button.isEnabled()              # fixing has nothing to do with the sets
+
+    dialog.quality_exclude_button.click()
+    assert all(link['included'] for link in saved[-1][key]['memberships'])
+    assert dialog._path_is_active(key)
+    assert dialog.quality_exclude_button.text() == 'Исключить из наборов'
+    assert 'Исключено из наборов' not in dialog.quality_list.item(0).toolTip()
+    dialog.reject()
+
+
+def test_quality_fix_works_for_an_excluded_picture(images):
+    """Владелец 2026-10-30: «Редактировать прозрачность» доступна и для исключённой картинки."""
+    from studio_alpha_qc import AlphaQcReport
+    key = str(images[0].resolve())
+    membership = _membership_for_sets([images[0]], ['Мини'])
+    for link in membership[key]['memberships']:
+        link['included'] = False
+    report = AlphaQcReport(key, 'ok', (), width=32, height=32)
+    dialog = SetExportDialog([images[0]], membership=membership, quality_reports=[report])
+    requested = []
+    dialog.fix_requested.connect(requested.append)
+    dialog._show_quality_review()
+    dialog.quality_list.setCurrentRow(0)
+    assert dialog.quality_fix_button.isEnabled()
+    dialog.quality_fix_button.click()
+    assert requested == [key]
+    dialog.reject()
+
+
+def test_exclude_button_is_disabled_for_a_picture_that_is_not_in_sets_yet(images):
+    """Картинка без «Ок» ещё не в наборах: исключать нечего, и кнопка это говорит, а не молчит."""
+    from studio_alpha_qc import AlphaQcReport
+    key = str(images[0].resolve())
+    report = AlphaQcReport(key, 'ok', (), width=32, height=32)
+    dialog = SetExportDialog([], review_paths=[images[0]], quality_reports=[report])
+    dialog._show_quality_review()
+    dialog.quality_list.setCurrentRow(0)
+    assert not dialog._path_has_sets(key)
+    assert not dialog.quality_exclude_button.isEnabled()
+    assert 'не в наборах' in dialog.quality_exclude_button.toolTip()
+    assert dialog.quality_exclude_button.text() == 'Исключить из наборов'
+    dialog.reject()
+
+
 def test_quality_exclusion_resolves_ambiguity_when_one_variant_remains(images):
     from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
     membership = _membership_for_sets(images[:2], ['Мини'])
