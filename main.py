@@ -11502,6 +11502,10 @@ if __name__ == "__main__":
         and "--local-processing-smoke" not in sys.argv
     ):
         os.environ["QT_QPA_PLATFORM"] = "windows"
+    # A recovery restart of the startup watchdog must never restart itself again.
+    startup_recovered = "--startup-recovered" in sys.argv
+    if startup_recovered:
+        sys.argv.remove("--startup-recovered")
     app = QApplication(sys.argv)
     configure_application_identity(app)
     if "--release-entrypoint-smoke" in sys.argv:
@@ -11537,10 +11541,23 @@ if __name__ == "__main__":
     if window is None:
         sys.exit(0)
     install_diagnostic_exception_hook(getattr(window, "_diagnostic_journal", None))
+    journal = getattr(window, "_diagnostic_journal", None)
+    # Last-resort safety net for the reported "process runs, no window" case: a window
+    # that never appears must not leave a zombie process holding the CPU.
+    window_watchdog = None
+    if getattr(sys, "frozen", False):
+        from startup_watchdog import RECOVERY_ARGUMENT, StartupWindowWatchdog
+
+        window_watchdog = StartupWindowWatchdog(
+            journal=journal,
+            retry_enabled=not startup_recovered,
+            executable=sys.executable,
+            restart_arguments=(RECOVERY_ARGUMENT,),
+        )
+        window_watchdog.arm()
     window.show()
     # Startup timing evidence: these two events separate a window that never
     # became visible from a stall after it did (owner diagnostics 2026-10-30).
-    journal = getattr(window, "_diagnostic_journal", None)
     if journal is not None:
         journal.record(
             "application_window_shown",
@@ -11548,6 +11565,9 @@ if __name__ == "__main__":
             outcome="success" if window.isVisible() else "failed",
             details={"visible": bool(window.isVisible())},
         )
+    if window_watchdog is not None:
+        # The loop handling this zero-delay timer proves the interface thread is alive.
+        QTimer.singleShot(0, window_watchdog.window_shown)
     QTimer.singleShot(1200, window.start_update_check)
     if journal is not None:
         journal.record(
