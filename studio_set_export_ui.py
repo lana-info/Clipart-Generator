@@ -1505,7 +1505,16 @@ class SetExportDialog(QDialog):
         set_count = len(catalog)
         sets_word = 'набор' if set_count % 10 == 1 and set_count % 100 != 11 else (
             'набора' if set_count % 10 in (2, 3, 4) and set_count % 100 not in (12, 13, 14) else 'наборов')
-        self.summary_counts.setText(f'{count} {images_word} · {set_count} {sets_word}')
+        if count or not self.review_paths:
+            self.summary_counts.setText(f'{count} {images_word} · {set_count} {sets_word}')
+        else:
+            # Owner 2026-10-30: a finished run whose pictures are not confirmed yet read as «no pictures at all».
+            self.summary_counts.setText(
+                f'Готово картинок: {len(self.review_paths)} · в наборах: 0 · наборов: {set_count}')
+        if self.paths or not self.review_paths:
+            self.empty_hint.setText('Готовых PNG пока нет. Проект можно сохранить и продолжить позже.')
+        else:
+            self.empty_hint.setText('В наборы попадут только картинки, подтверждённые «Ок».')
         self.empty_hint.setVisible(not self.paths)
         self.new_set_button.setEnabled(bool(self.paths) and self.worker is None)
         if self._editing_set_id not in dict(catalog):
@@ -1530,7 +1539,7 @@ class SetExportDialog(QDialog):
             for path, report in self.quality_reports.items()
         )
         block_count = len(self._active_quality_blockers())
-        quality_issue_count = sum(self._needs_attention(str(path)) for path in self.paths)
+        quality_issue_count = sum(self._needs_attention(str(path)) for path in self.review_paths)
         self.quality_panel.setVisible(quality_issue_count > 0 or self._qc_pending > 0)
         self.review_quality_button.setVisible(not self._qc_pending)
         if self._qc_pending:

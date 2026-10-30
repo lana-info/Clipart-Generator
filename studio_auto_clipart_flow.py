@@ -1139,7 +1139,10 @@ class AutoClipartFlowController(ClipartFlowController):
         current = page.session
         try:
             page.session = previous
-            ready = set(page._export_paths())
+            # Owner 2026-10-30: reuse answers «is the file ready?», not «is it confirmed?». An unconfirmed
+            # picture was declared «Сохранённый PNG недоступен» (or pushed the owner into a second paid run)
+            # although the file sits on disk; its mark is copied from the old item as it is.
+            ready = set(page._review_paths())
         finally:
             page.session = current
         reused = False
