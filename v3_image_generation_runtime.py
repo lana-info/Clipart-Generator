@@ -16,7 +16,7 @@ from model_catalog import (
     GENERATION_MODELS as CATALOG_GENERATION_MODELS,
     PROCESSING_PRICING as CATALOG_PROCESSING_PRICING,
     VISIBLE_GENERATION_MODEL_IDS as CATALOG_VISIBLE_GENERATION_MODEL_IDS,
-    MODEL_SPECS, model_spec, ratios_for_mode, validate_generation_contract,
+    model_spec, ratios_for_mode, validate_generation_contract,
 )
 from output_naming import workspace_layout
 from v3_flow_runtime import CostEstimate, FlowRunRequest

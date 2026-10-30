@@ -17,7 +17,7 @@ from studio_clipart_builder_ui import ClipartBuilderDialog
 from v3_components import ButtonVariant, V3Button
 from studio_clipart_versions import restore_review, review_fields
 from studio_clipart_objects import attach_reference_guidance, compile_objects, fill_recipe, validate_objects
-from studio_clipart_recipe import ClipartRecipe, ROLES
+from studio_clipart_recipe import ROLES
 from studio_bundle_planner import propose_bundle_plan
 from studio_style_profiles import style_modifier_keys
 from studio_workflow_host import workflow_host_for
@@ -1281,7 +1281,7 @@ class AutoClipartFlowController(ClipartFlowController):
             self.review.trash_button.hide()
 
     def _refresh_more_menu(self):
-        page = self.run_queue.page
+        _page = self.run_queue.page
         found = self._recoverable_outputs()
         # Owner 2026-10-30: the item used to vanish when there was nothing to attach, so the owner
         # hunted for a menu entry that was not there. It stays, with the reason it does nothing.

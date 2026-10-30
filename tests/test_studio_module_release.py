@@ -2,7 +2,6 @@ import io
 import json
 import os
 from contextlib import redirect_stdout, redirect_stderr
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest

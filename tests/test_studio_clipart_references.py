@@ -1,7 +1,6 @@
 import copy
 import tempfile
 import unittest
-import pytest
 from pathlib import Path
 from PIL import Image
 from PyQt6.QtWidgets import QApplication

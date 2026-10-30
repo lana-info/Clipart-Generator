@@ -23,7 +23,6 @@ from metadata_policy import (
     GENERATOR_XMP_PROPERTIES,
     XmpPolicyError,
     is_generator_text_field,
-    parse_xmp_root,
     xmp_text_for_png,
 )
 

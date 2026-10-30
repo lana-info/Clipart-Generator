@@ -60,7 +60,6 @@ class CatalogUiTests(unittest.TestCase):
 
     def test_catalog_replace_preserves_workflows_and_routes_by_module_id(self):
         screen = ModeSelectionScreen()
-        previous = dict(screen.mode_cards)
         replaced = list(screen.module_cards.values())
         received = []
         screen.module_action_requested.connect(lambda *args: received.append(args))

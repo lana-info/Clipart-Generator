@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt
 
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFrame, QFormLayout, QGridLayout,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QScrollArea, QSpinBox,
+    QGroupBox, QLabel, QLineEdit, QScrollArea, QSpinBox,
     QVBoxLayout, QWidget,
 )
 
@@ -31,7 +31,6 @@ from v3_provider_registry import (
     LOCAL_REMBG_PROFILE_MODELS,
     TOPAZ_UPSCALE_FACTORS,
     processing_provider_options,
-    upscale_model_preserves_alpha,
     provider_visible_controls,
 )
 from v3_project_state import ImageOperationData

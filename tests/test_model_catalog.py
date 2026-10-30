@@ -10,7 +10,6 @@ from model_catalog import (
     resolve_generation_endpoint,
     validate_generation_contract,
 )
-from fal_model_catalog import is_fal_generation_model
 from model_catalog import generation_provider_id
 
 

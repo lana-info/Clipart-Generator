@@ -15,9 +15,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from studio_module_runtime import (
-    CapabilityBroker, CapabilityProvider, CommandDeclaration, DocumentTypeDeclaration,
+    CapabilityBroker, CapabilityProvider, CommandDeclaration,
     ModuleAuthorizationError, ModuleRegistration, ModuleRuntimeError, ModuleRuntimeHost,
-    PageDeclaration,
 )
 from studio_module_api import CapabilityRequirement
 from studio_modules import ModulePackageError, ModuleStore, canonical_manifest

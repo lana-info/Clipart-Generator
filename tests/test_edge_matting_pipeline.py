@@ -1,5 +1,4 @@
 """Edge matting in the local chroma cut-out and the local Real-ESRGAN pass that follows it."""
-import cv2
 import numpy as np
 import pytest
 from PIL import Image

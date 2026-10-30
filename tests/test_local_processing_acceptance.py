@@ -567,8 +567,6 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
 
 
     def test_raw_bind_and_pending_cleanup_failure_still_uses_current_explicit_metadata(self):
-        import chroma_generation_record
-
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             raw = root / "rough"

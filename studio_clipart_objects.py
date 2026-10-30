@@ -52,7 +52,7 @@ def fill_recipe(items, counts):
 
 
 def compile_objects(recipe, generator):
-    from v3_project_state import ProjectMode, PromptGeneratorData
+    from v3_project_state import PromptGeneratorData
     from clipart_prompt_generator import generate_clipart_prompt_series
     recipe.validate()
     items = validate_objects(recipe.objects)

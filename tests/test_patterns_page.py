@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from studio_module_packaging import prepare_official_workflow_release

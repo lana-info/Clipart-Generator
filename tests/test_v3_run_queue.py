@@ -1993,7 +1993,7 @@ class V3RunQueueTests(unittest.TestCase):
 
 
 def test_run_results_alpha_qc_checks_only_transparent_intent(tmp_path):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     from v3_run_queue import RunItem
     clipart = tmp_path / 'clipart.png'
     surface = tmp_path / 'background.png'
@@ -2019,7 +2019,7 @@ def test_run_results_alpha_qc_checks_only_transparent_intent(tmp_path):
 
 
 def test_run_results_quality_fix_maps_output_path_back_to_item(tmp_path):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     from v3_run_queue import RunItem
     output = tmp_path / 'clipart.png'
     Image.new('RGBA', (20, 20), (10, 20, 30, 128)).save(output)
@@ -2037,7 +2037,7 @@ def test_run_results_quality_fix_maps_output_path_back_to_item(tmp_path):
 
 
 def test_run_results_requests_interior_opening_qc_for_wreath_role_only(tmp_path, monkeypatch):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     from v3_run_queue import RunItem
     from studio_clipart_recipe import ClipartRecipe
     from studio_clipart_objects import fill_recipe
@@ -2083,7 +2083,7 @@ def test_run_results_requests_interior_opening_qc_for_wreath_role_only(tmp_path,
 
 def test_corrected_generated_image_finishes_locally_without_generation_or_upscale(tmp_path):
     import main
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     request = generation_request(tmp_path, count=1)
     request.settings.update(upscale=False, remove_bg=True, remove_bg_provider='local_chroma_key',
                             upscale_after=True, upscale_after_provider='kie',
@@ -2206,7 +2206,7 @@ def test_cancelled_saved_source_retries_local_processing_without_generation(tmp_
 
 
 def test_recovery_groups_pending_stages_and_does_not_repeat_generation_failures(tmp_path):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     request = generation_request(tmp_path, count=3)
     request.settings.update(upscale=False, upscale_after=True, upscale_after_provider='kie')
     session = RunQueueSession(request, ProjectMode.CLIPART)

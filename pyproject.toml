@@ -7,3 +7,23 @@ markers = [
     "network: requires a real network socket or service",
     "paid: may consume provider credits or money",
 ]
+
+# T-QUAL-0 (TASKS.md): минимальный линт-гейт уровня ошибок в CI.
+# Только проверка: autofix в гейте запрещён, массовый autofix — отдельными PR
+# по этапам (см. TASKS.md T-QUAL-4); ruff format и mypy сюда не входят.
+[tool.ruff]
+fix = false
+extend-exclude = [
+    "docs", # макеты UI и артефакты приёмки — застывшие доказательства, не редактируются
+    "third_party", # вендоренный код, поведение не меняем
+]
+
+[tool.ruff.lint]
+# Синтаксические ошибки (E9), бессмысленные сравнения (F63),
+# break/continue/return вне цикла/функции (F7), неопределённые имена (F82),
+# неиспользуемые импорты и переменные (F401/F841). Стилистика — не гейт.
+select = ["E9", "F63", "F7", "F82", "F401", "F841"]
+
+[tool.ruff.lint.per-file-ignores]
+# Ре-экспорты интерфейсов пакетов в __init__.py — это не мусорные импорты.
+"__init__.py" = ["F401"]

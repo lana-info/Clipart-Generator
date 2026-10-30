@@ -7,7 +7,6 @@ can be used by local, KIE, and Fal.ai workflows alike.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 
 from PIL import Image, ImageColor
 

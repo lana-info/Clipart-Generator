@@ -17,7 +17,7 @@ from v3_clipart_flow import ClipartProcessingPage
 from v3_image_worker_settings import build_image_run_settings
 from v3_mode_selection import V3ApplicationView
 from v3_processing_flow import ProcessingPipelinePage
-from v3_project_state import ProjectState, ProjectMode, ImageOperationData, ProjectStateError
+from v3_project_state import ProjectState, ProjectMode, ProjectStateError
 
 @pytest.fixture(scope='module', autouse=True)
 def app():

@@ -8,8 +8,7 @@ import pytest
 from PIL import Image
 from PyQt6.QtTest import QTest
 
-from tests.test_studio_module_delivery_integration import delivery, app
-from studio_catalog import ModuleAvailability
+from tests.test_studio_module_delivery_integration import delivery, app  # noqa: F401 — импорт фикстур делает их видимыми pytest
 from studio_module_release import AdminDraftUploader
 from update_client import UpdateError
 from v3_mode_selection import V3ApplicationView

@@ -5,7 +5,7 @@ import time
 import numpy as np
 from PIL import Image
 import pytest
-from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QMessageBox, QPushButton
 
@@ -103,7 +103,6 @@ def test_repeat_clicks_each_undo_redo_and_explicit_save_reset(page):
 
 def test_terminal_mask_disables_button_and_undo_reenables_without_empty_history(page):
     doc = page.document
-    start = np.array(doc.mask)
     steps = 0
     while page.edge_buttons['harder'].isEnabled():
         assert steps < 10

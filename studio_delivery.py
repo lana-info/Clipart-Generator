@@ -272,12 +272,12 @@ def create_contact_sheet_pdf(
             os.link(temporary, destination)
         return destination
     finally:
-        if "painter" in locals() and painter.isActive():
-            painter.end()
+        if "painter" in locals() and painter.isActive():  # noqa: F821 — доступ под контролем locals()
+            painter.end()  # noqa: F821 — доступ под контролем locals()
         if "painter" in locals():
-            del painter
+            del painter  # noqa: F821 — доступ под контролем locals()
         if "writer" in locals():
-            del writer
+            del writer  # noqa: F821 — доступ под контролем locals()
         if temporary.exists():
             temporary.unlink()
 

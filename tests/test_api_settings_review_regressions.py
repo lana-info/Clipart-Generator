@@ -24,7 +24,7 @@ def pump_until(app, predicate, timeout=3):
 @pytest.mark.parametrize("limit", range(1, 6))
 @pytest.mark.parametrize("processing", [False, True])
 def test_core_limit_reaches_real_worker_and_executor(tmp_path, limit, processing):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     workers = []
 
     def factory(**kwargs):
@@ -49,7 +49,7 @@ def test_core_limit_reaches_real_worker_and_executor(tmp_path, limit, processing
         generated_prompts=[{"prompt": str(i), "references": []} for i in range(5)],
         selected_files=[str(tmp_path / f"input-{i}.png") for i in range(5)] if processing else [],
     )
-    handle = gateway.launch(request)
+    _handle = gateway.launch(request)
     worker = workers[0]
     assert worker.api_concurrency == limit
     assert request.settings["api_concurrency"] == 3

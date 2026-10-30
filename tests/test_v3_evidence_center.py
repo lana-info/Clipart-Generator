@@ -22,7 +22,6 @@ from v3_evidence_center import (
     export_evidence_report,
     format_evidence_log,
     set_verification_result,
-    ZEROGPT_IMAGE_DETECTOR_URL,
 )
 from v3_processing_flow import install_processing_flow
 from v3_project_state import (

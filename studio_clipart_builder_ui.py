@@ -5,9 +5,9 @@ import sys
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
-    QComboBox, QDialog, QTabWidget, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
+    QComboBox, QDialog, QTabWidget, QFormLayout, QGridLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QScrollArea, QSpinBox, QAbstractSpinBox, QStackedWidget,
-    QVBoxLayout, QWidget, QFrame, QSizePolicy,
+    QVBoxLayout, QWidget,
 )
 from studio_clipart_recipe import ClipartRecipe, ROLES
 from v3_project_state import ClipartModeData

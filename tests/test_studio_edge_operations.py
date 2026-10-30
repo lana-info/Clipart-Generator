@@ -2,7 +2,6 @@
 from concurrent.futures import CancelledError
 from threading import Event
 
-import cv2
 import numpy as np
 import pytest
 from PIL import Image

@@ -176,7 +176,7 @@ def test_promotional_refresh_keeps_wide_grid_and_compact_cards():
 
 
 def test_server_module_order_arranges_cards_and_keeps_rights():
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     screen = ModeSelectionScreen()
     screen.resize(1120, 780)
     screen.show()

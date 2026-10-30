@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 from PyQt6.QtCore import QEvent, QPoint, Qt, QTimer
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QLabel, QMessageBox, QPushButton
+from PyQt6.QtWidgets import QApplication, QMessageBox, QPushButton
 
 from prompt_composer.catalog import catalogue
 from prompt_composer.model import new_draft, validate_draft

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -106,7 +105,7 @@ def test_unreadable_tree_reports_unknown_verdict_instead_of_raising(tmp_path, mo
 
 
 def test_exit_watchdog_arms_only_when_configured(monkeypatch):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     timers = []
 
     class FakeTimer:
@@ -129,7 +128,7 @@ def test_exit_watchdog_arms_only_when_configured(monkeypatch):
 
 
 def test_refresh_uses_in_memory_verdict_and_verifies_unknown_modules_in_background(monkeypatch):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     started = []
     monkeypatch.setattr(vms.V3ApplicationView, "_start_module_verification",
                         lambda self, ids: started.append(list(ids)))
@@ -148,7 +147,7 @@ def test_refresh_uses_in_memory_verdict_and_verifies_unknown_modules_in_backgrou
 
 def test_startup_refresh_never_walks_module_trees_even_on_a_slow_disk(tmp_path, monkeypatch):
     """Regression: the start must not touch the installed trees on the GUI thread."""
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     store = _store(tmp_path)
     _enabled_module(store)
     store._display_verdicts[("clipart", "1.0.0")] = ("signature", True)
@@ -174,7 +173,7 @@ def test_startup_refresh_never_walks_module_trees_even_on_a_slow_disk(tmp_path, 
 
 
 def test_module_verification_timeout_is_recorded_and_window_keeps_working(tmp_path):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     journal = DiagnosticJournal(tmp_path, app_version="3.2.52")
     view = vms.V3ApplicationView(draft_path=tmp_path / "a.json", diagnostic_journal=journal)
 
@@ -222,7 +221,7 @@ def test_module_verification_timeout_is_recorded_and_window_keeps_working(tmp_pa
 
 
 def test_verification_thread_emits_finished_even_on_unexpected_error():
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     emitted = []
     thread = vms._ModuleVerifyThread(object(), ["clipart"])
     thread.verified.connect(lambda: emitted.append(True))
@@ -242,7 +241,7 @@ def test_verification_runs_once_per_session_and_never_raises(tmp_path, monkeypat
     monkeypatch.setattr(store, "_tree_signature", lambda path: (_ for _ in ()).throw(OSError("locked")))
     assert store.verify_for_display("clipart") is False           # no exception escapes the thread
 
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     started = []
 
     class FakeThread:
@@ -295,7 +294,7 @@ def test_startup_refresh_failure_is_journaled_and_never_escapes(tmp_path):
 
 
 def test_missing_studio_upcoming_cache_is_not_a_hang(tmp_path):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     from studio_upcoming import StudioUpcomingClient
     from studio_upcoming_ui import StudioUpcomingController
 

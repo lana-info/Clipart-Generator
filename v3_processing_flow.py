@@ -36,7 +36,7 @@ from v3_flow_ui import ScrollableStepPage as _ScrollableStepPage
 from v3_image_worker_settings import build_image_run_settings
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
 from v3_image_processing_ui import (
-    CLEANUP_OPERATION_LABELS, ProcessingPipelineEditor, RunPlanBuilder,
+    CLEANUP_OPERATION_LABELS, ProcessingPipelineEditor,
     configure_unavailable_synthid, WHITE_BACKGROUND_UNAVAILABLE_MESSAGE,
 )
 import white_background
@@ -56,7 +56,6 @@ from v3_project_state import (
     ProjectMode,
     ProjectState,
     StepId,
-    route_for_mode,
 )
 from v3_transparency_preview import ClipartTransparencyEditorPage, MAX_EDITOR_IMAGE_PIXELS
 from studio_workflow_host import WorkflowHost, workflow_host_for
@@ -1485,7 +1484,7 @@ class ProcessingFlowController(QObject):
 
     @staticmethod
     def _missing_authorization() -> None:
-        raise LicenseError("Лицензионный сервис не настроен")
+        raise LicenseError("Лицензионный сервис не настроен")  # noqa: F821 — метод сейчас не вызывается; реальный импорт LicenseError = новое ребро графа зависимостей (см. test_studio_dependency_architecture), правится отдельной логической задачей
 
     @staticmethod
     def _missing_worker_factory(**_kwargs: Any) -> Any:

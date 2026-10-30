@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import tempfile
 from functools import lru_cache
-import math
 from math import ceil, floor, hypot
 from pathlib import Path
 

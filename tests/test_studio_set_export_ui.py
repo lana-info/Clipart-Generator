@@ -5,7 +5,7 @@ from zipfile import ZipFile
 import pytest
 from PIL import Image
 from PyQt6.QtCore import QEvent, QEventLoop, QTimer, Qt
-from PyQt6.QtWidgets import QApplication, QFileDialog, QInputDialog, QLabel, QMessageBox
+from PyQt6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
 
 from studio_set_export import export_clipart_sets, ExportCancelled
 from studio_set_export_ui import SetExportDialog
@@ -1194,7 +1194,6 @@ def test_png_check_screen_follows_marks_set_elsewhere(images):
 
 
 def test_thumbnail_cache_on_disk_serves_second_read_and_ignores_a_changed_file(images, tmp_path):
-    import os
     from studio_set_export_ui import read_thumbnail, thumb_cache_dir
     cache = thumb_cache_dir(tmp_path)
     assert cache == tmp_path / '.thumb-cache' and thumb_cache_dir(None) is None

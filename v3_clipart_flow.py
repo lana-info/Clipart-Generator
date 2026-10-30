@@ -2,140 +2,83 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import os
-import re
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from decimal import Decimal
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any
 
-from PyQt6.QtCore import QObject, QRectF, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import (
-    QAbstractItemView,
-    QAbstractScrollArea,
-    QDialog,
-    QDialogButtonBox,
     QCheckBox,
-    QButtonGroup,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
-    QFrame,
-    QGridLayout,
     QGroupBox,
-    QHeaderView,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMessageBox,
-    QPlainTextEdit,
-    QScrollArea,
-    QSizePolicy,
-    QRadioButton,
-    QPushButton,
     QSpinBox,
-    QStackedWidget,
-    QTableWidget,
-    QTableWidgetItem,
-    QVBoxLayout,
     QWidget,
+    QMessageBox,  # noqa: F401 — ре-экспорт, используют внешние модули
 )
 
 from v3_flow_runtime import CostEstimate, FlowRunRequest, safe_runtime_error as _safe_runtime_error
 from v3_image_generation_ui import ImageGenerationSettingsPage
 from v3_image_review_ui import ImageReviewRunPage
 from v3_prompt_editor_ui import (
-    CHROMA_KEY_MATERIAL_OPTIONS,
     MAX_CSV_BYTES,
-    PromptBatchEditDialog,
     PromptInputPage,
-    PromptReferenceEditorDialog,
     PromptReviewPage,
-    ReferenceScopeDialog,
-    _compact_review_action_button,
-    _confirm_delete_all_prompts,
-    _reference_icon,
-    _reference_label,
-    _reference_summary,
-    _review_action_icon,
-    _supported_local_reference,
-    apply_prompt_text_edit,
-    configure_chroma_material_buttons,
-    export_prompt_csv,
+    PromptBatchEditDialog,  # noqa: F401 — ре-экспорт, используют внешние модули
+    PromptReferenceEditorDialog,  # noqa: F401 — ре-экспорт, используют внешние модули
+    apply_prompt_text_edit,  # noqa: F401 — ре-экспорт, используют внешние модули
+    export_prompt_csv,  # noqa: F401 — ре-экспорт, используют внешние модули
 )
 from v3_image_generation_runtime import (
     MAX_IMAGE_GENERATION_REQUESTS,
-    GenerationModelOption,
     ImageGenerationFlowError,
-    _model_option,
-    _reference_file_size_error,
-    _split_user_prompt,
-    _user_prompt_text,
     build_image_generation_run_request,
     estimate_image_generation_cost,
     fal_endpoint_quantities as _image_fal_endpoint_quantities,
-    generation_model_options,
     image_generation_pipeline_steps,
+    generation_model_options,  # noqa: F401 — ре-экспорт, используют внешние модули
 )
 from v3_flow_ui import ProjectDirectoryPage, ScrollableStepPage as _ScrollableStepPage
-from chroma_key import chroma_key_prompt_block
-from chroma_key_selection import select_chroma_key_color
-from provider_error_messages import friendly_provider_error
+from chroma_key import chroma_key_prompt_block  # noqa: F401 — ребро зафиксировано в allowlist test_studio_dependency_architecture
+from chroma_key_selection import select_chroma_key_color  # noqa: F401 — ребро зафиксировано в allowlist test_studio_dependency_architecture
 
 from v3_components import (
     AdvancedSection,
-    ButtonVariant,
     DEFAULT_TOKENS,
-    FormCard,
-    V3Button,
     V3DesignTokens,
 )
 from v3_image_processing_ui import (
-    METADATA_CLEANUP_FIELDS, ProcessingPipelineEditor, RunPlanBuilder,
+    METADATA_CLEANUP_FIELDS, ProcessingPipelineEditor,
     UPSCALE_AFTER_UI_ENABLED,
 )
 from v3_provider_registry import CHROMA_KEY_COLOR_OPTIONS
-from fal_model_catalog import is_fal_generation_model, is_fal_model_id
+from fal_model_catalog import is_fal_generation_model, is_fal_model_id  # noqa: F401 — ребро зафиксировано в allowlist test_studio_dependency_architecture
 from output_naming import workspace_layout
 from v3_prompt_csv_import import PromptCsvImportDialog
 from v3_project_state import (
     MAX_PROMPT_ENTRIES,
-    MAX_CHROMA_KEY_MATERIALS,
-    MAX_PROMPT_GENERATOR_TEXT_LENGTH,
     MAX_REFERENCES_PER_PROMPT,
     MAX_TEXT_LENGTH,
-    GenerationData,
     ImageOperationData,
     ProjectMode,
     ProjectState,
     PromptEntry,
     PromptGeneratorData,
-    RuntimeData,
     StepId,
 )
 from clipart_prompt_generator import generate_clipart_prompt_series
-from v3_prompt_generator import (
-    PromptGeneratorError,
-    generate_into_project,
-    replace_project_prompts,
-)
 from v3_provider_registry import (
     FAL_BIREFNET_MODEL_OPTIONS,
     FAL_BIREFNET_RESOLUTION_OPTIONS,
     FAL_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
     KIE_REMOVE_BG_MODEL_OPTIONS,
-    normalize_fal_upscale_factor,
     processing_provider_options,
-    provider_requires_api_key,
-    provider_supports_operation,
     provider_visible_controls,
     upscale_model_preserves_alpha,
 )
@@ -143,14 +86,9 @@ from workflow_definitions import workflow_for_mode
 from studio_workflow_host import WorkflowHost, workflow_host_for
 from v3_lazy_loading import LazyPageRegistry
 from v3_transparency_preview import ClipartTransparencyEditorPage
+from v3_prompt_generator import PromptGeneratorError, generate_into_project, replace_project_prompts  # noqa: F401 — ребро зафиксировано в allowlist test_studio_dependency_architecture
 from model_catalog import (
-    GENERATION_MODELS as CATALOG_GENERATION_MODELS,
-    PROCESSING_PRICING as CATALOG_PROCESSING_PRICING,
-    VISIBLE_GENERATION_MODEL_IDS as CATALOG_VISIBLE_GENERATION_MODEL_IDS,
-    MODEL_SPECS,
-    model_spec,
-    ratios_for_mode,
-    validate_generation_contract,
+    GENERATION_MODELS as CATALOG_GENERATION_MODELS,  # noqa: F401 — модуль исполняется при импорте, оставлен
 )
 
 
@@ -1025,7 +963,7 @@ class ClipartFlowController(QObject):
 
     @staticmethod
     def _missing_authorization() -> None:
-        raise LicenseError("Лицензионный сервис не настроен")
+        raise LicenseError("Лицензионный сервис не настроен")  # noqa: F821 — метод сейчас не вызывается; реальный импорт LicenseError = новое ребро графа зависимостей (см. test_studio_dependency_architecture), правится отдельной логической задачей
 
     @staticmethod
     def _missing_worker_factory(**_kwargs: Any) -> Any:

@@ -3,7 +3,7 @@ import ssl
 import os
 import urllib.request
 from pathlib import Path
-from app_identity import APP_NAME, APP_STORAGE_NAME
+from app_identity import APP_STORAGE_NAME
 
 
 GENERATION_MODELS = [

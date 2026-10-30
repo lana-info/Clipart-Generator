@@ -1,7 +1,6 @@
 """Transparency window panels «Файлы» / «Инструменты» and zoom on the picture
 (approved mockups docs/ui/3.2/photoshop-panels/, 2026-10-23)."""
 import os
-import tempfile
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 

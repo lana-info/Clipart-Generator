@@ -3,11 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from v3_project_state import ImageOperationData, ProjectMode, ProjectState
-from v3_image_processing_ui import (
-    CLEANUP_OPERATION_LABELS, ProcessingPipelineEditor, RunPlanBuilder,
-    UPSCALE_AFTER_UI_ENABLED, configure_unavailable_synthid, processing_pipeline_steps,
-)
+from v3_project_state import ImageOperationData, ProjectMode
+from v3_image_processing_ui import ProcessingPipelineEditor, processing_pipeline_steps  # noqa: F401 — ре-экспорт, используют внешние модули
 
 @dataclass(frozen=True, slots=True)
 class ProcessingRecipe:

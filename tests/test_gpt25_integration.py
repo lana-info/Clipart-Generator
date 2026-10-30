@@ -28,7 +28,7 @@ def test_gateway_uses_new_key_without_requiring_kie(provider, label):
 
 @pytest.mark.parametrize('provider,label', [('atlascloud','AtlasCloud'),('piapi','PiAPI')])
 def test_unknown_token_cost_never_displays_free_total(provider, label):
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     state = ProjectState(mode=ProjectMode.CLIPART)
     data = state.clipart
     data.prompts = [PromptEntry('A ceramic cup')]
@@ -61,7 +61,7 @@ def test_sunburst_routes_independently(provider):
 def test_budget_route_omits_ignored_controls_and_qt_explains_auto():
     from gpt25_provider import generation_payload, Gpt25ProviderError
     from v3_clipart_flow import ClipartGenerationPage
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     payload = generation_payload('piapi/gpt-image-2.5','A ceramic cup','auto','auto')
     assert payload == {'model':'gpt-image-2.5','prompt':'A ceramic cup',
                        'output_format':'png','n':1,'response_format':'url'}
@@ -88,7 +88,7 @@ def test_budget_route_omits_ignored_controls_and_qt_explains_auto():
 def test_api_dialog_saves_both_masked_keys(monkeypatch):
     import v3_api_settings
     from PyQt6.QtWidgets import QLineEdit
-    app = QApplication.instance() or QApplication([])
+    _app = QApplication.instance() or QApplication([])
     monkeypatch.setattr(v3_api_settings,'load_credentials',lambda:{})
     saved = []
     monkeypatch.setattr(v3_api_settings,'save_credentials',lambda values:saved.append(values))

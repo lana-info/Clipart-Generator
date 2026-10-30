@@ -223,7 +223,6 @@ def _cap_key_tint(colour: np.ndarray, alpha: np.ndarray, channel: int) -> np.nda
     palette = np.zeros((int(labels.max()) + 1, 3))
     palette[labels[trusted]] = colour[trusted]
     reference = palette[labels]
-    capped = colour.copy()
     excess = np.zeros(alpha.shape)
     lead = np.zeros(alpha.shape)
     for other in (c for c in range(3) if c != channel):

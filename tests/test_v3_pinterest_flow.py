@@ -42,7 +42,6 @@ from pinterest_pin_composer import ProductLayer, assert_product_pixels_preserved
 from v3_clipart_flow import (
     ClipartFlowError,
     ClipartGenerationPage,
-    ClipartPromptReviewPage,
     ClipartReviewRunPage,
 )
 from v3_project_state import (
@@ -1563,15 +1562,6 @@ class V3PinterestFlowTests(unittest.TestCase):
         self.assertEqual(page.ratio_combo.currentText(), "9:16")
 
     def test_each_text_model_uses_its_deterministic_reference_pair(self):
-        expected_pairs = {
-            "flux-2/flex-text-to-image": "flux-2/flex-image-to-image",
-            "flux-2/pro-text-to-image": "flux-2/pro-image-to-image",
-            "gpt-image/1.5-text-to-image": "gpt-image/1.5-image-to-image",
-            "gpt-image-2": "gpt-image-2",
-            "nano-banana-2": "nano-banana-2",
-            "nano-banana-pro": "nano-banana-pro",
-            "qwen-image-2": "qwen-image-2",
-        }
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-model-pairs-") as temp:
             state = self.make_state(temp)
             reference_path = Path(temp) / "reference.png"

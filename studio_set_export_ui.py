@@ -12,7 +12,7 @@ from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QImage, QIm
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QDialog, QFileDialog, QFrame,
     QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem,
-    QComboBox, QMenu, QMessageBox, QProgressBar, QPushButton, QSizePolicy, QStackedWidget, QWidgetAction,
+    QMenu, QMessageBox, QProgressBar, QPushButton, QSizePolicy, QStackedWidget, QWidgetAction,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -1690,11 +1690,11 @@ class SetExportDialog(QDialog):
             if issue_count > missing_count:
                 parts.append(f'Нужно выбрать вариант: {issue_count - missing_count}')
             self.issue_text.setText(' · '.join(parts))
-        review_count = sum(
+        _review_count = sum(
             report.status == 'review' and self._path_is_active(path)
             for path, report in self.quality_reports.items()
         )
-        block_count = len(self._active_quality_blockers())
+        _block_count = len(self._active_quality_blockers())
         quality_issue_count = sum(self._needs_attention(str(path)) for path in self.review_paths)
         self.quality_panel.setVisible(quality_issue_count > 0 or self._qc_pending > 0)
         self.review_quality_button.setVisible(not self._qc_pending)
@@ -1707,7 +1707,6 @@ class SetExportDialog(QDialog):
         elif quality_issue_count:
             quality_text = f'Не помечено «Ок»: {quality_issue_count}'
             self.quality_summary_label.setText(quality_text)
-            total = sum(str(path) in self.quality_reports for path in self.paths)
             self._set_quality_page_text('')
             self.quality_panel.setProperty('state', 'warning')
             self.quality_panel.style().unpolish(self.quality_panel)

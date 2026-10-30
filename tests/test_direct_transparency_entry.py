@@ -1,5 +1,4 @@
 import hashlib
-from pathlib import Path
 import pytest
 from PIL import Image
 from PyQt6.QtWidgets import QApplication

@@ -35,9 +35,7 @@ class ProjectDirectoryPage(ScrollableStepPage):
     """Shared project/work-directory editor with module-selected output mode."""
 
     def __init__(self, state, changed, *, output_mode, tokens=DEFAULT_TOKENS) -> None:
-        import os
-        from pathlib import Path
-        from PyQt6.QtWidgets import QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit
+        from PyQt6.QtWidgets import QFormLayout, QHBoxLayout, QLabel, QLineEdit
         from v3_components import ButtonVariant, V3Button
 
         super().__init__("Рабочая папка", "Выберите папку для записи результатов.", tokens=tokens)

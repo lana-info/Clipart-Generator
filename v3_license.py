@@ -216,7 +216,7 @@ class LicenseDialog(QDialog):
             return
         self.buttons.setEnabled(False)
         try:
-            authorization = self.gate.activate(license_key)
+            self.gate.activate(license_key)
         except LicenseError as exc:
             self.license_key_input.clear()
             self.status_label.setText(str(exc))

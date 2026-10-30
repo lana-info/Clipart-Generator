@@ -3,7 +3,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from studio_text_errors import TextGenerationError, ComposerAIError, composer_error_code
+from studio_text_errors import ComposerAIError, composer_error_code
 
 
 @dataclass(frozen=True)

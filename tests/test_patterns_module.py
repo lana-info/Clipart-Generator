@@ -1,7 +1,6 @@
 """Patterns: signed package, Core host, projects and export (no UI stage yet)."""
 import ast
 import os
-import sys
 import time
 from pathlib import Path
 

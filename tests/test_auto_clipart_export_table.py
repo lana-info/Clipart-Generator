@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw
 from PyQt6.QtCore import QEventLoop, QTimer, Qt
 from PyQt6.QtWidgets import QFileDialog
 
-from tests.test_auto_clipart_workflow import app, workspace, prepare_launch, wait_png_check
+from tests.test_auto_clipart_workflow import app, workspace, prepare_launch, wait_png_check  # noqa: F401 — импорт фикстур делает их видимыми pytest
 from v3_clipart_flow import build_clipart_run_request
 from v3_project_state import StepId
 from v3_run_queue import RunItemStatus, RunQueueSession

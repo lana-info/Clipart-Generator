@@ -13,7 +13,6 @@ from v3_processing_editor import (
     apply_processing_recipe,
     processing_pipeline_steps,
 )
-from v3_pinterest_flow import PinterestProcessingPage, _pinterest_project_adapter
 from v3_project_state import ProjectMode, ProjectState
 from v3_processing_flow import ProcessingPipelinePage
 

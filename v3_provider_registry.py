@@ -10,10 +10,14 @@ from provider_upscale_contract import (
     FAL_BRIA_INCREASE_RESOLUTION_MODEL_ID, FAL_BRIA_UPSCALE_MODEL_ID,
     FAL_RECRAFT_CRISP_MODEL_ID, FAL_TOPAZ_PRECISION_MODEL_ID,
     FAL_TOPAZ_TRANSPARENT_MODEL_ID,
-    FAL_UPSCALE_MODEL_IDS, KIE_TOPAZ_MODEL_ID, LEGACY_FAL_UPSCALE_MODEL_IDS,
-    LEGACY_KIE_TOPAZ_MODEL_IDS, TOPAZ_MAX_FILE_BYTES, TOPAZ_MAX_OUTPUT_SIDE,
-    TOPAZ_UPSCALE_FACTORS, normalize_fal_upscale_factor, normalize_fal_upscale_model,
-    normalize_kie_upscale_model, normalize_topaz_upscale_factor,
+    KIE_TOPAZ_MODEL_ID,
+    TOPAZ_MAX_FILE_BYTES,  # noqa: F401 — ре-экспорт, используют внешние модули
+    TOPAZ_MAX_OUTPUT_SIDE,  # noqa: F401 — ре-экспорт, используют внешние модули
+    TOPAZ_UPSCALE_FACTORS,  # noqa: F401 — ре-экспорт, используют внешние модули
+    normalize_fal_upscale_factor,  # noqa: F401 — ре-экспорт, используют внешние модули
+    normalize_fal_upscale_model,  # noqa: F401 — ре-экспорт, используют внешние модули
+    normalize_kie_upscale_model,  # noqa: F401 — ре-экспорт, используют внешние модули
+    normalize_topaz_upscale_factor,  # noqa: F401 — ре-экспорт, используют внешние модули
 )
 
 CHROMA_KEY_COLOR_OPTIONS: Final = tuple(
