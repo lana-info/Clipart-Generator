@@ -503,8 +503,15 @@ class SetExportDialog(QDialog):
         self.status.setWordWrap(True)
         bottom = QHBoxLayout()
         bottom.addWidget(self.export_options_button)
-        bottom.addWidget(self.status, 2)
-        bottom.addWidget(self.quality_bottom_row, 3)
+        # Owner 2026-10-28: the progress line («Перегенерация: …») keeps an even gap from the
+        # options menu instead of sitting right next to it, and the «Фон» block with
+        # «Редактировать прозрачность» starts at the left edge of its part instead of being
+        # pushed to the far right.
+        bottom.setSpacing(16)
+        bottom.addWidget(self.status, 1)
+        bottom.addSpacing(16)
+        bottom.addWidget(self.quality_bottom_row)
+        bottom.addStretch(1)
         self.stack.currentChanged.connect(
             lambda _index: self.quality_bottom_row.setVisible(self.stack.currentWidget() is self.quality_page))
         root.addLayout(bottom)
@@ -723,6 +730,9 @@ class SetExportDialog(QDialog):
             button = QPushButton(label)
             button.setCheckable(True)
             button.setProperty('v3Chip', True)
+            # Owner 2026-10-29: the whole block — marks, «Исключить из наборов», «Редактировать
+            # прозрачность» — has one rounding, the app's usual one, not the pill shape.
+            button.setProperty('v3ChipControl', True)
             button.setAccessibleName(f'Метка: {label}')
             button.clicked.connect(lambda _=False, mark=key: self._quality_mark_clicked(mark))
             bold = QFont(button.font())

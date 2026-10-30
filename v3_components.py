@@ -435,6 +435,13 @@ QPushButton[v3Chip="true"] {{
     min-height: 30px;
     padding: 2px 14px;
 }}
+/* Owner 2026-10-29: buttons in a block (marks on the PNG check) carry the same slight
+   rounding and height as every other button of the app, not the pill shape. */
+QPushButton[v3Chip="true"][v3ChipControl="true"] {{
+    border-radius: {tokens.radius_control}px;
+    min-height: {tokens.control_height}px;
+    padding: 0 {tokens.space_4}px;
+}}
 QPushButton[v3Chip="true"]:hover {{
     border-color: {tokens.text_muted};
 }}
