@@ -1,7 +1,8 @@
 """Automatic Clipart set summary with optional manual membership editing."""
 import hashlib
 import os
-from collections import OrderedDict
+from collections import OrderedDict, deque
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
 from uuid import uuid4
@@ -172,8 +173,16 @@ def prune_thumb_cache(cache_dir, max_files=THUMB_CACHE_MAX_FILES, max_bytes=THUM
 
 
 class _PngCheckWorker(QThread):
-    """Loads thumbnails and the transparency check one PNG at a time, off the UI thread."""
+    """Loads thumbnails and the transparency check off the UI thread (owner 2026-10-30).
+
+    The pictures are decoded by a few threads at once and reported in order: a single sequence left
+    the grid filling one picture at a time, and one large PNG held every later picture back
+    (measured: 334 ms per 4096-pixel picture, 47 of them in a row). Decoding at most a couple of
+    pictures per thread ahead keeps a stop quick.
+    """
     item_ready = pyqtSignal(str, QImage, object)  # path, thumbnail, report or None
+
+    DECODE_THREADS = max(2, min(4, (os.cpu_count() or 2) - 1))
 
     def __init__(self, paths, loader, parent=None, cache_dir=None):
         super().__init__(parent)
@@ -184,18 +193,41 @@ class _PngCheckWorker(QThread):
     def stop(self):
         self._stop.set()
 
+    def _report(self, path, future):
+        """Emit one picture: its thumbnail comes from the pool, its check runs here, in order."""
+        try:
+            image = future.result()
+        except Exception:
+            image = QImage()
+        try:
+            report = self.loader(path)
+        except Exception:
+            report = None
+        if self._stop.is_set():
+            return False
+        self.item_ready.emit(str(path), image, report)
+        return True
+
     def run(self):
-        for path in self.paths:
-            if self._stop.is_set():
-                return
-            image = read_thumbnail(path, PRIME_BOUND, self.cache_dir)
-            try:
-                report = self.loader(path)
-            except Exception:
-                report = None
-            if self._stop.is_set():
-                return
-            self.item_ready.emit(str(path), image, report)
+        pool = ThreadPoolExecutor(max_workers=self.DECODE_THREADS,
+                                  thread_name_prefix="png-thumb")
+        try:
+            pending = deque()
+            window = self.DECODE_THREADS * 2  # a stop should not wait for the whole run
+            for path in self.paths:
+                if self._stop.is_set():
+                    return
+                pending.append((path, pool.submit(read_thumbnail, path, PRIME_BOUND, self.cache_dir)))
+                while len(pending) > window:
+                    queued_path, future = pending.popleft()
+                    if not self._report(queued_path, future):
+                        return
+            while pending:
+                queued_path, future = pending.popleft()
+                if not self._report(queued_path, future):
+                    return
+        finally:
+            pool.shutdown(wait=True, cancel_futures=True)
         if self.cache_dir is not None:
             prune_thumb_cache(self.cache_dir)
 
@@ -1088,9 +1120,14 @@ class SetExportDialog(QDialog):
         if not hasattr(self, 'quality_list'):
             return
         selected_path = getattr(self, '_select_path', '')
+        focus = bool(selected_path)  # «open this picture»: it must be brought into view, not just selected
         current = self.quality_list.currentItem()
         if current is not None and not selected_path:
             selected_path = str(current.data(Qt.ItemDataRole.UserRole) or '')
+        # Owner 2026-10-30: a rebuild (the check fills in, a picture is redone) used to drop the place —
+        # the grid jumped to the first picture. Keep the position and the scroll, not the top of the list.
+        previous_row = self.quality_list.currentRow()
+        scroll = self.quality_list.verticalScrollBar().value()
         self.quality_list.blockSignals(True)
         self.quality_list.clear()
         selected_row = -1
@@ -1144,13 +1181,21 @@ class SetExportDialog(QDialog):
                 selected_row = self.quality_list.count() - 1
                 self._select_path = ''
         self.quality_list.blockSignals(False)
+        if selected_row < 0 and previous_row >= 0 and self.quality_list.count():
+            # The picture she was looking at is momentarily gone (it is being redone): stay in place
+            # instead of jumping to the first row and looking as if the grid had reset.
+            selected_row = min(previous_row, self.quality_list.count() - 1)
         if selected_row < 0:
             selected_row = next((row for row in range(self.quality_list.count())
                                  if self.quality_list.item(row).data(Qt.ItemDataRole.UserRole)), -1)
         if selected_row >= 0:
             self.quality_list.setCurrentRow(selected_row)
+            if focus:
+                self.quality_list.scrollToItem(
+                    self.quality_list.item(selected_row), QAbstractItemView.ScrollHint.PositionAtCenter)
         else:
             self._quality_selected(-1)
+        self.quality_list.verticalScrollBar().setValue(scroll)
 
     def _placeholder_icon(self):
         icon = getattr(self, '_placeholder', None)

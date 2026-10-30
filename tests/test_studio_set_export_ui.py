@@ -757,6 +757,36 @@ def test_exclude_button_is_disabled_for_a_picture_that_is_not_in_sets_yet(images
     dialog.reject()
 
 
+def test_png_grid_keeps_the_place_while_a_picture_is_being_redone(images, tmp_path):
+    """Владелец 2026-10-30: при перегенерации сетка «обнулялась» — выделение прыгало на первую картинку.
+
+    The picture being redone leaves the ready list for a while; the rebuild must keep the owner's
+    place instead of selecting the first row, and the returned picture must come back into view.
+    """
+    from studio_alpha_qc import AlphaQcReport
+    paths = []
+    for number in range(6):
+        path = tmp_path / f'item_{number}.png'
+        Image.new('RGBA', (32, 32), (60, 80, 90, 128)).save(path)
+        paths.append(path)
+    reports = [AlphaQcReport(str(path.resolve()), 'ok', (), 32, 32) for path in paths]
+    dialog = SetExportDialog(paths, quality_reports=reports)
+    dialog._show_quality_review()
+    dialog.quality_list.setCurrentRow(4)
+    looking_at = str(paths[4].resolve())
+    assert dialog._current_quality_key() == looking_at
+
+    every = list(dialog.review_paths)
+    dialog.review_paths = [path for path in every if str(path) != looking_at]  # the redo took it away
+    dialog._refresh_quality_page()
+    assert dialog.quality_list.currentRow() == 4, 'сетка прыгнула на первую картинку вместо сохранения места'
+
+    dialog.review_paths = every  # the new picture is ready
+    dialog.focus_quality_path(looking_at)
+    assert dialog._current_quality_key() == looking_at, 'вернувшаяся картинка не открылась'
+    dialog.reject()
+
+
 def test_quality_exclusion_resolves_ambiguity_when_one_variant_remains(images):
     from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
     membership = _membership_for_sets(images[:2], ['Мини'])
