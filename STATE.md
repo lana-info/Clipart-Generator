@@ -8,7 +8,7 @@
 
 Тесты: `test_export_step_shows_ready_pictures_that_are_not_confirmed_yet`, `test_replan_reuses_a_ready_picture_that_is_not_marked_ok_yet`, `test_replan_keeps_unconfirmed_pictures_beside_confirmed_ones`; подвыборка «автоклипарт + экспорт наборов + метки + проверка PNG + результаты» — **213 passed**. Снимок настоящего экрана после правки — `docs/ui/3.2/export-step-truth/наборы-после.png`.
 
-`ветка codex/fix-export-step-truth-20261030 · слито в develop/3.2: нет · в сборке: нет · опубликовано: нет`
+`ветка codex/fix-export-step-truth-20261030 → PR #136 · слито в develop/3.2: да (0ba80f9) · в сборке: нет · опубликовано: нет`
 
 ## Исключённую из наборов картинку можно вернуть тем же экраном (2026-10-30)
 
