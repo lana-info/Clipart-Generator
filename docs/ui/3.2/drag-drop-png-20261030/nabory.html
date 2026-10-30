@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Макет · Наборы · перетаскивание PNG</title>
+<style>
+/* Токены Vibix (v3_components.V3DesignTokens + утверждённые макеты docs/ui/3.2) */
+:root{
+  --canvas:#101827;--surface:#172131;--row:#1b2636;--head:#223045;--line:#354154;
+  --ink:#e4edf6;--muted:#a6b5c8;--muted2:#7e8ea1;--accent:#24d8c5;--accent2:#2dd4bf;
+  --accent-soft:#12363f;--btn:#263548;--err:#f87171;--err-soft:#441d1d;
+  --checker:repeating-conic-gradient(#eef1f4 0% 25%,#c9d0d6 0% 50%);--cs:14px;
+}
+*{box-sizing:border-box;margin:0}
+body{width:1120px;height:780px;background:var(--canvas);color:var(--ink);
+  font:14px/1.4 "Segoe UI",Roboto,sans-serif;overflow:hidden;position:relative;padding:20px 24px}
+h1{font-size:19px;font-weight:700}
+.small{font-size:12px}.mut{color:var(--muted)}.mut2{color:var(--muted2)}
+button{font:14px "Segoe UI",sans-serif;color:var(--ink);background:var(--btn);
+  border:1px solid var(--line);border-radius:7px;padding:7px 16px}
+button.primary{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+/* ————— заголовок страницы наборов ————— */
+.top{display:flex;align-items:center;gap:14px}
+.top .counts{color:var(--muted)}
+.top button{margin-left:auto}
+/* ————— таблица наборов ————— */
+#table{margin-top:14px;border-radius:10px;outline:1px solid var(--line);overflow:hidden}
+.trow{display:flex;align-items:stretch;height:52px}
+.trow.head{background:var(--head);height:46px;font-weight:700}
+.trow.row{background:var(--surface);border-top:1px solid #223045;position:relative}
+.cell{display:flex;align-items:center;padding:0 10px}
+.c-png{width:430px;gap:10px}
+.c-set{flex:1;justify-content:center;gap:9px;position:relative}
+.thumb44{width:44px;height:44px;border-radius:5px;background:var(--checker);background-size:var(--cs) var(--cs);
+  display:flex;align-items:center;justify-content:center;flex:none}
+.thumb44 svg{width:40px;height:40px}
+.glyphs{color:var(--accent);font-size:13px;letter-spacing:4px}
+.ghost-col-head-on{background:#1b3a44!important}
+.chk{width:17px;height:17px;border:1.6px solid var(--line);border-radius:4px;flex:none}
+.chk.on{border-color:var(--accent);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+/* строки таблицы: дроп-подсветка (рекомендуемый вид) */
+.row.drop-on{background:#14333c;outline:2px dashed var(--accent);outline-offset:-4px;border-radius:8px}
+.cell.drop-cell{outline:2px dashed var(--accent);outline-offset:-5px;border-radius:8px;background:#14333c}
+/* ghost-файл у курсора */
+#ghost{position:absolute;display:none;z-index:30;align-items:center;gap:8px;background:#0d1a2b;
+  border:1px solid var(--accent);border-radius:8px;padding:7px 12px;font-size:13px;box-shadow:0 6px 18px #000c}
+#ghost .ico{width:22px;height:22px;border-radius:4px;background:var(--checker);background-size:8px 8px;flex:none;
+  display:flex;align-items:center;justify-content:center}
+#ghost .ico svg{width:16px;height:16px}
+.hint{margin-top:8px;font-size:11px;color:var(--muted2)}
+/* ————— нижние панели страницы ————— */
+.checkline{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px}
+.qpanel{display:flex;align-items:center;gap:12px;margin-top:12px;background:var(--surface);
+  border:1px solid var(--line);border-radius:8px;padding:10px 14px;font-size:13px}
+.qpanel button{margin-left:auto}
+.spacer{flex:1}
+/* ————— нижний ряд окна ————— */
+.footer{position:absolute;left:0;right:0;bottom:0;height:58px;background:#0d1523;border-top:1px solid var(--line);
+  display:flex;align-items:center;gap:10px;padding:0 20px;font-size:13px}
+.footer .saved{color:var(--muted)}
+/* ————— плашки результата дропа ————— */
+.plate{position:absolute;left:24px;right:24px;bottom:72px;border-radius:8px;padding:11px 14px;
+  display:none;align-items:flex-start;gap:10px;font-size:13.5px;z-index:20}
+.plate.show{display:flex}
+.plate .ic{font-weight:700;font-size:15px;line-height:1.2}
+.plate.err{background:var(--err-soft);outline:1px solid #b95c5c}
+.plate.err .ic,.plate.err b{color:var(--err)}
+.plate.err .sub{color:#e5bcbc}
+.plate.ok{background:var(--accent-soft);outline:1px solid #2c6f68}
+.plate.ok .ic,.plate.ok b{color:var(--accent)}
+.plate.ok .sub{color:#b8d8d3}
+/* фантомная строка «появится после Ок» */
+.trow.ghostrow{border-top:1px dashed #35415a;background:transparent}
+.trow.ghostrow .c-png,.trow.ghostrow .c-set{color:var(--muted2);font-style:italic;font-size:12.5px}
+</style>
+</head>
+<body>
+
+<!-- ЗАГОЛОВОК -->
+<div class="top">
+  <div>
+    <h1>Экспорт наборов</h1>
+    <div class="counts small">Готово картинок: 6 · в наборах: 4 · наборов: 2</div>
+  </div>
+  <button>+ Добавить набор</button>
+</div>
+
+<!-- ТАБЛИЦА -->
+<div id="table">
+  <div class="trow head">
+    <div class="cell c-png mut" style="font-weight:400">PNG</div>
+    <div class="cell c-set" id="h-mini"><span>Мини</span><span class="glyphs">✓ ✎ ⇅</span></div>
+    <div class="cell c-set" id="h-std"><span>Стандарт</span><span class="glyphs">✓ ✎ ⇅</span></div>
+  </div>
+
+  <div class="trow row">
+    <div class="cell c-png"><div class="thumb44"><svg viewBox="0 0 64 64"><circle cx="28" cy="36" r="19" fill="#f5e6c8"/><circle cx="45" cy="20" r="7" fill="#f5a54a"/></svg></div><span>gusenok_imennik_01_ready.png</span></div>
+    <div class="cell c-set"><span class="chk on">✓</span></div>
+    <div class="cell c-set"><span class="chk on">✓</span></div>
+  </div>
+  <div class="trow row" id="row6">
+    <div class="cell c-png"><div class="thumb44"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="17" fill="none" stroke="#7cb56b" stroke-width="9"/></svg></div><span>venok_podkova_02_ready.png</span></div>
+    <div class="cell c-set"><span class="chk on">✓</span></div>
+    <div class="cell c-set"><span class="chk"></span></div>
+  </div>
+  <div class="trow row" id="row4">
+    <div class="cell c-png"><div class="thumb44"><svg viewBox="0 0 64 64"><rect x="13" y="13" width="38" height="38" fill="none" stroke="#f0b452" stroke-width="9"/></svg></div><span>ramka_tsvety_04_ready.png</span></div>
+    <div class="cell c-set"><span class="chk"></span></div>
+    <div class="cell c-set" id="cell4-std"><span class="chk on">✓</span></div>
+  </div>
+  <div class="trow row">
+    <div class="cell c-png"><div class="thumb44"><svg viewBox="0 0 64 64"><path d="M10 46 A 24 24 0 0 1 54 46" stroke="#7cb56b" stroke-width="10" fill="none"/></svg></div><span>bordyur_listya_05_ready.png</span></div>
+    <div class="cell c-set"><span class="chk on">✓</span></div>
+    <div class="cell c-set"><span class="chk"></span></div>
+  </div>
+  <!-- фантомная строка: видна только в состоянии успеха -->
+  <div class="trow row ghostrow" id="ghostrow" style="display:none">
+    <div class="cell c-png"><div class="thumb44" style="outline:1.5px dashed #4a5a70"><svg viewBox="0 0 64 64" style="opacity:.4"><circle cx="30" cy="34" r="16" fill="#f7d154"/><path d="M45 30 l10 5 -10 5z" fill="#f0a13c"/></svg></div>
+      <span>utka_02_ready.png — появится после «Ок»</span></div>
+    <div class="cell c-set" style="color:var(--muted2)">— &nbsp;«Мини»: нет</div>
+    <div class="cell c-set"><span class="chk" style="border-style:dashed;border-color:var(--accent);color:var(--accent)">…</span></div>
+  </div>
+</div>
+
+<div class="checkline"><span class="chk"></span> Экспортировать только готовые PNG</div>
+
+<div class="qpanel"><span>Проверка PNG: 6 из 6 готовы. В наборы попадут только картинки с «Ок».</span>
+  <button>Открыть проверку PNG</button></div>
+
+<div class="hint" id="cap">Перетащите PNG из проводника на ячейку набора — файл встанет на картинку этой строки и будет отмечен в этом наборе; на пустое место — позиция подскажет имя файла (_NN_ready).</div>
+
+<!-- ПЛАШКИ -->
+<div class="plate err" id="plate-err"><span class="ic">✕</span>
+  <span>Файл отклонён: <b>utka.jpg — это не PNG</b>.<div class="sub small">Перетащите файл с расширением .png. Папки, ярлыки и файлы больше 64 МБ не принимаются.</div></span></div>
+<div class="plate ok" id="plate-ok"><span class="ic">✓</span>
+  <span><b>utka_03_ready.png</b> поставлена на позицию 2 — вместо венка, прежняя картинка теперь в «Истории версий».<div class="sub small">Она ждёт вашего «Ок»: строка вернётся в таблицу, и галочка «Стандарт» встанет сама.</div></span></div>
+
+<!-- НИЖНИЙ РЯД ОКНА -->
+<div class="footer">
+  <span class="saved">Проект сохранён</span><span class="spacer"></span>
+  <button>Назад</button><button>Сохранить проект</button><button class="primary">Создать ZIP-наборы</button>
+</div>
+
+<!-- GHOST у курсора (drag-hover) -->
+<div id="ghost"><span class="ico"><svg viewBox="0 0 64 64"><circle cx="30" cy="34" r="16" fill="#f7d154"/><path d="M45 30 l10 5 -10 5z" fill="#f0a13c"/></svg></span>
+  <span>utka_03_ready.png → позиция 3 · набор «Стандарт»</span></div>
+
+<script>
+const st=new URLSearchParams(location.search).get('state')||'normal';
+if(st==='hover'){
+  document.getElementById('row6').classList.add('drop-on');
+  document.getElementById('ghost').style.display='flex';
+  document.getElementById('h-std').classList.add('ghost-col-head-on');
+  const g=document.getElementById('ghost');g.style.left='478px';g.style.top='196px';g.style.zIndex='40';
+  g.innerHTML='<span class="ico"><svg viewBox="0 0 64 64"><circle cx="30" cy="34" r="16" fill="#f7d154"/><path d="M45 30 l10 5 -10 5z" fill="#f0a13c"/></svg></span><span>utka_03_ready.png → позиция 2 (по строке), станет utka_02_ready.png · набор «Стандарт»</span>';
+  document.getElementById('cap').textContent=
+    'Подсвечена строка и колонка набора, на которую наведён файл: отпускание сюда = картинка встанет на позицию этой строки (2) и будет отмечена в «Стандарте». Отпускание мимо таблицы = позицию подскажет имя файла (_NN_ready); чужое имя — выбор позиции.';
+}
+if(st==='rejected'){document.getElementById('plate-err').classList.add('show');
+  document.getElementById('cap').textContent='Отказ показывается плашкой внизу, таблица не меняется.';}
+if(st==='success'){document.getElementById('plate-ok').classList.add('show');
+  document.getElementById('ghostrow').style.display='flex';
+  document.getElementById('cap').textContent='Строка замещённой картинки уйдёт из наборов, пока не стоит «Ок» (SET-0); фантомная строка показывает, что вернётся.';}
+</script>
+</body>
+</html>

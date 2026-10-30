@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Макет · Результаты · перетаскивание PNG</title>
+<style>
+:root{--canvas:#101827;--surface:#172131;--row:#1b2636;--line:#354154;--ink:#e4edf6;--muted:#a6b5c8;
+  --muted2:#7e8ea1;--accent:#24d8c5;--accent-soft:#12363f;--btn:#263548;--err:#f87171;--err-soft:#441d1d}
+*{box-sizing:border-box;margin:0}
+body{width:1120px;height:780px;background:var(--canvas);color:var(--ink);font:14px/1.45 "Segoe UI",Roboto,sans-serif;overflow:hidden;position:relative}
+h1{font-size:19px}.mut{color:var(--muted)}.mut2{color:var(--muted2)}.small{font-size:12px}
+button{font:14px "Segoe UI",sans-serif;color:var(--ink);background:var(--btn);border:1px solid var(--line);border-radius:7px;padding:8px 16px}
+button.primary{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+/* шапка модуля */
+.hdr{position:absolute;left:16px;right:16px;top:14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  display:flex;align-items:center;padding:14px 20px}
+.hdr .links{margin-left:auto;display:flex;gap:28px;font-weight:600;font-size:14px}
+/* шаги */
+.steps{position:absolute;left:16px;top:92px;width:236px;bottom:88px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.steps h2{font-size:17px;margin-bottom:12px}
+.step{font-size:13.5px;margin:9px 0;color:var(--muted);display:flex;gap:8px;align-items:baseline}
+.step.done::before{content:"✓";color:var(--accent)}
+.step.cur::before{content:"●";color:var(--accent)}
+.step.todo::before{content:"○";color:var(--muted2)}
+.done,.cur{color:var(--accent)}
+/* карточка результатов */
+.card{position:absolute;left:268px;right:16px;top:92px;bottom:88px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 20px;display:flex;flex-direction:column}
+.card h2{font-size:17px;margin-bottom:6px}
+.sum{color:var(--ink);font-size:13.5px}
+.bar{display:flex;align-items:center;gap:12px;margin:12px 0 8px}
+select{background:var(--accent-soft);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:13px}
+.lg{font-size:12.5px}.lg i{font-style:normal;margin-right:3px}
+#list{flex:1;border:1px solid #223045;border-radius:8px;background:#0e1728;padding:8px;overflow:hidden}
+.q{display:flex;gap:9px;align-items:baseline;border-radius:6px;padding:7px 8px;font-size:13.5px}
+.q i{font-style:normal;flex:none}
+.q.mut{color:var(--muted)}
+.q.sel{background:var(--accent-soft);outline:1px solid #2a5f5b}
+.note{font-size:12px;color:var(--muted);margin:10px 0}
+.btnrow{display:flex;gap:10px}
+.btnrow .spacer{flex:1}
+/* подсветка дропа */
+.q.drop{outline:2px dashed var(--accent);outline-offset:-2px;background:#14333c}
+#pagehint{position:absolute;left:268px;right:16px;bottom:64px;font-size:11px;color:var(--muted2);display:none}
+.foot{position:absolute;left:16px;right:16px;bottom:14px;height:58px;background:var(--surface);border:1px solid var(--line);border-radius:10px;display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:0 16px}
+/* плашки над кнопками */
+.plate{position:absolute;left:280px;right:26px;bottom:186px;border-radius:8px;padding:11px 14px;display:none;gap:10px;font-size:13.5px;z-index:5}
+.plate.show{display:flex}
+.plate .ic{font-weight:700}
+.plate.err{background:var(--err-soft);outline:1px solid #b95c5c}.plate.err .ic,.plate.err b{color:var(--err)}.plate.err .sub{color:#e5bcbc}
+.plate.ok{background:var(--accent-soft);outline:1px solid #2c6f68}.plate.ok .ic,.plate.ok b{color:var(--accent)}.plate.ok .sub{color:#b8d8d3}
+/* ghost у курсора */
+#ghost{position:absolute;display:none;z-index:30;align-items:center;gap:8px;background:#0d1a2b;border:1px solid var(--accent);border-radius:8px;padding:7px 12px;font-size:13px;box-shadow:0 6px 18px #000c}
+/* модальный вопрос о замене */
+#modal{position:absolute;inset:0;background:#0009;z-index:40;display:none;align-items:center;justify-content:center}
+#modal.show{display:flex}
+.dlg{width:520px;background:#172131;border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.dlg h3{font-size:15px;margin-bottom:10px}
+.dlg p{font-size:13.5px;color:#cdd9e5}
+.dlg .b{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+</style>
+</head>
+<body>
+
+<div class="hdr"><h1>Автоматический Clipart</h1>
+  <div class="links"><span>Сменить режим</span><span>Настройки API</span><span>Диагностика</span></div></div>
+
+<div class="steps"><h2>Шаги</h2>
+  <div class="step done">1. Идея</div><div class="step done">2. Визуальное направление</div>
+  <div class="step done">3. Референсы</div><div class="step done">4. Структура набора</div>
+  <div class="step done">5. Объекты</div><div class="step done">6. Промпты и запуск</div>
+  <div class="step cur">7. Проверка</div><div class="step todo">8. Экспорт</div></div>
+
+<div class="card">
+  <h2>Выполнение и результаты</h2>
+  <div class="sum" id="sum">Обработано: 6 · Ошибки: 0 · Всего: 6. Помечено: брак генерации 1, брак вырезания 1, удалено 0.</div>
+  <div class="bar"><span class="mut">Показать:</span>
+    <select><option>Все (6)</option><option>Не проверено (0)</option><option>Помеченные (2)</option><option>Удалённые (0)</option></select>
+    <span class="lg"><i style="color:#24cabb">●</i>Ок &nbsp;<i style="color:#f0c38a">●</i>Брак генерации &nbsp;<i style="color:#b9a3f5">●</i>Брак вырезания &nbsp;<i style="color:#8a97a8">●</i>Удалено</span></div>
+
+  <div id="list">
+    <div class="q"><i style="color:#24cabb">●</i>1. gusenok_imennik_01_ready.png — <span>готово · Ок</span></div>
+    <div class="q"><i style="color:#24cabb">●</i>2. venok_podkova_02_ready.png — <span>готово · Ок</span></div>
+    <div class="q"><i style="color:#b9a3f5">●</i>3. gusenok_s_bantom_03_ready.png — <span>готово · Брак вырезания</span></div>
+    <div class="q"><i style="color:#24cabb">●</i>4. ramka_tsvety_04_ready.png — <span>готово · Ок</span></div>
+    <div class="q" id="row5"><i style="color:#24cabb">●</i>5. bordyur_listya_05_ready.png — <span>готово · Ок</span></div>
+    <div class="q"><i style="color:#f0c38a">●</i>6. ugol_girlyanda_06_ready.png — <span>готово · Брак генерации</span></div>
+  </div>
+
+  <div class="note">«Переделать выбранные»: выделите строки (Ctrl/Shift); «Пересоздать помеченные» запускает платную генерацию — цена в подтверждении.</div>
+  <div class="btnrow"><button>Проверить PNG</button><button>Пересоздать помеченные (2)</button>
+    <button>Переделать выбранные ▾</button><span class="spacer"></span><button>Корзина (1)</button>
+    <button>Открыть папку с результатами</button></div>
+</div>
+<div id="pagehint">Файл можно бросить на строку — картинка встанет на позицию этой строки; на пустое место — позицию подскажет имя файла (_NN_ready), чужое имя → выбор позиции.</div>
+
+<div class="foot"><button>Назад</button><button class="primary">К экспорту</button></div>
+
+<div class="plate err" id="plate-err" style="left:280px"><span class="ic">✕</span>
+  <span>Файл отклонён: <b>utka.jpg — это не PNG</b>.<div class="sub small">Перетащите файл с расширением .png. Папки, ярлыки и файлы больше 64 МБ не принимаются.</div></span></div>
+<div class="plate ok" id="plate-ok" style="left:280px"><span class="ic">✓</span>
+  <span><b>utka_03_ready.png</b> подключена к позиции 5 — прежний бордюр теперь в «Истории версий».<div class="sub small">Метка строки — «Не проверено»: поставьте «Ок» после просмотра (или в «Проверке PNG»). В наборы картинка попадёт только после «Ок».</div></span></div>
+
+<div id="ghost"><span style="width:22px;height:22px;border-radius:4px;background:repeating-conic-gradient(#eef1f4 0% 25%,#c9d0d6 0% 50%);background-size:8px 8px;display:inline-flex;align-items:center;justify-content:center"><svg viewBox="0 0 64 64" width="16" height="16"><circle cx="30" cy="34" r="16" fill="#f7d154"/><path d="M45 30 l10 5 -10 5z" fill="#f0a13c"/></svg></span>
+  <span>utka_03_ready.png → позиция 5</span></div>
+
+<div id="modal" class="show" style="display:none">
+  <div class="dlg">
+    <h3>Поставить файл на позицию 5?</h3>
+    <p>«utka_03_ready.png» будет подключена вместо картинки этой строки.<br><br>
+    Прежняя (bordyur_listya_05_ready.png) станет версией — её можно вернуть через «Историю версий».<br>
+    Новая генерация не запускается, платных запросов нет, файл не изменяется.</p>
+    <div class="b"><button>Нет</button><button class="primary">Да, поставить</button></div>
+  </div>
+</div>
+
+<script>
+const st=new URLSearchParams(location.search).get('state')||'normal';
+if(st==='hover'){document.getElementById('row5').classList.add('drop');
+  const g=document.getElementById('ghost');g.style.display='flex';g.style.left='600px';g.style.top='430px';
+  document.querySelector('.note').textContent='Приём: бросьте файл на строку — картинка встанет на позицию этой строки; на пустое место списка — позицию подскажет имя файла (_NN_ready), чужое имя — выбор позиции.';}
+if(st==='confirm'){document.getElementById('modal').style.display='flex'}
+if(st==='rejected'){document.getElementById('plate-err').classList.add('show')}
+if(st==='success'){document.getElementById('plate-ok').classList.add('show');
+  const r=document.getElementById('row5');
+  r.innerHTML='<i style="color:#8393a7">●</i>5. utka_03_ready.png — <span class="mut">готово · Не проверено</span>';
+  document.getElementById('sum').textContent='Обработано: 6 · Ошибки: 0 · Всего: 6. Помечено: брак генерации 1, брак вырезания 1, удалено 0.';}
+</script>
+</body>
+</html>
