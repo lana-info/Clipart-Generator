@@ -1269,6 +1269,10 @@ class AutoClipartFlowController(ClipartFlowController):
         menu = QMenu(self.more_button)
         self.more_recover_action = menu.addAction("Вернуть готовые файлы")
         self.more_recover_action.triggered.connect(self.recover_results)
+        # Owner 2026-10-30: files appear in the result folder while the page just sits there — nothing
+        # else rebuilds this menu. Every open of «Ещё» decides afresh; the stale «Подключать нечего»
+        # swallowed the owner's click (a disabled action does not fire) — «есть чего вернуть, не возвращает».
+        menu.aboutToShow.connect(self._refresh_more_menu)
         self.more_trash_action = menu.addAction("Корзина")
         if self.review is not None:
             self.more_trash_action.triggered.connect(self.review.trash_button.click)
@@ -1283,9 +1287,10 @@ class AutoClipartFlowController(ClipartFlowController):
     def _refresh_more_menu(self):
         _page = self.run_queue.page
         found = self._recoverable_outputs()
-        # Owner 2026-10-30: the item used to vanish when there was nothing to attach, so the owner
-        # hunted for a menu entry that was not there. It stays, with the reason it does nothing.
-        self.more_recover_action.setVisible(True)
+        # Owner 2026-10-30: the item is shown only while there is something to attach. The permanently
+        # visible, disabled entry read as «как будто файлы есть» when there were none; with candidates
+        # the item must actually return them.
+        self.more_recover_action.setVisible(bool(found))
         self.more_recover_action.setText(
             f"Вернуть готовые файлы ({len(found)})" if found else "Вернуть готовые файлы")
         self.more_recover_action.setEnabled(bool(found))

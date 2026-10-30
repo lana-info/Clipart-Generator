@@ -1762,17 +1762,61 @@ def test_a_done_picture_whose_file_vanished_can_be_brought_back(workspace, monke
     assert not session.items[1].review_checked  # back as «Не проверено»
 
 
-def test_the_recovery_menu_item_explains_itself_instead_of_vanishing(workspace):
-    """Владелец 2026-10-30: «кнопка есть, пункта нет» — пункт теперь всегда на месте и говорит, почему выключен."""
+def test_the_recovery_menu_item_shows_only_when_there_is_something_to_return(workspace, monkeypatch):
+    """Владелец 2026-10-30: «пункт виден всегда, как будто файлы есть», а когда файлы есть — «он не возвращает».
+
+    Пункт «Ещё» → «Вернуть готовые файлы» выводится только при кандидатах; кандидаты пересчитываются при
+    каждом открытии меню. Раньше файл, положенный в папку результата уже после обновления экрана, оставлял
+    пункт за устаревшим «Подключать нечего»: клик по выключенному пункту не вызывал подключение вовсе.
+    """
     view, controller, _, worker = workspace
     controller.brief.total.setValue(3)
     prepare_launch(controller)
-    _session = _ready_run(controller, 3, confirmed=(0, 1, 2))
+    session = _ready_run(controller, 3, confirmed=(0, 1, 2))
     controller._refresh_more_menu()
+    assert not controller.more_recover_action.isVisible()       # вернуть нечего — пункта в меню нет
+
+    # Владелец кладёт готовый PNG в папку результата при открытом приложении; экран не обновлялся.
+    orphan = session.output_dir / 'flower_03_ready_2.png'
+    Image.new('RGBA', (64, 64), (120, 80, 40, 255)).save(orphan)
+    controller.more_button.menu().aboutToShow.emit()            # открытие «Ещё» пересчитывает кандидатов
     assert controller.more_recover_action.isVisible()
-    assert not controller.more_recover_action.isEnabled()
-    assert controller.more_recover_action.text() == 'Вернуть готовые файлы'
-    assert 'Подключать нечего' in controller.more_recover_action.toolTip()
+    assert controller.more_recover_action.isEnabled()           # клик больше не падает в устаревший запрет
+    assert controller.more_recover_action.text() == 'Вернуть готовые файлы (1)'
+    asked = []
+    monkeypatch.setattr(QMessageBox, 'question',
+                        lambda *args, **kwargs: asked.append(args[2]) or QMessageBox.StandardButton.Yes)
+    controller.recover_results()
+    assert 'найдено готовых PNG: 1' in asked[0]
+    assert Path(session.items[2].output_path) == orphan.resolve()
+    assert not session.items[2].review_checked                  # подключено как «Не проверено», а не «Ок»
+    controller._refresh_more_menu()
+    assert not controller.more_recover_action.isVisible()       # подключили — снова нечего возвращать
+
+
+def test_a_position_already_showing_its_file_does_not_block_other_positions(workspace):
+    """Нечего вернуть для позиции, которая уже показывает именно этот файл, — но не для остальных."""
+    view, controller, _, worker = workspace
+    controller.brief.total.setValue(3)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    own = session.output_dir / 'flower_01_ready.png'
+    orphan = session.output_dir / 'flower_02_ready.png'
+    for path in (own, orphan):
+        Image.new('RGBA', (64, 64), (120, 80, 40, 255)).save(path)
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    session.items[0].output_path = str(own)                     # позиция 0 показывает ровно этот файл
+    session.items[1].status = RunItemStatus.CANCELLED
+    session.items[2].status = RunItemStatus.CANCELLED
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    controller.save_timer.stop()
+    controller._refresh_more_menu()
+    assert controller._recoverable_outputs().keys() == {1}      # позиция 0 не блокирует позицию 1
+    assert controller.more_recover_action.isVisible()
 
 
 def test_a_picture_marked_as_a_defect_leaves_the_sets_at_once(workspace):
