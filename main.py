@@ -3645,7 +3645,9 @@ class WorkerThread(QThread):
             # preparation the local Real-ESRGAN path does is needed here: junk rim colour (black
             # or white) otherwise bleeds into the upscaled edge as a halo (owner item 2026-10-28).
             # Recraft Crisp gets its own opaque input just above and needs no second copy.
+            flattened_alpha = None
             if upscale_model != FAL_RECRAFT_CRISP_MODEL_ID:
+                flattened_alpha = self._transparent_alpha_channel(current_path)
                 current_path = self._prepare_fal_upscale_rgb(
                     current_path, raw_dir, idx, prefix, step_name,
                 )
@@ -3666,6 +3668,12 @@ class WorkerThread(QThread):
                 raw_dir, f"{prefix}_{step_name}_fal_{idx:03d}_{self.run_stamp}.png"
             )
             self._download_file(current_url, current_path)
+            if flattened_alpha is not None:
+                # Owner 2026-10-30: the prepared copy carries no alpha, so the model cannot return one —
+                # such pictures came back fully opaque and were reported as «апскейлер потерял
+                # прозрачность». The matte comes back from the source, exactly as on the local path.
+                with self._local_operation_lock:
+                    self._restore_upscaled_alpha(current_path, flattened_alpha)
             self.progress.emit(f"  Промежуточный Fal.ai апскейл: {current_path}")
             self.progress.emit(f"  Этап обработки: {stage}; status=complete")
             self._emit_diagnostic(
@@ -3784,6 +3792,19 @@ class WorkerThread(QThread):
         )
         prepared.save(prepared_path, format="PNG")
         return prepared_path
+
+    @staticmethod
+    def _transparent_alpha_channel(input_path):
+        """The picture's matte when it has transparency, else None (an opaque picture has nothing to restore).
+
+        Used around the Fal upscale: the opaque copy sent to the provider cannot come back with an
+        alpha channel, so the matte is kept here and put back on the result (owner 2026-10-30).
+        """
+        with Image.open(input_path) as source:
+            if "A" not in source.getbands():
+                return None
+            alpha = source.convert("RGBA").getchannel("A")
+            return alpha if alpha.getextrema()[0] < 255 else None
 
     def _fal_source_url(self, current_path, current_url, *, require_https=False, fal_model_id=None):
         if current_url and str(current_url).startswith("https://"):

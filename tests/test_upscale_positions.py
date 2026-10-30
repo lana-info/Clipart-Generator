@@ -509,5 +509,68 @@ class UpscalePositionTests(unittest.TestCase):
                 self.app.processEvents()
 
 
+    def test_fal_after_upscale_returns_the_transparency_it_flattened(self):
+        """Владелец 2026-10-30: Fal-апскейл (Bria, 4×) вернул картинку совсем без прозрачности.
+
+        The opaque copy sent to Fal cannot come back with alpha, so the pipeline must put the matte
+        back itself — otherwise every cut-out picture is delivered opaque and the item is reported as
+        «апскейлер потерял прозрачность».
+        """
+        with tempfile.TemporaryDirectory(prefix="clipart-fal-after-alpha-") as temp_dir:
+            temp_path = Path(temp_dir)
+            source_path = temp_path / "source.png"
+            image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+            ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(180, 70, 100, 255))
+            image.save(source_path, format="PNG")
+            settings = processing_settings(
+                upscale=False,
+                upscale_after=True,
+                upscale_after_provider="fal",
+                fal_upscale_after_model="bria/increase-resolution",
+                fal_upscale_after_scale=4,
+                remove_bg=False,
+                fal_api_key="test-fal-key",
+            )
+            worker = main.WorkerThread(
+                "mode2_process", temp_dir, settings, selected_files=[str(source_path)],
+            )
+            seen = {}
+
+            def fake_upload(worker_self, path, model_id=None):
+                seen["input"] = Path(path)
+                with Image.open(path) as prepared:  # exactly what the provider receives: no alpha
+                    seen["opaque_input"] = prepared.convert("RGBA").getchannel("A").getextrema()[0] == 255
+                return "mock://source"
+
+            def fake_process(worker_self, image_url, *, operation, model_id, scale):
+                return "mock://upscaled"
+
+            def fake_download(worker_self, image_url, output_path):
+                # what Bria returns for an opaque input: 4× RGB, no alpha at all
+                with Image.open(seen["input"]) as prepared:
+                    prepared.convert("RGB").resize(
+                        (prepared.width * 4, prepared.height * 4), Image.Resampling.NEAREST,
+                    ).save(output_path, format="PNG")
+
+            worker._fal_upload_https_url = types.MethodType(fake_upload, worker)
+            worker._fal_process_image = types.MethodType(fake_process, worker)
+            worker._download_file = types.MethodType(fake_download, worker)
+            worker._mode2_process_files(emit_final=False)
+
+            self.assertTrue(seen.get("opaque_input"), "провайдеру ушла непрозрачная копия — это задумано")
+            delivered = list((temp_path / "output").glob("*.png"))
+            self.assertEqual(len(delivered), 1)
+            with Image.open(delivered[0]) as result:
+                rgba = result.convert("RGBA")
+                alpha = rgba.getchannel("A")
+                self.assertEqual(rgba.size, (256, 256))
+                self.assertEqual(alpha.getextrema()[0], 0, "прозрачность потеряна")
+                self.assertEqual(alpha.getextrema()[1], 255)
+                self.assertEqual(alpha.getpixel((2, 2)), 0, "угол должен остаться прозрачным")
+                self.assertEqual(alpha.getpixel((128, 128)), 255, "середина предмета непрозрачна")
+                self.assertGreater(rgba.getchannel("R").getpixel((128, 128)), 100)
+            self.assertFalse(getattr(worker._item_context, "manual_transparency_required", False),
+                             "картинка не должна требовать ручного удаления фона")
+
 if __name__ == "__main__":
     unittest.main()

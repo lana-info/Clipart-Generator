@@ -730,16 +730,25 @@ class KieRoutingTests(unittest.TestCase):
                 worker,
             )
             worker._download_file = types.MethodType(
-                lambda _self, _url, output_path: Path(output_path).write_bytes(b"result"),
+                # What the provider really returns for the opaque copy: a 2× RGB PNG, no alpha.
+                lambda _self, _url, output_path: Image.new("RGB", (64, 64), (200, 120, 60)).save(
+                    output_path, format="PNG"),
                 worker,
             )
-            worker._run_upscale_pass(str(source), None, temp, 1, "gen",
-                                     "upscaled_before", "fal", 2, "ignored")
+            delivered, _url, _local = worker._run_upscale_pass(
+                str(source), None, temp, 1, "gen", "upscaled_before", "fal", 2, "ignored")
             self.assertNotEqual(uploaded["path"], str(source))
             self.assertNotIn("A", Image.open(uploaded["path"]).getbands())
             # The rim now carries the subject colour instead of black or white junk.
             self.assertEqual(uploaded["image"].getpixel((16, 7))[:3], (200, 120, 60))
             self.assertEqual(uploaded["image"].getpixel((16, 24))[:3], (200, 120, 60))
+            # EDGE-FAL kept the matte: the opaque copy cannot return one, so it comes back from the
+            # source (owner 2026-10-30 — before this the picture was delivered fully opaque).
+            with Image.open(delivered) as result:
+                alpha = result.convert("RGBA").getchannel("A")
+                self.assertEqual(result.size, (64, 64))
+                self.assertEqual(alpha.getpixel((2, 2)), 0)
+                self.assertEqual(alpha.getpixel((32, 32)), 255)
             # An opaque picture is uploaded as it is.
             uploaded.clear()
             worker._run_upscale_pass(str(opaque), None, temp, 1, "gen",
