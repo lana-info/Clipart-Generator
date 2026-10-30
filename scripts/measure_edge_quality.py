@@ -72,13 +72,19 @@ def measure(source: Image.Image, result: Image.Image) -> dict:
     thin_total = int(thin.sum())
     thin_kept = int(((alpha > 128) & thin).sum())
 
+    # The rim tint is measured twice: on the source (how much key the blend carries) and on
+    # the result (what actually ships). The second number is the one that matters for the
+    # owner's "лиловая кайма" complaint; the first only describes the input (review R5).
     angle = ck.key_chroma_angle(rgb, key)
-    tint = {}
+    result_rgb = np.asarray(result.convert("RGB"), np.float32)
+    result_angle = ck.key_chroma_angle(result_rgb, key)
+    tint, tint_out = {}, {}
     for level in (0, 64, 128):
         band = (alpha > level) & (alpha < 255)
-        tinted = band & (angle <= 20.0) & (rgb[..., 2] <= 0.95 * key[2])
         total = int(band.sum())
-        tint[level] = (100.0 * int(tinted.sum()) / total) if total else 0.0
+        tint[level] = (100.0 * int((band & (angle <= 20.0) & (rgb[..., 2] <= 0.95 * key[2])).sum()) / total) if total else 0.0
+        tint_out[level] = (100.0 * int((band & (result_angle <= 20.0)
+                                        & (result_rgb[..., 2] <= 0.95 * key[2])).sum()) / total) if total else 0.0
     return {
         "size": source.size,
         "edge_width_px": edge_width,
@@ -86,6 +92,7 @@ def measure(source: Image.Image, result: Image.Image) -> dict:
         "thin_total": thin_total,
         "thin_kept_pct": (100.0 * thin_kept / thin_total) if thin_total else float("nan"),
         "tint_pct": tint,
+        "tint_out_pct": tint_out,
     }
 
 
@@ -99,7 +106,7 @@ def main() -> int:
     import chroma_key
     print("chroma_key:", chroma_key.__file__, flush=True)
     print(f"{'frame':<28} {'edgeW':>6} {'jaggy':>6} {'thinN':>6} {'thin%':>6} "
-          f"{'tint>0':>7} {'tint>64':>8} {'tint>128':>9}")
+          f"{'in>64':>7} {'out>64':>8} {'out>128':>9}")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     for path in args.frames:
@@ -108,10 +115,10 @@ def main() -> int:
         _, result = cutout(source)
         values = measure(source, result)
         result.save(out / f"{path.stem}_cutout.png")
-        tint = values["tint_pct"]
+        tint, tint_out = values["tint_pct"], values["tint_out_pct"]
         print(f"{path.name:<28} {values['edge_width_px']:>6.2f} {values['jagged_points_per_100px']:>6.2f} "
               f"{values['thin_total']:>6d} {values['thin_kept_pct']:>6.1f} "
-              f"{tint[0]:>6.1f}% {tint[64]:>7.1f}% {tint[128]:>8.1f}%")
+              f"{tint[64]:>6.1f}% {tint_out[64]:>7.1f}% {tint_out[128]:>8.1f}%")
     return 0
 
 
