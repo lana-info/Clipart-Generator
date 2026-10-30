@@ -3093,9 +3093,11 @@ class WorkerThread(QThread):
                     with Image.open(current_path) as source_image:
                         preserved = preserve_native_alpha(source_image)
                         # The model's own matte carries faint haze and debris; drop them and
-                        # tighten smooth edges. Never fails the stage.
+                        # tighten smooth edges. The coverage itself is delivered as it was
+                        # solved (straighten=False), the delivery cut never restyles it.
                         try:
-                            cleaned = clean_alpha(preserved, clear_hidden_rgb=True, gain=DELIVERY_EDGE_GAIN)
+                            cleaned = clean_alpha(preserved, clear_hidden_rgb=True, gain=DELIVERY_EDGE_GAIN,
+                                                  straighten=False)
                             if cleaned.getchannel("A").getextrema()[1] > 0:
                                 cleaned.info.update(preserved.info)
                                 preserved = cleaned
@@ -3186,9 +3188,11 @@ class WorkerThread(QThread):
                                     chroma_working_alpha = working_alpha.copy()
                                     chroma_delivery_alpha = delivery_alpha
                                     # The delivery alpha is published after the upscale, so its haze is dropped here
-                                    # (owner 2026-10-28); the working matte for the upscaler stays as it is.
+                                    # (owner 2026-10-28); the working matte for the upscaler stays as it is, and
+                                    # nothing in it is restyled (straighten=False).
                                     try:
-                                        cleaned = clean_alpha(remove_key_residue(result, selected_chroma_key_color), gain=DELIVERY_EDGE_GAIN)
+                                        cleaned = clean_alpha(remove_key_residue(result, selected_chroma_key_color),
+                                                              gain=DELIVERY_EDGE_GAIN, straighten=False)
                                         cleaned.info.update(result.info)
                                         result = cleaned
                                         chroma_delivery_alpha = cleaned.getchannel("A")
@@ -3199,8 +3203,10 @@ class WorkerThread(QThread):
                                     # Local Real-ESRGAN after the cut-out takes this exact alpha as its
                                     # input (byte-exact contract), so it is left alone. Otherwise drop
                                     # faint haze and debris and tighten smooth edges; never fail the cut-out.
+                                    # The delivery cut keeps the matte it was given (straighten=False).
                                     try:
-                                        cleaned = clean_alpha(remove_key_residue(result, selected_chroma_key_color), gain=DELIVERY_EDGE_GAIN)
+                                        cleaned = clean_alpha(remove_key_residue(result, selected_chroma_key_color),
+                                                              gain=DELIVERY_EDGE_GAIN, straighten=False)
                                         cleaned.info.update(result.info)
                                         result = cleaned
                                     except Exception:

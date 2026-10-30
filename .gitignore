@@ -71,3 +71,8 @@ artifacts/**/*_on_cyan.png
 # Cut-outs written by scripts/measure_edge_quality.py (regenerable, about 5 MB each)
 artifacts/**/out/
 artifacts/**/out-fixed/
+
+# Per-variant cut-outs of the even-contour verification (about 6 MB each, regenerable
+# with scripts/compare_cutout_variants.py)
+artifacts/cutout-ab/**/candidate/
+artifacts/cutout-ab/**/reference/
