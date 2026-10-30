@@ -334,3 +334,99 @@ def test_entrypoint_journals_window_show_and_event_loop_start():
     assert '"application_window_shown"' in source
     assert '"application_event_loop_started"' in source
     assert source.index("window.show()") < source.index('"application_window_shown"')
+
+
+def test_startup_window_watchdog_restarts_once_and_journals_the_timeout(tmp_path):
+    from startup_watchdog import RECOVERY_ARGUMENT, StartupWindowWatchdog
+
+    journal = DiagnosticJournal(tmp_path, app_version="3.2.53")
+    launches, exits = [], []
+    watchdog = StartupWindowWatchdog(
+        timeout_seconds=1.0, journal=journal, retry_enabled=True,
+        executable="Vibix Images.exe", restart_arguments=(RECOVERY_ARGUMENT,),
+        exit_process=lambda code: exits.append(code),
+        launcher=lambda argv, **kwargs: launches.append((list(argv), kwargs)),
+    )
+    watchdog._started_at = time.monotonic() - 31
+    watchdog._on_timeout()                                         # fire deterministically
+    assert exits == [1]
+    assert launches and launches[0][0] == ["Vibix Images.exe", RECOVERY_ARGUMENT]
+    events = [event for event in journal.read_events() if event["event"] == "startup_window_timeout"]
+    assert events and events[0]["severity"] == "warning"
+    assert events[0]["details"]["decision"] == "restarted"
+    assert events[0]["details"]["attempt"] == 1
+    assert events[0]["details"]["elapsed_ms"] >= 30000
+    watchdog._on_timeout()                                         # fires exactly once
+    assert exits == [1] and len(launches) == 1
+    journal.close()
+
+
+def test_startup_window_watchdog_stays_silent_when_the_window_shows(tmp_path):
+    from startup_watchdog import StartupWindowWatchdog
+
+    journal = DiagnosticJournal(tmp_path, app_version="3.2.53")
+    exits = []
+    watchdog = StartupWindowWatchdog(
+        timeout_seconds=0.05, journal=journal, retry_enabled=True,
+        executable="Vibix Images.exe", exit_process=lambda code: exits.append(code),
+        launcher=lambda argv, **kwargs: None,
+    )
+    watchdog.arm()
+    watchdog.window_shown()
+    time.sleep(0.2)
+    assert exits == []
+    assert [event["event"] for event in journal.read_events()] == []
+    journal.close()
+
+
+def test_startup_window_watchdog_never_restarts_the_recovery_launch(tmp_path):
+    from startup_watchdog import StartupWindowWatchdog
+
+    journal = DiagnosticJournal(tmp_path, app_version="3.2.53")
+    launches, exits = [], []
+    watchdog = StartupWindowWatchdog(
+        timeout_seconds=1.0, journal=journal, retry_enabled=False,   # the recovery launch
+        executable="Vibix Images.exe", exit_process=lambda code: exits.append(code),
+        launcher=lambda argv, **kwargs: launches.append(argv),
+    )
+    watchdog._started_at = time.monotonic() - 31
+    watchdog._on_timeout()
+    assert exits == [1] and launches == []
+    events = [event for event in journal.read_events() if event["event"] == "startup_window_timeout"]
+    assert events and events[0]["details"]["decision"] == "stopped"
+    journal.close()
+
+
+def test_startup_window_watchdog_arms_in_frozen_entrypoint_only():
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "main.py").read_text(encoding="utf-8")
+    assert "StartupWindowWatchdog" in source
+    assert '"--startup-recovered"' in source
+    assert 'getattr(sys, "frozen", False)' in source
+    # the watchdog disarms from the event loop, and the recovery flag never restarts again
+    assert "window_watchdog.window_shown" in source
+    assert "retry_enabled=not startup_recovered" in source
+    watchdog_source = (root / "startup_watchdog.py").read_text(encoding="utf-8")
+    assert "os._exit" in watchdog_source and "startup_window_timeout" in watchdog_source
+
+
+def test_watchdog_is_disarmed_by_a_real_event_loop_timer(tmp_path):
+    """The entrypoint disarms the watchdog with singleShot(0); a live loop must beat the deadline."""
+    from PyQt6.QtCore import QTimer
+    from startup_watchdog import StartupWindowWatchdog
+
+    app = QApplication.instance() or QApplication([])
+    journal = DiagnosticJournal(tmp_path, app_version="3.2.53")
+    exits = []
+    watchdog = StartupWindowWatchdog(
+        timeout_seconds=0.3, journal=journal, retry_enabled=True,
+        executable="Vibix Images.exe", exit_process=lambda code: exits.append(code),
+        launcher=lambda argv, **kwargs: None,
+    )
+    watchdog.arm()
+    QTimer.singleShot(0, watchdog.window_shown)                    # what the entrypoint does
+    app.processEvents()
+    time.sleep(0.5)                                                # past the original deadline
+    assert exits == []
+    assert [event["event"] for event in journal.read_events()] == []
+    journal.close()
