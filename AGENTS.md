@@ -44,6 +44,24 @@
   at a time and verify after each merge.
 - Update `release/3.x` only after the candidate is stable and explicitly approved.
 
+## Mandatory code review gate (owner decision 2026-10-30, mandatory)
+
+- Every task PR receives an explicit review pass before it is merged into the
+  active development branch, even when the author is an agent session.
+- The reviewer reads the full diff against the task's stated intent and checks:
+  - the change does only what the task declares; in refactor/move PRs behavior
+    must not change — behavioral fixes and code relocation are never mixed in
+    one PR;
+  - new or changed guards keep negative controls that fail when the guard is
+    bypassed (a green test alone is not proof — `TRUSTWORTHY_TEST_MATRIX.md`);
+  - no secrets, prompts, personal paths or key material enter code, logs or
+    fixtures;
+  - commits that must not trigger builds carry `[skip ci]`.
+- Review findings are fixed in the same branch before the merge; record the
+  review pass and its outcome in STATE.md next to the test results.
+- TASKS.md T-QUAL-0/T-QUAL-4 add ruff (lint mode, no mass autofix) to CI; until
+  it lands, `py_compile` on every touched file is the minimum bar.
+
 ## Build composition and "done" status (owner decision 2026-10-23, mandatory)
 
 - Current integration branch is `develop/3.2`; branch, merge and cleanup rules in STATE.md
