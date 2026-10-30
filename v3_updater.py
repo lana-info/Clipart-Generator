@@ -289,6 +289,13 @@ class UpdateController(QObject):
             )
             return
         try:
+            verify_release_manifest = getattr(
+                self.client, "verify_release_manifest", None
+            )
+            if callable(verify_release_manifest):
+                verify_release_manifest(
+                    getattr(release, "delivery_envelope", None), release,
+                )
             with self.client.protected_download(release, installer):
                 try:
                     self.installer_launcher(installer)
