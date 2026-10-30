@@ -51,7 +51,7 @@ class AutoClipartStateExtension:
             for row in rows:
                 if (not isinstance(row, dict)
                         or not {"status", "output_path", "attempts"} <= set(row)
-                        or set(row) - {"status", "output_path", "attempts", "editor_output_path", "stage_statuses", "source_path", "paid_completed_stages",
+                        or set(row) - {"status", "output_path", "attempts", "editor_output_path", "stage_statuses", "source_path", "cutout_path", "paid_completed_stages",
                                        "review_mark", "review_note", "versions", "review_checked", "prompt_edited"}):
                     raise ValueError("Неверная запись результата")
                 from studio_clipart_versions import validate_review_row
@@ -63,6 +63,9 @@ class AutoClipartStateExtension:
                 source = row.get("source_path", "")
                 if not isinstance(source, str) or len(source) > 4000:
                     raise ValueError("Неверный путь исходного результата")
+                upscale_input = row.get("cutout_path", "")
+                if not isinstance(upscale_input, str) or len(upscale_input) > 4000:
+                    raise ValueError("Неверный путь изображения до апскейла")
                 edited = row.get("editor_output_path", "")
                 if not isinstance(edited, str) or (edited and edited != row["output_path"]):
                     raise ValueError("Неверный путь отредактированного результата")

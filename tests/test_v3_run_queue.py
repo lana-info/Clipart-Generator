@@ -614,6 +614,26 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertEqual(session.items[0].source_path, str(generated.resolve()))
             self.assertEqual(session.items[0].stage_statuses["generation"], "complete")
 
+    def test_upscale_input_line_is_recorded_for_the_redo(self):
+        """Владелец 2026-10-30: конвейер отдаёт картинку до апскейла, очередь запоминает её для «Апскейл заново»."""
+        with tempfile.TemporaryDirectory(prefix="v3-queue-upscale-input-") as temp:
+            root = Path(temp)
+            run_dir = root / ".run" / "current-run"
+            run_dir.mkdir(parents=True)
+            kept = run_dir / "gen_upscale_input_001.png"
+            Image.new("RGBA", (4, 4), (10, 20, 30, 0)).save(kept)
+            elsewhere = root / "outside.png"
+            Image.new("RGBA", (4, 4), (10, 20, 30, 0)).save(elsewhere)
+            session = RunQueueSession(generation_request(root, count=1), ProjectMode.CLIPART)
+            session.handle_progress("[1/1] Генерация")
+            session.handle_progress(f"Вход апскейла: {kept}")
+
+            self.assertEqual(session.items[0].cutout_path, str(kept.resolve()))
+            self.assertEqual(session.items[0].stage_statuses["background_removal"], "complete")
+            # Путь вне временной папки запуска не принимается.
+            session.handle_progress(f"Вход апскейла: {elsewhere}")
+            self.assertEqual(session.items[0].cutout_path, str(kept.resolve()))
+
     def test_missing_processing_file_is_marked_failed(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-missing-file-") as temp:
             session = RunQueueSession(

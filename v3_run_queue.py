@@ -63,6 +63,8 @@ _ITEM_START = re.compile(
     r"(?:Генерация|Обработка файла:)"
 )
 _GENERATED_PREFIX = "Сгенерировано:"
+# The picture entering the upscale stage, kept for «Апскейл заново» (owner 2026-10-30).
+_UPSCALE_INPUT_PREFIX = "Вход апскейла:"
 _OUTPUT_PREFIX = "Итог сохранён:"
 _ERROR_PREFIX = "Ошибка:"
 _MISSING_PREFIX = "Файл не найден:"
@@ -134,6 +136,8 @@ class RunItem:
     recovery_attempts: int = 0
     stage_statuses: dict[str, str] = field(default_factory=dict)
     source_path: str = field(default="", repr=False)
+    # The picture as it entered the upscale stage: «Апскейл заново» starts from it (owner 2026-10-30).
+    cutout_path: str = field(default="", repr=False)
     output_path: str = field(default="", repr=False)
     payload: Any = field(default=None, repr=False)
     # Explicit editor save, distinct from a worker-supplied external path.
@@ -1030,6 +1034,21 @@ class RunQueueSession(QObject):
             self.changed.emit()
             return
 
+        if text.startswith(_UPSCALE_INPUT_PREFIX) and item is not None:
+            raw = text[len(_UPSCALE_INPUT_PREFIX) :].strip()
+            trusted = _trusted_worker_path(raw, self.transient_dir)
+            if trusted:
+                item.cutout_path = trusted
+                item.stage_statuses["background_removal"] = "complete"
+            else:
+                self._event(
+                    "worker_path_rejected",
+                    item=item.index,
+                    kind="upscale_input",
+                )
+            self.changed.emit()
+            return
+
         if text.startswith(_OUTPUT_PREFIX) and item is not None:
             raw = text[len(_OUTPUT_PREFIX) :].strip()
             trusted = _trusted_worker_path(raw, self.output_dir)
@@ -1502,6 +1521,69 @@ class RunQueueSession(QObject):
         self.stop_after_current_requested = False
         self._deferred_stop = None
         self._event("reprocess_started", count=len(chosen))
+        self.changed.emit()
+        return request
+
+    def upscale_redoable_indices(self, indices) -> list[int]:
+        """Finished items whose picture as it entered the upscale stage is still on disk (owner 2026-10-30)."""
+        if (self.running or getattr(self.request, "queue_items", None)
+                or not getattr(self.request, "generated_prompts", None)):
+            return []
+        chosen = []
+        for index in sorted(set(indices)):
+            if not 0 <= index < len(self.items):
+                continue
+            item = self.items[index]
+            source = Path(item.cutout_path) if item.cutout_path else None
+            if (item.status in {RunItemStatus.SUCCEEDED, RunItemStatus.FAILED}
+                    and source is not None and _is_within(source, self.transient_dir)
+                    and not source.is_symlink() and source.is_file()):
+                chosen.append(index)
+        return chosen
+
+    def preview_upscale_redo(self, indices) -> Any | None:
+        """Upscale again from the picture that entered the stage: no generation, no background removal.
+
+        The saved input already carries its matte, so ``skip_remover_for_alpha`` tells the pipeline to
+        reuse it instead of running the remover over an already cut-out picture.
+        """
+        chosen = self.upscale_redoable_indices(indices)
+        if not chosen:
+            return None
+        settings = dict(self.request.settings)
+        settings["skip_remover_for_alpha"] = True
+        settings["overwrite_existing"] = True  # the previous picture is kept as a version first
+        settings["publish_recovered_source"] = True
+        settings["recovery_completed_stages"] = []
+        settings["task_item_indices"] = self._retry_task_indices(chosen)
+        return replace(self.request, mode="mode2_process", generated_prompts=[],
+                       selected_files=[str(Path(self.items[index].cutout_path).resolve())
+                                       for index in chosen],
+                       settings=settings)
+
+    def prepare_upscale_redo(self, indices) -> Any | None:
+        request = self.preview_upscale_redo(indices)
+        if request is None:
+            return None
+        chosen = self.upscale_redoable_indices(indices)
+        self.active_order = list(chosen)
+        for index in chosen:
+            item = self.items[index]
+            item.status = RunItemStatus.PENDING
+            item.short_message = "Ожидает повторного апскейла."
+            item.output_path = ""
+            item.editor_output_path = ""
+            item.stage_statuses = {"generation": "complete", "background_removal": "complete"}
+            item.paid_completed_stages = ()
+            item.recovery_input_stages = None
+            item.attempts += 1
+        self.current_index = None
+        self._item_progress.clear()
+        self._last_progress = 0
+        self.running = True
+        self.stop_after_current_requested = False
+        self._deferred_stop = None
+        self._event("upscale_redo_started", count=len(chosen))
         self.changed.emit()
         return request
 
@@ -3180,6 +3262,26 @@ class RunQueueSupport:
         return self._launch("reprocess", preview, self.session.reprocessable_indices(indices),
                             lambda: self.session.prepare_reprocess(indices, overrides))
 
+    def upscale_redo_selected(self, indices, *, confirm=None) -> Any | None:
+        """Upscale the chosen pictures again; confirm only when the upscale stage is paid (owner 2026-10-30)."""
+        if self.session is None:
+            return None
+        busy = getattr(self.controller, "is_busy", None)
+        if callable(busy) and busy():
+            return None
+        worker = getattr(self.controller, "worker", None)
+        if worker is not None and bool(worker.isRunning()):
+            return None
+        preview = self.session.preview_upscale_redo(indices)
+        if preview is None:
+            return self._blocked("upscale_redo", "nothing_to_upscale_again")
+        if callable(confirm) and not confirm(preview):
+            return self._blocked("upscale_redo", "not_confirmed")
+        if self.session.preview_upscale_redo(indices) != preview:
+            return self._blocked("upscale_redo", "request_changed")
+        return self._launch("upscale_redo", preview, self.session.upscale_redoable_indices(indices),
+                            lambda: self.session.prepare_upscale_redo(indices))
+
     def _keep_previous_outputs(self, indices, kind) -> bool:
         """Let the module keep the current pictures as versions before they are replaced."""
         keep = getattr(self.controller, "before_replace_outputs", None)
@@ -3200,6 +3302,7 @@ class RunQueueSupport:
         if page is None:
             return
         titles = {"regenerate": "Перегенерация не начата", "reprocess": "Повторное вырезание не начато",
+                  "upscale_redo": "Повторный апскейл не начат",
                   "retry": "Повтор не начат"}
         reason = _safe_technical_log_text(str(error).strip() or type(error).__name__)[:300]
         page.summary_label.setText(f"{titles[kind]}: {reason}")

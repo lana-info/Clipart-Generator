@@ -2599,9 +2599,11 @@ class WorkerThread(QThread):
             if (not retain_generated_sources
                     and Path(raw_dir).resolve() == owned_run and owned_run.is_dir()):
                 # The raw generated picture (with its sidecar) stays: «Убрать фон» and
-                # re-cutting need it after a finished or regenerated run.
+                # re-cutting need it after a finished or regenerated run. The picture that entered the
+                # upscale stage stays the same way: «Апскейл заново» repeats that stage from it (owner 2026-10-30).
                 raw_kept = re.compile(
-                    rf"^gen_\d{{3,}}_{re.escape(self.run_stamp)}\.png(\.generation\.json)?$",
+                    rf"^(gen_\d{{3,}}_{re.escape(self.run_stamp)}\.png(\.generation\.json)?"
+                    rf"|(?:gen|file)_upscale_input_\d{{3,}}_{re.escape(self.run_stamp)}\.png)$",
                     re.IGNORECASE,
                 )
                 kept = [entry for entry in owned_run.iterdir()
@@ -2632,7 +2634,8 @@ class WorkerThread(QThread):
         if not transient.is_dir():
             return
         cutoff = time.time() - cls.RAW_SOURCE_MAX_AGE_SECONDS
-        raw_only = re.compile(r"^gen_\d{3,}_.+\.png(\.generation\.json)?$", re.IGNORECASE)
+        raw_only = re.compile(r"^(gen_\d{3,}_.+\.png(\.generation\.json)?"
+                              r"|(?:gen|file)_upscale_input_\d{3,}_.+\.png)$", re.IGNORECASE)
         for run_dir in transient.iterdir():
             try:
                 if (run_dir.resolve() == current_run or run_dir.is_symlink() or not run_dir.is_dir()
@@ -3399,6 +3402,9 @@ class WorkerThread(QThread):
                 source_size = source.size
                 source_alpha = source.convert("RGBA").getchannel("A")
                 preserve_alpha = source_alpha.getextrema()[0] < 255
+            # Owner 2026-10-30: «Апскейл заново» redoes this stage from the picture as it enters it, so the
+            # picture is kept next to the run's other redo inputs (the saved generation) before the pass.
+            self._remember_upscale_input(current_path, raw_dir, idx, prefix)
             scale = self._upscale_pass_factor(
                 self.upscale_after_provider, self.local_realesrgan_after_scale,
                 self.kie_upscale_after_model, self.fal_upscale_after_model,
@@ -5192,6 +5198,21 @@ class WorkerThread(QThread):
     def _save_image_as_png(self, source_path, output_path):
         with Image.open(source_path) as img:
             self._save_image_object_as_png(img, output_path)
+
+    def _remember_upscale_input(self, input_path, raw_dir, idx, prefix):
+        """Keep the picture as it enters the upscale stage for «Апскейл заново» (owner 2026-10-30).
+
+        The run queue trusts paths inside its transient folder only, exactly like the saved generation
+        that makes «Удалить фон заново» possible; without this copy the stage cannot be redone.
+        """
+        try:
+            with Image.open(input_path) as source:
+                source.load()
+                target = os.path.join(raw_dir, f"{prefix}_upscale_input_{idx:03d}_{self.run_stamp}.png")
+                self._save_image_object_as_png(source.convert("RGBA"), target)
+        except (OSError, ValueError):
+            return  # no copy: «Апскейл заново» will simply not be offered for this picture
+        self.progress.emit(f"  Вход апскейла: {target}")
 
     def _save_image_object_as_png(self, image, output_path):
         image_to_save = image
