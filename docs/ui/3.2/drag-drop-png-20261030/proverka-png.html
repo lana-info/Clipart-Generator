@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Макет · Проверка PNG · перетаскивание PNG</title>
+<style>
+:root{--canvas:#101827;--surface:#172131;--line:#354154;--ink:#e4edf6;--muted:#a6b5c8;--muted2:#7e8ea1;
+  --accent:#24d8c5;--accent-soft:#12363f;--btn:#263548;--err:#f87171;--err-soft:#441d1d;
+  --checker:repeating-conic-gradient(#eef1f4 0% 25%,#c9d0d6 0% 50%)}
+*{box-sizing:border-box;margin:0}
+body{width:1120px;height:780px;background:var(--canvas);color:var(--ink);font:14px/1.45 "Segoe UI",Roboto,sans-serif;overflow:hidden;position:relative;padding:16px 18px 0}
+button{font:14px "Segoe UI",sans-serif;color:var(--ink);background:var(--btn);border:1px solid var(--line);border-radius:7px;padding:8px 16px}
+button.primary{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+.chip{background:var(--btn);border:1px solid var(--line);border-radius:7px;padding:7px 14px;font-size:13.5px}
+.chip.hot{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+.layout{display:flex;gap:14px;height:586px}
+/* сетка миниатюр */
+.grid{width:452px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:16px 12px;align-content:start;position:relative}
+.tile{position:relative}
+.tile .pic{width:132px;height:132px;border-radius:6px;background:var(--checker);background-size:14px 14px;
+  display:flex;align-items:center;justify-content:center;margin:0 auto;position:relative}
+.tile .pic svg{width:96px;height:96px}
+.tile .nm{font-size:12px;color:var(--muted);text-align:center;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#06201c}
+.b-ok{background:#24cabb}.b-gen{background:#f0c38a}.b-cut{background:#b9a3f5}.b-del{background:#8a97a8;color:#e4edf6}
+.excl{position:absolute;top:6px;left:6px;width:22px;height:22px;border-radius:50%;background:#2b3340;color:#c7d2dd;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.tile.dim .pic svg{opacity:.55}
+.tile.selected .pic{outline:3px solid var(--accent);outline-offset:-3px}
+/* дроп-подсветка */
+.tile.drop .pic{outline:2.5px dashed var(--accent);outline-offset:-4px;background-color:#dfe7ec}
+#ghost{position:absolute;display:none;z-index:30;align-items:center;gap:8px;background:#0d1a2b;border:1px solid var(--accent);
+  border-radius:8px;padding:7px 12px;font-size:13px;box-shadow:0 6px 18px #000c}
+/* правая карточка */
+.detail{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.prev{flex:1;border-radius:6px;background:var(--checker);background-size:16px 16px;display:flex;align-items:center;justify-content:center}
+.prev svg{max-width:78%;max-height:92%}
+.chips{display:flex;gap:8px}
+.actions{display:flex;gap:8px}
+/* нижний ряд */
+.bottom{display:flex;align-items:center;margin-top:12px}
+.sw{width:26px;height:26px;border:2px solid #526174;border-radius:6px}
+.sw.cb{background:var(--checker);background-size:8px 8px;border-color:var(--accent);outline:1.5px solid var(--accent)}
+.foot{position:absolute;left:0;right:0;bottom:0;height:58px;background:#0d1523;border-top:1px solid var(--line);
+  display:flex;align-items:center;gap:10px;padding:0 20px;font-size:13px}
+.saved{color:var(--muted)}.spacer{flex:1}
+/* плашки */
+.plate{position:absolute;left:18px;right:18px;bottom:94px;border-radius:8px;padding:11px 14px;display:none;gap:10px;font-size:13.5px;z-index:20}
+.plate.show{display:flex}.plate .ic{font-weight:700}
+.plate.err{background:var(--err-soft);outline:1px solid #b95c5c}.plate.err .ic,.plate.err b{color:var(--err)}.plate.err .sub{color:#e5bcbc}
+.plate.ok{background:var(--accent-soft);outline:1px solid #2c6f68}.plate.ok .ic,.plate.ok b{color:var(--accent)}.plate.ok .sub{color:#b8d8d3}
+/* модальный выбор позиции */
+#modal{position:absolute;inset:0;background:#0009;z-index:40;display:none;align-items:center;justify-content:center}
+#modal.show{display:flex}
+.dlg{width:560px;background:#172131;border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.dlg h3{font-size:15px;margin-bottom:4px}
+.pk{position:relative}
+.dlg .why{font-size:12px;color:var(--muted);margin-bottom:12px}
+.pick{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.pk{text-align:center;border:1.5px solid var(--line);border-radius:8px;padding:8px 4px;background:#0e1728}
+.pk .th{width:56px;height:56px;border-radius:5px;background:var(--checker);background-size:8px 8px;display:flex;align-items:center;justify-content:center;margin:0 auto}
+.pk .th svg{width:40px;height:40px}
+.pk .n{font-size:11.5px;color:var(--muted);margin-top:6px}
+.pk.here{outline:2px dashed var(--accent);outline-offset:-4px;background:#14333c}
+.dlg .b{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+.hintline{font-size:11px;color:var(--muted2);margin-top:10px}
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <div class="grid" id="grid">
+    <div class="tile selected"><div class="pic"><svg viewBox="0 0 64 64"><circle cx="28" cy="36" r="19" fill="#f5e6c8"/><circle cx="45" cy="20" r="7" fill="#f5a54a"/></svg><span class="badge b-ok">✓</span></div><div class="nm">gusenok_ime…01_r…</div></div>
+    <div class="tile"><div class="pic"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="17" fill="none" stroke="#7cb56b" stroke-width="9"/></svg><span class="badge b-ok">✓</span></div><div class="nm">venok_podkova_02_r…</div></div>
+    <div class="tile dim"><div class="pic"><svg viewBox="0 0 64 64"><circle cx="32" cy="36" r="18" fill="#b8b0a2"/><circle cx="46" cy="20" r="6" fill="#f5a54a"/></svg><span class="excl">⊘</span><span class="badge b-cut">B</span></div><div class="nm">gusenok_s_bantom_…</div></div>
+    <div class="tile" id="t4"><div class="pic"><svg viewBox="0 0 64 64"><rect x="13" y="13" width="38" height="38" fill="none" stroke="#f0b452" stroke-width="9"/></svg><span class="badge b-ok">✓</span></div><div class="nm">ramka_tsvety_04_re…</div></div>
+    <div class="tile"><div class="pic"><svg viewBox="0 0 64 64"><path d="M10 46 A 24 24 0 0 1 54 46" stroke="#7cb56b" stroke-width="10" fill="none"/></svg><span class="badge b-ok">✓</span></div><div class="nm">bordyur_listya_05_r…</div></div>
+    <div class="tile"><div class="pic"><svg viewBox="0 0 64 64"><polyline points="8,24 24,44 40,20 56,40" stroke="#e78fc0" stroke-width="6" fill="none"/></svg><span class="badge b-gen">!</span></div><div class="nm">ugol_girlyanda_06_r…</div></div>
+    <div class="tile" id="newtile" style="display:none"><div class="pic" style="background:#223045;outline:1.5px dashed #4a5a70"><span style="color:#a6b5c8;font-size:11.5px">проверяется…</span></div><div class="nm">utka_03_ready.png</div></div>
+  </div>
+
+  <div class="detail">
+    <div class="prev"><svg viewBox="0 0 64 64" width="360" height="360"><circle cx="30" cy="34" r="22" fill="#f5e6c8"/><circle cx="48" cy="16" r="8" fill="#f5a54a"/></svg></div>
+    <div class="chips"><span class="chip hot">Ок</span><span class="chip">Брак генерации</span><span class="chip">Брак вырезания</span><span class="chip">Исключить из наборов</span></div>
+    <div class="actions"><span class="chip">Убрать фон</span></div>
+  </div>
+</div>
+
+<div class="bottom">
+  <button>Параметры экспорта ▾</button><span class="spacer"></span>
+  <button class="primary">Редактировать прозрачность</button>
+  <span class="saved" style="margin-left:14px">ФОН</span>
+  <span class="sw cb"></span><span class="sw" style="background:#000"></span><span class="sw" style="background:#fff"></span>
+  <span class="sw" style="background:#0f8f4e"></span><span class="sw" style="background:#e84393"></span><span class="sw" style="background:#45aaf2"></span>
+</div>
+
+<div class="hintline" id="cap">Перетащите PNG из проводника на миниатюру — файл встанет на эту позицию; на пустое место — позицию подскажет имя файла (_NN_ready), чужое имя → выбор позиции.</div>
+
+<div class="plate err" id="plate-err"><span class="ic">✕</span>
+  <span>Файл отклонён: <b>utka.jpg — это не PNG</b>.<div class="sub small">Перетащите файл с расширением .png. Папки, ярлыки и файлы больше 64 МБ не принимаются.</div></span></div>
+<div class="plate ok" id="plate-ok"><span class="ic">✓</span>
+  <span><b>utka_03_ready.png</b> поставлена на позицию 4 — прежняя рамка теперь в «Истории версий».<div class="sub small">Метка — «Не проверено»: просмотрите картинку и поставьте «Ок». Проверка качества PNG для неё запустится сама.</div></span></div>
+
+<div id="ghost"><span style="width:22px;height:22px;border-radius:4px;background:repeating-conic-gradient(#eef1f4 0% 25%,#c9d0d6 0% 50%);background-size:8px 8px;display:inline-flex;align-items:center;justify-content:center"><svg viewBox="0 0 64 64" width="16" height="16"><circle cx="30" cy="34" r="16" fill="#f7d154"/><path d="M45 30 l10 5 -10 5z" fill="#f0a13c"/></svg></span>
+  <span>utka_03_ready.png → позиция 4</span></div>
+
+<div id="modal">
+  <div class="dlg">
+    <h3>Куда поставить duckling.png?</h3>
+    <div class="why">Имя файла не подсказывает номер (шаблон _NN_ready) — выберите позицию. Если на позиции уже есть картинка, она станет версией.</div>
+    <div class="pick">
+      <div class="pk"><div class="th"><svg viewBox="0 0 64 64"><circle cx="28" cy="36" r="19" fill="#f5e6c8"/></svg></div><div class="n">1</div></div>
+      <div class="pk"><div class="th"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="17" fill="none" stroke="#7cb56b" stroke-width="9"/></svg></div><div class="n">2</div></div>
+      <div class="pk" style="opacity:.55"><div class="th"><svg viewBox="0 0 64 64"><circle cx="32" cy="36" r="18" fill="#b8b0a2"/></svg><span class="excl" style="top:2px;right:2px">⊘</span></div><div class="n">3 · исключена</div></div>
+      <div class="pk"><div class="th"><svg viewBox="0 0 64 64"><rect x="13" y="13" width="38" height="38" fill="none" stroke="#f0b452" stroke-width="9"/></svg></div><div class="n">4</div></div>
+      <div class="pk here"><div class="th"><svg viewBox="0 0 64 64"><path d="M10 46 A 24 24 0 0 1 54 46" stroke="#7cb56b" stroke-width="10" fill="none"/></svg></div><div class="n">5</div></div>
+      <div class="pk"><div class="th"><svg viewBox="0 0 64 64"><polyline points="8,24 24,44 40,20 56,40" stroke="#e78fc0" stroke-width="6" fill="none"/></svg></div><div class="n">6</div></div>
+    </div>
+    <div class="b"><button>Отмена</button><button class="primary">Поставить</button></div>
+  </div>
+</div>
+
+<div class="foot"><span class="saved">Проект сохранён</span><span class="spacer"></span>
+  <button>Назад</button><button>Сохранить проект</button><button class="primary">Создать ZIP-наборы</button></div>
+
+<script>
+const st=new URLSearchParams(location.search).get('state')||'normal';
+if(st==='hover'){document.getElementById('t4').classList.add('drop');
+  const g=document.getElementById('ghost');g.style.display='flex';g.style.left='180px';g.style.top='330px';}
+if(st==='picker'){document.getElementById('modal').classList.add('show')}
+if(st==='rejected'){document.getElementById('plate-err').classList.add('show');
+  document.getElementById('cap').textContent='Отказ показывается плашкой внизу, сетка не меняется.';}
+if(st==='success'){document.getElementById('plate-ok').classList.add('show');
+  document.getElementById('newtile').style.display='block';
+  document.getElementById('cap').textContent='Появившаяся плитка сначала «проверяется…», затем покажет результат автопроверки; количество в счётчике обновится.';}
+</script>
+</body>
+</html>
