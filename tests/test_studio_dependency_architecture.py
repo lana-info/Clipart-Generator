@@ -87,6 +87,9 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     # The drop attaches a file through the same recovery constants (PNG signature,
     # READY_NUMBER template) the «Вернуть готовые файлы» flow already uses.
     ('studio_clipart_drop', 'studio_clipart_recovery'),
+    # The flow receives the dropped files from its PNG-check panel and runs the
+    # drop contract (validation, position choice, copy) from studio_clipart_drop.
+    ('studio_auto_clipart_flow', 'studio_clipart_drop'),
     ('studio_clipart_objects', 'v3_project_state'),
     ('studio_planning_ui', 'studio_text_pricing'),
     ('studio_planning_ui', 'v3_api_settings'),

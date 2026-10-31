@@ -93,6 +93,7 @@ Write-Host "==> Build app with PyInstaller"
     --hidden-import "provider_error_messages" `
     --hidden-import "security_redaction" `
     --hidden-import "studio_bundle_planner" `
+    --hidden-import "studio_clipart_drop" `
     --hidden-import "studio_name_translation" `
     --hidden-import "studio_object_editor" `
     --hidden-import "studio_prompt_composer_host" `

@@ -455,6 +455,7 @@ class SetExportDialog(QDialog):
     prompt_requested = pyqtSignal(str)  # «Изменить промпт» for a picture marked as a generation defect
     cutout_requested = pyqtSignal(str)  # «Убрать фон»: free local re-cutout of the same picture (module runs it)
     regenerate_requested = pyqtSignal(str)  # «Перегенерировать» for the same picture (paid, confirmed by the module)
+    files_dropped = pyqtSignal(list, object)  # PNG from the file manager: ([paths], target review path or None)
     review_requested = pyqtSignal()
     QUALITY_THUMB = 120
     export_availability_changed = pyqtSignal(bool)
@@ -907,6 +908,20 @@ class SetExportDialog(QDialog):
         body.addWidget(detail, 3)
         layout.addLayout(body, 1)
 
+        # Owner 2026-10-30 (approved mockup drag-drop-png-20261030): PNGs from the file
+        # manager drop onto the check grid and attach to the position they land on.
+        self.quality_drop_notice = QLabel('')
+        self.quality_drop_notice.setWordWrap(True)
+        self.quality_drop_notice.setProperty('v3Description', True)
+        self.quality_drop_notice.setStyleSheet('color: #e88b8b;')
+        self.quality_drop_notice.hide()
+        layout.addWidget(self.quality_drop_notice)
+        self.quality_list.setAcceptDrops(True)
+        self.quality_list.viewport().setAcceptDrops(True)
+        self.quality_list.dragEnterEvent = self._quality_drag_enter
+        self.quality_list.dragMoveEvent = self._quality_drag_enter
+        self.quality_list.dropEvent = self._quality_drop
+
         footer = QHBoxLayout()
         self.quality_back_button = QPushButton('← К наборам')
         self.quality_back_button.setProperty('v3Button', True)
@@ -1241,6 +1256,7 @@ class SetExportDialog(QDialog):
         scroll = self.quality_list.verticalScrollBar().value()
         self.quality_list.blockSignals(True)
         self.quality_list.clear()
+        self.quality_drop_notice.hide()  # перетаскивание начнёт новый итог после пересборки
         selected_row = -1
         status_labels = {'ok': 'Готово', 'review': 'Проверьте края', 'block': 'Не экспортировать'}
         total = sum(str(path) in self.quality_reports for path in self.review_paths)
@@ -1484,6 +1500,31 @@ class SetExportDialog(QDialog):
         for mark, button in self.quality_mark_buttons.items():
             button.setChecked(known and self._marks.get(key) == mark)
             button.setEnabled(known and self.worker is None)
+
+    def _quality_drop_png_candidates(self, urls):
+        return [url.toLocalFile() for url in urls
+                if url.isLocalFile() and url.toLocalFile().lower().endswith('.png')]
+
+    def _quality_drag_enter(self, event):
+        if self._quality_drop_png_candidates(event.mimeData().urls):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def _quality_drop(self, event):
+        paths = self._quality_drop_png_candidates(event.mimeData().urls)
+        if not paths:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        item = self.quality_list.itemAt(event.position().toPoint())
+        target = str(item.data(Qt.ItemDataRole.UserRole) or '') if item is not None else None
+        self.files_dropped.emit(paths, target or None)
+
+    def show_drop_notice(self, text):
+        """Красная плашка отказов/итога перетаскивания (макет drag-drop-png-20261030)."""
+        self.quality_drop_notice.setText(text)
+        self.quality_drop_notice.setVisible(bool(text))
 
     def _quality_mark_clicked(self, mark):
         key = self._current_quality_key()
