@@ -68,6 +68,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from foreground_colour import with_clean_hidden_rgb
 from background_mask import (
     apply_mask_stroke,
     apply_mask_to_image,
@@ -180,7 +181,8 @@ class MaskEditDocument:
             for key in ("dpi", "icc_profile", "exif")
             if key in image.info and image.info[key] is not None
         }
-        self.image = image.convert("RGBA")
+        # Colour under alpha == 0 is what the restoring brush will reveal: never the stored junk.
+        self.image = with_clean_hidden_rgb(image)
         self._original_mask = mask_for_image(self.image)
         self.mask = self._original_mask.copy()
         self._saved_mask = self.mask.copy()
