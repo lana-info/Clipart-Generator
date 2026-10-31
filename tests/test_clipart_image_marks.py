@@ -124,6 +124,71 @@ def test_restore_version_swaps_current_and_old(tmp_path):
     assert pixel(item.versions[0]["path"]) == (2, 2, 2, 255)
 
 
+def _lock_restore_target(monkeypatch):
+    """An antivirus holds the picture: replacing it fails with WinError 32."""
+    real = Path.replace
+
+    def locked(self, target):
+        if str(self).endswith(".restore"):
+            raise PermissionError(13, "The process cannot access the file", None, 32)
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "replace", locked)
+
+
+def _files(root):
+    return sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file())
+
+
+def test_restore_under_a_locked_picture_changes_nothing(tmp_path, monkeypatch):
+    output = tmp_path / "output"
+    item = item_with_output(tmp_path, colour=(1, 1, 1, 255))
+    keep_version(item, output, now=NOW)
+    png(Path(item.output_path), (2, 2, 2, 255))
+    item.review_mark, item.review_note, item.review_checked = "bad_generation", "кривой клюв", True
+    versions, files = [dict(entry) for entry in item.versions], _files(output)
+    _lock_restore_target(monkeypatch)
+    with pytest.raises(PermissionError):
+        restore_version(item, 0, output, now=NOW)
+    assert item.versions == versions
+    assert (item.review_mark, item.review_note, item.review_checked) == ("bad_generation", "кривой клюв", True)
+    assert _files(output) == files  # no .restore leftovers, no extra version, the old one is still there
+    assert pixel(item.output_path) == (2, 2, 2, 255)
+
+
+def test_restore_can_be_repeated_after_the_lock_is_gone(tmp_path, monkeypatch):
+    output = tmp_path / "output"
+    item = item_with_output(tmp_path, colour=(1, 1, 1, 255))
+    keep_version(item, output, now=NOW)
+    png(Path(item.output_path), (2, 2, 2, 255))
+    with monkeypatch.context() as locked:
+        _lock_restore_target(locked)
+        with pytest.raises(PermissionError):
+            restore_version(item, 0, output, now=NOW)
+    restore_version(item, 0, output, now=NOW)
+    assert pixel(item.output_path) == (1, 1, 1, 255)
+    assert [pixel(entry["path"]) for entry in item.versions] == [(2, 2, 2, 255)]
+
+
+def test_restore_still_succeeds_when_the_spent_version_file_is_locked(tmp_path, monkeypatch):
+    output = tmp_path / "output"
+    item = item_with_output(tmp_path, colour=(1, 1, 1, 255))
+    keep_version(item, output, now=NOW)
+    png(Path(item.output_path), (2, 2, 2, 255))
+    spent = Path(item.versions[0]["path"])
+    real = Path.unlink
+
+    def locked_unlink(self, *args, **kwargs):
+        if self == spent:
+            raise PermissionError(13, "in use", None, 32)
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", locked_unlink)
+    restore_version(item, 0, output, now=NOW)
+    assert pixel(item.output_path) == (1, 1, 1, 255)
+    assert [pixel(entry["path"]) for entry in item.versions] == [(2, 2, 2, 255)]
+
+
 def test_restore_after_failed_recreation_uses_recorded_original(tmp_path):
     output = tmp_path / "output"
     item = item_with_output(tmp_path, colour=(1, 1, 1, 255))
