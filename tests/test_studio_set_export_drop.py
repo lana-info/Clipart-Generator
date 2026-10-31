@@ -162,3 +162,58 @@ def test_flow_busy_shows_notice_and_does_not_touch_session(app, tmp_path):
     auto_flow.AutoClipartFlowController._attach_dropped_to_png_check(stub, [str(source)], None)
     assert session.items[1].output_path == before
     assert any("Идёт обработка" in notice for notice in notices)
+
+
+def _output_files(session):
+    return sorted(path.name for path in Path(session.output_dir).glob("*.png"))
+
+
+def test_flow_copy_failure_is_reported_and_does_not_stop_the_other_files(app, tmp_path, monkeypatch):
+    """Антивирус/Windows держит файл или нет места: дроп не должен падать исключением из слота Qt."""
+    session = make_session(tmp_path)
+    notices = []
+    stub = make_flow_stub(session, notices)
+    locked = tmp_path / "locked_01_ready.png"
+    Image.new("RGBA", (24, 24), (11, 22, 33, 255)).save(locked)
+    fine = tmp_path / "fine_02_ready.png"
+    Image.new("RGBA", (24, 24), (44, 55, 66, 255)).save(fine)
+    real_copy = auto_flow.copy_for_position
+
+    def flaky_copy(source, output_dir, number):
+        if Path(source).name == locked.name:
+            raise PermissionError(32, "Процесс не может получить доступ к файлу")
+        return real_copy(source, output_dir, number)
+
+    monkeypatch.setattr(auto_flow, "copy_for_position", flaky_copy)
+    before = session.items[0].output_path
+    auto_flow.AutoClipartFlowController._attach_dropped_to_png_check(stub, [str(locked), str(fine)], None)
+    assert session.items[0].output_path == before, "позиция 1 не тронута"
+    assert Path(session.items[1].output_path).name == "fine_02_ready_02_ready.png", "второй файл подключён"
+    assert any(locked.name in notice and "не удалось" in notice.lower() for notice in notices), notices
+
+
+def test_flow_duplicate_drop_leaves_no_orphan_copy_in_the_result_folder(app, tmp_path):
+    session = make_session(tmp_path)
+    stub = make_flow_stub(session, [])
+    duplicate = png(tmp_path / "duplicate_source.png")
+    before = _output_files(session)
+    auto_flow.AutoClipartFlowController._attach_dropped_to_png_check(
+        stub, [str(duplicate)], session.items[0].output_path)
+    assert _output_files(session) == before
+
+
+def test_flow_version_failure_leaves_no_orphan_copy_in_the_result_folder(app, tmp_path, monkeypatch):
+    session = make_session(tmp_path)
+    notices = []
+    stub = make_flow_stub(session, notices)
+    source = tmp_path / "fresh_03_ready.png"
+    Image.new("RGBA", (24, 24), (9, 99, 199, 255)).save(source)
+
+    def broken_keep_version(item, output_dir):
+        raise OSError("версию сохранить нельзя")
+
+    monkeypatch.setattr("studio_clipart_versions.keep_version", broken_keep_version)
+    before = _output_files(session)
+    auto_flow.AutoClipartFlowController._attach_dropped_to_png_check(stub, [str(source)], None)
+    assert _output_files(session) == before
+    assert any("не подключ" in notice for notice in notices)

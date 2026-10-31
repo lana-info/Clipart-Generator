@@ -149,16 +149,32 @@ def restore_version(item, index: int, output_dir, prompt: str = "", *,
         raise ValueError("Вернуть версию можно только в папку результата")
     if target.is_symlink():
         raise ValueError("Вернуть версию можно только в папку результата")
-    keep_version(item, output_dir, prompt, now=now)
-    restored = item.versions.pop(index)
+    snapshot = (list(item.versions), item.review_mark, item.review_checked, item.review_note)
     staged = target.with_name(target.name + ".restore")
-    shutil.copy2(source, staged)
-    staged.replace(target)
-    source.unlink()
+    kept = None
+    try:
+        keep_version(item, output_dir, prompt, now=now)
+        if len(item.versions) > len(snapshot[0]):
+            kept = Path(item.versions[-1]["path"])
+        shutil.copy2(source, staged)
+        staged.replace(target)  # the one step an antivirus lock can refuse (WinError 32)
+    except BaseException:
+        # the picture on disk is still the old one: keep the item exactly as it was
+        staged.unlink(missing_ok=True)
+        if kept is not None:
+            kept.unlink(missing_ok=True)
+        item.versions[:] = snapshot[0]
+        item.review_mark, item.review_checked, item.review_note = snapshot[1:]
+        raise
+    restored = item.versions.pop(index)
     item.output_path = str(target.resolve())
     item.review_mark = "ok"
     item.review_checked = False
     item.review_note = ""
+    try:
+        source.unlink()
+    except OSError:
+        pass  # the picture is already restored; a leftover copy in versions/ is harmless
     return Path(restored["path"])
 
 

@@ -1424,15 +1424,21 @@ class AutoClipartFlowController(ClipartFlowController):
                 notices.append(f"{Path(source).name}: позиции {index + 1} в наборе нет.")
                 continue
             item = session.items[index]
-            copied = copy_for_position(source, session.output_dir, index + 1)
             if item.output_path and Path(item.output_path).is_file() and same_file_content(
-                    copied, Path(item.output_path)):
+                    source, Path(item.output_path)):
                 notices.append(f"Позиция {index + 1}: уже показывает этот файл.")
+                continue
+            try:
+                copied = copy_for_position(source, session.output_dir, index + 1)
+            except OSError:
+                # Файл держит антивирус/другая программа или нет места — остальные файлы дропа не теряем.
+                notices.append(f"{Path(source).name}: не удалось скопировать в папку результата — файл не подключён.")
                 continue
             if item.output_path:
                 try:
                     keep_version(item, session.output_dir)
                 except (OSError, ValueError):
+                    _discard_copy(copied)
                     notices.append(f"Позиция {index + 1}: прежнюю картинку нельзя сохранить в версии — файл не подключён.")
                     continue
             item.status = RunItemStatus.SUCCEEDED
@@ -1500,6 +1506,14 @@ class AutoClipartFlowController(ClipartFlowController):
         self.run_queue.session = session
         self.run_queue.page.set_session(session)
         session.changed.connect(self._save_run)
+
+
+def _discard_copy(path):
+    """Убрать копию, которая не стала картинкой позиции, чтобы она не осталась мусором рядом с результатами."""
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def install_auto_clipart_flow(host):
