@@ -50,8 +50,12 @@ def _profile(key, title, category, phrase, best_for, aliases=(), defaults=()):
 
 
 _MODIFIERS = (
-    _modifier('gentle', 'Нежный', 'gentle, soft visual character', 'нежное', 'нежный', 'soft', 'gentle'),
-    _modifier('vintage', 'Винтажный', 'subtle vintage character, timeless rather than distressed', 'винтажный', 'vintage'),
+    _modifier('gentle', 'Нежный',
+              'gentle, soft visual character in colour and texture, painted in fully opaque colours, no translucent washes',
+              'нежное', 'нежный', 'soft', 'gentle'),
+    _modifier('vintage', 'Винтажный',
+              'subtle vintage character, timeless rather than distressed, crisp readable shapes in fully opaque paint',
+              'винтажный', 'vintage'),
     _modifier('nursery', 'Детский / nursery', 'nursery-friendly proportions and approachable shapes', 'детский', 'nursery'),
     _modifier('whimsical', 'Сказочный', 'whimsical, imaginative visual character', 'сказочное', 'сказочный', 'whimsical'),
     _modifier('minimal', 'Минималистичный', 'minimal, visually clean, restrained detail', 'минималистичный', 'minimal'),
@@ -67,7 +71,7 @@ _MODIFIERS = (
 
 _PROFILES = (
     _profile('watercolor', 'Акварель', 'Живописные',
-             'refined watercolor illustration, hand-painted texture inside the subject, controlled readable edges',
+             'refined watercolor illustration, hand-painted opaque watercolor texture inside the subject, dense paint coverage, controlled readable edges',
              ('nursery', 'florals', 'animals', 'weddings', 'premium Etsy clipart'),
              ('watercolor', 'акварель', 'акварельная иллюстрация'), ('gentle',)),
     _profile('gouache', 'Гуашь', 'Живописные',
