@@ -5,11 +5,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import http.client
 import os
 import platform
 import re
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +33,8 @@ from license_update_contract import LicenseUpdatePolicy
 
 MAX_UPDATE_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_UPDATE_INSTALLER_BYTES = 512 * 1024 * 1024
+PUBLISH_ATTEMPTS = 4          # os.replace свежего файла, пока его держит антивирус (Windows)
+PUBLISH_PAUSE_SECONDS = 1.0
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _FILENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}\Z")
 _PLATFORM_ARTIFACT = {
@@ -354,7 +358,7 @@ class UpdateClient:
             temporary = Path(temporary_name)
             try:
                 self._download_attempt(release, temporary, cancelled=cancelled, progress=progress)
-                os.replace(temporary, final)
+                self._publish_download(temporary, final)
                 return final
             except UpdateError:
                 temporary.unlink(missing_ok=True)
@@ -399,8 +403,8 @@ class UpdateClient:
                         chunk = response.read(
                             min(self.lifecycle_policy.download_chunk_bytes, release.size - received)
                         )
-                    except (TimeoutError, error.URLError) as exc:
-                        # Транзиентный сбой сети: попытку можно повторить целиком.
+                    except (TimeoutError, error.URLError, ConnectionError, http.client.IncompleteRead) as exc:
+                        # Транзиентный сбой сети (таймаут, сброс соединения): попытку можно повторить целиком.
                         raise _RetryableDownload() from exc
                     if not chunk:
                         break
@@ -425,10 +429,25 @@ class UpdateClient:
             raise UpdateError("Контрольная сумма обновления не совпадает")
 
     @staticmethod
+    def _publish_download(temporary: Path, final: Path) -> None:
+        """Перенести скачанный файл на место; Windows на секунды занимает свежий файл сканер/антивирус."""
+        for attempt in range(PUBLISH_ATTEMPTS):
+            try:
+                os.replace(temporary, final)
+                return
+            except PermissionError:
+                if attempt == PUBLISH_ATTEMPTS - 1:
+                    raise
+                time.sleep(PUBLISH_PAUSE_SECONDS)
+
+    @staticmethod
     def _download_error_message(exc: BaseException) -> str:
         """Причина скачивания — конкретным текстом (правило диагностики AGENTS.md)."""
         reason = getattr(exc, "reason", None)
-        if isinstance(exc, TimeoutError) or isinstance(reason, TimeoutError):
+        if isinstance(exc, PermissionError):
+            return ("Файл обновления занят другой программой (часто антивирус проверяет его). "
+                    "Подождите минуту и повторите.")
+        if isinstance(exc, (TimeoutError, ConnectionError, http.client.IncompleteRead)) or isinstance(reason, TimeoutError):
             return ("Соединение прервалось во время скачивания обновления (канал медленный или нестабильный). "
                     "Попробуйте ещё раз; если повторится — установщик можно скачать вручную.")
         if isinstance(exc, error.HTTPError):

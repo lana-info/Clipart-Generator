@@ -6,6 +6,7 @@
 транзиентном сбое и конкретная причина в сообщении.
 """
 import hashlib
+import http.client
 import os
 from types import SimpleNamespace
 
@@ -177,3 +178,87 @@ def test_negative_control_without_retry_policy(tmp_path, scripted_opener, monkey
     with pytest.raises(UpdateError):
         client.download(release_)
     assert FakeOpener.opened == 1
+
+
+class ResetResponse(FakeResponse):
+    """Поток, который рвётся посреди скачивания не таймаутом, а сбросом/обрывом соединения."""
+
+    def __init__(self, content, failure):
+        super().__init__(content)
+        self._failure = failure
+
+    def read(self, size):
+        if self._failure is not None:
+            failure, self._failure = self._failure, None
+            raise failure
+        return super().read(size)
+
+
+def _scripted_failures(monkeypatch, *failures):
+    """Первые попытки рвутся перечисленными исключениями, следующая проходит."""
+    queue = list(failures)
+    opened = []
+
+    class Opener:
+        def open(self, req, timeout=None):
+            opened.append(1)
+            return ResetResponse(SETUP_BYTES, queue.pop(0) if queue else None)
+
+    monkeypatch.setattr(uc.request, "build_opener", lambda *args, **kwargs: Opener())
+    return opened
+
+
+@pytest.mark.parametrize("failure", [
+    ConnectionResetError(10054, "Удалённый хост принудительно разорвал соединение"),
+    ConnectionAbortedError(10053, "Программа на вашем хосте разорвала соединение"),
+    http.client.IncompleteRead(b"partial", 100),
+], ids=["reset", "aborted", "incomplete-read"])
+def test_connection_drop_mid_download_is_retried_like_a_timeout(tmp_path, monkeypatch, failure):
+    client = make_client(tmp_path)
+    opened = _scripted_failures(monkeypatch, failure)
+    assert client.download(release(SETUP_BYTES)).read_bytes() == SETUP_BYTES
+    assert len(opened) == 2
+    assert not list((tmp_path / "downloads").glob("*.part"))
+
+
+def test_persistent_connection_drop_is_a_named_update_error_not_a_raw_exception(tmp_path, monkeypatch):
+    client = make_client(tmp_path)
+    _scripted_failures(monkeypatch, http.client.IncompleteRead(b"x", 9), ConnectionResetError(10054, "reset"))
+    with pytest.raises(UpdateError) as raised:
+        client.download(release(SETUP_BYTES))
+    assert "Соединение прервалось" in str(raised.value)
+    assert not list((tmp_path / "downloads").glob("*.part"))
+
+
+def test_final_file_held_by_antivirus_is_retried_instead_of_failing_the_update(tmp_path, monkeypatch):
+    """Windows: свежий установщик на секунду занят сканером — os.replace даёт WinError 32/5."""
+    client = make_client(tmp_path)
+    _scripted_failures(monkeypatch)
+    monkeypatch.setattr(uc.time, "sleep", lambda seconds: None)
+    real_replace = os.replace
+    refusals = []
+
+    def locked_twice(source, destination):
+        if len(refusals) < 2:
+            refusals.append(1)
+            raise PermissionError(32, "Процесс не может получить доступ к файлу")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(uc.os, "replace", locked_twice)
+    assert client.download(release(SETUP_BYTES)).read_bytes() == SETUP_BYTES
+    assert len(refusals) == 2
+
+
+def test_final_file_locked_for_good_is_a_named_error_and_leaves_no_part_file(tmp_path, monkeypatch):
+    client = make_client(tmp_path)
+    _scripted_failures(monkeypatch)
+    monkeypatch.setattr(uc.time, "sleep", lambda seconds: None)
+
+    def always_locked(source, destination):
+        raise PermissionError(32, "Процесс не может получить доступ к файлу")
+
+    monkeypatch.setattr(uc.os, "replace", always_locked)
+    with pytest.raises(UpdateError) as raised:
+        client.download(release(SETUP_BYTES))
+    assert "занят" in str(raised.value)
+    assert not list((tmp_path / "downloads").glob("*.part"))
