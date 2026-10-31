@@ -6,6 +6,7 @@ from studio_style_profiles import (
     get_style_profile,
     recommended_style_profiles,
     style_planning_hints,
+    style_prompt_text,
 )
 
 
@@ -51,6 +52,34 @@ class StyleProfileTests(unittest.TestCase):
         self.assertEqual(custom['key'], 'custom')
         self.assertEqual(custom['title'], 'Мой авторский штрих')
         self.assertLessEqual(len(str(custom)), 4000)
+
+    def test_gentle_modifier_pins_softness_to_colour_and_opaque_paint(self):
+        """Мягкость — только цвет и фактура; краска полностью непрозрачна (вердикт владельца 2026-10-30)."""
+        phrase = next(m.prompt_phrase for m in all_style_modifiers() if m.key == 'gentle')
+        self.assertIn('soft visual character in colour and texture', phrase)
+        self.assertIn('painted in fully opaque colours', phrase)
+        self.assertIn('no translucent washes', phrase)
+
+    def test_vintage_modifier_pins_timeless_shapes_in_opaque_paint(self):
+        phrase = next(m.prompt_phrase for m in all_style_modifiers() if m.key == 'vintage')
+        self.assertIn('subtle vintage character, timeless rather than distressed', phrase)
+        self.assertIn('crisp readable shapes in fully opaque paint', phrase)
+
+    def test_watercolor_profile_pins_opaque_texture_and_dense_coverage(self):
+        profile = get_style_profile('watercolor')
+        self.assertIn('hand-painted opaque watercolor texture', profile.prompt_phrase)
+        self.assertIn('dense paint coverage', profile.prompt_phrase)
+        self.assertIn('controlled readable edges', profile.prompt_phrase)
+
+    def test_generation_style_phrase_carries_opacity_anchors(self):
+        """Сборка «Стиль» для генерации (profile + модификаторы) несёт якоря непрозрачности."""
+        phrase = style_prompt_text('Акварель', 'Нежный Винтажный')
+        casefolded = phrase.casefold()
+        self.assertIn('fully opaque colours', casefolded)
+        self.assertIn('no translucent washes', casefolded)
+        self.assertIn('fully opaque paint', casefolded)
+        self.assertIn('opaque watercolor texture', casefolded)
+        self.assertIn('dense paint coverage', casefolded)
 
 
 if __name__ == '__main__':
