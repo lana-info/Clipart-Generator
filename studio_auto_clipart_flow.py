@@ -14,6 +14,10 @@ from PyQt6.QtWidgets import (
 )
 
 from studio_clipart_builder_ui import ClipartBuilderDialog
+from studio_clipart_drop import (
+    PositionPickerDialog, copy_for_position, position_options, same_file_content,
+    suggest_position, validate_dropped_files,
+)
 from v3_components import ButtonVariant, V3Button
 from studio_clipart_versions import restore_review, review_fields
 from studio_clipart_objects import attach_reference_guidance, compile_objects, fill_recipe, validate_objects
@@ -690,6 +694,7 @@ class AutoClipartFlowController(ClipartFlowController):
         panel._keep_view = keep_view
         self.export_page.layout().addWidget(panel, 1)
         self.export_panel = panel
+        self.png_check_panel = panel
         panel.busy_changed.connect(self.shell.refresh)
         panel.export_availability_changed.connect(lambda _enabled: self.shell.refresh())
         panel.review_requested.connect(lambda: self._select_step(StepId.RESULTS))
@@ -706,6 +711,7 @@ class AutoClipartFlowController(ClipartFlowController):
             panel.prompt_requested.connect(lambda path: self.review.edit_prompt_for(path, panel))
             panel.regenerate_requested.connect(self._regenerate_from_png_check)
             panel.cutout_requested.connect(self._cutout_from_png_check)
+            panel.files_dropped.connect(self._attach_dropped_to_png_check)
         if keep_view is not None:
             panel._select_path = keep_view
             panel._show_quality_review()
@@ -1374,6 +1380,86 @@ class AutoClipartFlowController(ClipartFlowController):
         session.changed.emit()
         self._save_run()
         page.refresh_from_state()
+
+    def _attach_dropped_to_png_check(self, paths, target_path):
+        """PNG из проводника упал на проверку PNG — подключить к позиции (макет 2026-10-30).
+
+        Тот же механизм, что «Вернуть готовые файлы»: копия под шаблон позиции
+        (`_<NN>_ready`), прежняя картинка — в «Историю версий», метка «Не проверено»,
+        SET-0 не нарушается, новых позиций и платных запросов нет. Отказы — красной
+        плашкой на странице (панель.show_drop_notice), причины — из макета.
+        """
+        session = self.run_queue.session
+        if session is None:
+            return
+        if self.is_busy():
+            self._show_drop_notice_on_panel("Идёт обработка — перетаскивание сейчас недоступно.")
+            return
+        accepted, reasons = validate_dropped_files(paths)
+        notices = list(reasons)
+        sources = accepted
+        attached: list[int] = []
+        from studio_clipart_versions import keep_version
+        from v3_run_queue import RunItemStatus
+        for source in sources:
+            index = None
+            for hint in (target_path, source):
+                if hint:
+                    # suggest_position возвращает 0-based индекс позиции запуска.
+                    index = suggest_position(Path(hint).name, len(session.items))
+                    if index is not None:
+                        break
+            if index is None:
+                picked = None
+                if self.run_queue.page is not None:
+                    picked = PositionPickerDialog.ask(
+                        Path(source).name, position_options(session.items), self.run_queue.page,
+                    )
+                # Диалог возвращает номер позиции (1-based) — переводим в индекс.
+                index = (picked - 1) if picked else None
+            if index is None:
+                notices.append(f"{Path(source).name}: позицию не выбрали — файл не подключён.")
+                continue
+            if not 0 <= index < len(session.items):
+                notices.append(f"{Path(source).name}: позиции {index + 1} в наборе нет.")
+                continue
+            item = session.items[index]
+            copied = copy_for_position(source, session.output_dir, index + 1)
+            if item.output_path and Path(item.output_path).is_file() and same_file_content(
+                    copied, Path(item.output_path)):
+                notices.append(f"Позиция {index + 1}: уже показывает этот файл.")
+                continue
+            if item.output_path:
+                try:
+                    keep_version(item, session.output_dir)
+                except (OSError, ValueError):
+                    notices.append(f"Позиция {index + 1}: прежнюю картинку нельзя сохранить в версии — файл не подключён.")
+                    continue
+            item.status = RunItemStatus.SUCCEEDED
+            item.output_path = str(copied)
+            item.editor_output_path = ""
+            item.attempts = max(1, item.attempts)
+            item.short_message = "PNG подключён перетаскиванием."
+            item.review_mark, item.review_checked = "ok", False
+            attached.append(index + 1)
+        if attached:
+            session.changed.emit()
+            self._save_run()
+            if self.run_queue.page is not None:
+                self.run_queue.page.refresh_from_state()
+        if attached:
+            summary = f"Подключено перетаскиванием: позиции {', '.join(str(number) for number in sorted(attached))}."
+        else:
+            summary = "Подключить не удалось."
+        if notices:
+            summary = f"{summary} " + " ".join(notices)
+        self._show_drop_notice_on_panel(summary)
+
+    def _show_drop_notice_on_panel(self, text):
+        panel = getattr(self, "png_check_panel", None)
+        show = getattr(panel, "show_drop_notice", None)
+        if callable(show):
+            show(text)
 
     def _restore_run(self):
         self._ensure_delivery_operations()
