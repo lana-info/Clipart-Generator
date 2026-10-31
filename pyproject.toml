@@ -6,6 +6,7 @@ addopts = "-ra -m 'not network and not paid'"
 markers = [
     "network: requires a real network socket or service",
     "paid: may consume provider credits or money",
+    "perf: slow seconds-scale performance measurement (AC-C1 alpha leg, 4 MP x4)",
 ]
 
 # T-QUAL-0 (TASKS.md): минимальный линт-гейт уровня ошибок в CI.
