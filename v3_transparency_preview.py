@@ -16,6 +16,7 @@ import json
 import os
 import errno
 import tempfile
+import time
 from pathlib import Path
 
 from PIL import Image, ImageChops, UnidentifiedImageError
@@ -119,6 +120,39 @@ MAX_EDITOR_IMAGE_PIXELS = 40_000_000
 
 class EditorImageTooLargeError(ValueError):
     pass
+
+
+class MaskSaveFallbackNotice(RuntimeError):
+    """The target PNG was held busy, so the pair was committed to a timestamped copy.
+
+    Owner 2026-10-30 (Windows): «Не удалось сохранить PNG … [WinError 32]» —
+    the destination PNG can be held open by a viewer or Explorer thumbnails.
+    Raised only after the copy and its mask were committed and the document was
+    marked saved, so callers can surface one explicit notice with the copy path.
+    """
+
+    def __init__(self, output_path: Path, mask_path: Path, target_path: Path):
+        super().__init__(
+            "Целевой PNG занят другой программой, результат сохранён в копию: "
+            f"{output_path.name}"
+        )
+        self.output_path = Path(output_path)
+        self.mask_path = Path(mask_path)
+        self.target_path = Path(target_path)
+
+
+def _is_target_busy_error(error: BaseException) -> bool:
+    """True for Windows sharing-violation-style failures on the target PNG.
+
+    WinError 32 (ERROR_SHARING_VIOLATION) and WinError 5 (ERROR_ACCESS_DENIED)
+    both surface as PermissionError/OSError when another process (viewer or
+    Explorer's thumbnail extractor) keeps the destination PNG open.
+    """
+    if not isinstance(error, OSError):
+        return False
+    if getattr(error, "winerror", None) in (5, 32):
+        return True
+    return error.errno in (errno.EACCES, errno.EPERM, errno.EBUSY)
 
 
 def _validate_editor_image_size(size: tuple[int, int]) -> None:
@@ -339,6 +373,7 @@ class MaskEditDocument:
             )
             mask_temporary: Path | None = None
             sidecar_temporary: Path | None = None
+            fallback_paths: tuple[Path, Path] | None = None
             try:
                 mask_temporary = self._stage_png(self.mask, mask_destination, {})
                 if generation_record is not None:
@@ -346,14 +381,33 @@ class MaskEditDocument:
                         output_temporary, generation_record, stage="final",
                         directory=destination.parent,
                     )
-                self._replace_pair(
-                    output_temporary,
-                    destination,
-                    mask_temporary,
-                    mask_destination,
-                    sidecar_temporary=sidecar_temporary,
-                    sidecar_destination=(record_path(destination) if sidecar_temporary else None),
-                )
+                try:
+                    self._replace_busy_pair_with_retries(
+                        output_temporary,
+                        destination,
+                        mask_temporary,
+                        mask_destination,
+                        sidecar_temporary=sidecar_temporary,
+                        sidecar_destination=(
+                            record_path(destination) if sidecar_temporary else None
+                        ),
+                    )
+                except OSError as error:
+                    # Owner 2026-10-30 (Windows, «Не удалось сохранить PNG …
+                    # [WinError 32]»): the destination PNG can stay open in a
+                    # viewer or Explorer's thumbnail extractor. After short
+                    # retries commit the pair to a timestamped copy instead of
+                    # surfacing a bare error: the edit is never lost, and the
+                    # outcome is always explicit.
+                    if not _is_target_busy_error(error):
+                        raise
+                    fallback_paths = self._commit_fallback_pair(
+                        destination,
+                        mask_destination,
+                        output_temporary=output_temporary,
+                        mask_temporary=mask_temporary,
+                        sidecar_temporary=sidecar_temporary,
+                    )
             finally:
                 output_temporary.unlink(missing_ok=True)
                 if mask_temporary is not None:
@@ -361,6 +415,87 @@ class MaskEditDocument:
                 if sidecar_temporary is not None:
                     sidecar_temporary.unlink(missing_ok=True)
         self._saved_mask = self.mask.copy()
+        if fallback_paths is not None:
+            raise MaskSaveFallbackNotice(
+                fallback_paths[0], fallback_paths[1], destination
+            )
+
+    def _replace_busy_pair_with_retries(
+        self,
+        output_temporary: Path,
+        destination: Path,
+        mask_temporary: Path,
+        mask_destination: Path,
+        *,
+        sidecar_temporary: Path | None,
+        sidecar_destination: Path | None,
+        busy_retry_delays: tuple[float, ...] = (0.3, 0.4),
+    ) -> None:
+        """Commit png/mask pair once, retrying briefly while the target is busy.
+
+        Total pause stays below one second: a transient thumbnail-extractor or
+        viewer lock usually clears on the first retry, so the owner sees a
+        normal save instead of an error dialog.
+        """
+        for attempt in range(len(busy_retry_delays) + 1):
+            try:
+                self._replace_pair(
+                    output_temporary,
+                    destination,
+                    mask_temporary,
+                    mask_destination,
+                    sidecar_temporary=sidecar_temporary,
+                    sidecar_destination=sidecar_destination,
+                )
+                return
+            except OSError as error:
+                if attempt >= len(busy_retry_delays) or not _is_target_busy_error(error):
+                    raise
+                time.sleep(busy_retry_delays[attempt])
+
+    def _commit_fallback_pair(
+        self,
+        destination: Path,
+        mask_destination: Path,
+        *,
+        output_temporary: Path,
+        mask_temporary: Path,
+        sidecar_temporary: Path | None,
+    ) -> tuple[Path, Path]:
+        """Commit the staged pair to a fresh timestamped copy near the target.
+
+        Returns the committed (output, mask) paths; callers raise
+        MaskSaveFallbackNotice with them so the result stays explicit.
+        """
+        from chroma_generation_record import (
+            generation_transaction_lock, record_path,
+        )
+        fallback_output = self._timestamped_fallback_path(destination)
+        fallback_mask = mask_destination.parent / f"{fallback_output.stem}_alpha-mask.png"
+        fallback_sidecar = (
+            record_path(fallback_output) if sidecar_temporary is not None else None
+        )
+        with generation_transaction_lock(fallback_output):
+            self._recover_pair_unlocked(fallback_output, fallback_mask)
+            self._replace_pair(
+                output_temporary,
+                fallback_output,
+                mask_temporary,
+                fallback_mask,
+                sidecar_temporary=sidecar_temporary,
+                sidecar_destination=fallback_sidecar,
+            )
+        return fallback_output, fallback_mask
+
+    @staticmethod
+    def _timestamped_fallback_path(destination: Path) -> Path:
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        for index in range(1, 1000):
+            suffix = f"_{stamp}" if index == 1 else f"_{stamp}_{index}"
+            candidate = destination.with_name(f"{destination.stem}_saved{suffix}.png")
+            if not (candidate.exists() or candidate.is_symlink()):
+                return candidate
+        raise OSError("Не удалось выбрать свободное имя для копии PNG")
 
     @staticmethod
     def _stage_png(
@@ -2269,6 +2404,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self._rough_dir: Path | None = None
         self._save_dir: Path | None = None
         self._saved_copies: dict[Path, Path] = {}
+        self._busy_fallback_path: Path | None = None
         self._document: MaskEditDocument | None = None
         self._loaded_path: Path | None = None
         self._draft_masks: dict[Path, bytes] = {}
@@ -3601,6 +3737,7 @@ class ClipartTransparencyEditorPage(QWidget):
             self._save_clicked()
 
     def save_current(self) -> tuple[Path, Path]:
+        self._busy_fallback_path = None
         if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
             job = self.canvas._contour_job
             if job['future'] is not None and job['future'].done():
@@ -3619,7 +3756,13 @@ class ClipartTransparencyEditorPage(QWidget):
             raise ValueError("Нет изображения для сохранения")
         source_path = output_path
         if self._save_dir is not None:
-            output_path, mask_path = self._save_new_copy(source_path)
+            try:
+                output_path, mask_path = self._save_new_copy(source_path)
+            except MaskSaveFallbackNotice as notice:
+                # The fresh copy name itself was held busy: the pair now lives
+                # in a timestamped copy and must be linked for this file too.
+                output_path, mask_path = notice.output_path, notice.mask_path
+                self._busy_fallback_path = output_path
             self._saved_copies[source_path] = output_path
             self._draft_masks.pop(source_path, None)
             self.copy_saved.emit(source_path, output_path)
@@ -3627,9 +3770,20 @@ class ClipartTransparencyEditorPage(QWidget):
             return output_path, mask_path
         rough_dir = self._rough_dir or output_path.parent.parent / "rough"
         mask_path = rough_dir / f"{output_path.stem}_alpha-mask.png"
-        self.document.save(output_path, mask_path)
-        self._draft_masks.pop(output_path, None)
-        self.copy_saved.emit(output_path, output_path)
+        try:
+            self.document.save(output_path, mask_path)
+        except MaskSaveFallbackNotice as notice:
+            # Owner 2026-10-30: the ready PNG stayed locked (WinError 32) after
+            # retries; the pair was saved to a timestamped copy instead — the
+            # edit is not lost and the outcome stays explicit (no silent save).
+            output_path, mask_path = notice.output_path, notice.mask_path
+            self._busy_fallback_path = output_path
+            self._saved_copies[source_path] = output_path
+        self._draft_masks.pop(source_path, None)
+        if self._busy_fallback_path is not None:
+            self.copy_saved.emit(source_path, output_path)
+        else:
+            self.copy_saved.emit(output_path, output_path)
         self.saved.emit(output_path.name)
         return output_path, mask_path
 
@@ -3697,14 +3851,37 @@ class ClipartTransparencyEditorPage(QWidget):
         QApplication.processEvents()
         try:
             output_path, _ = self.save_current()
-            self._show_contour_status(f"Сохранено: {output_path.name} • {output_path.parent}")
+            if self._busy_fallback_path is not None:
+                self._show_contour_status(
+                    f"Сохранено в копию: {output_path.name} • {output_path.parent}"
+                )
+                QMessageBox.warning(
+                    self,
+                    "PNG занят другой программой",
+                    ("Файл занят другой программой — чаще всего это открытый "
+                     "просмотрщик или проводник с превью.\n\n"
+                     f"Результат сохранён в копию: {output_path}\n"
+                     "Ничего не потеряно."),
+                )
+            else:
+                self._show_contour_status(f"Маска сохранена: {output_path.name} • {output_path.parent}")
         except (OSError, ValueError) as error:
             self._show_contour_status(f"Ошибка сохранения: {error}")
-            QMessageBox.critical(
-                self,
-                "Не удалось сохранить PNG",
-                f"Проверьте доступ к папке и свободное место.\n\n{error}",
-            )
+            if _is_target_busy_error(error):
+                QMessageBox.critical(
+                    self,
+                    "Не удалось заменить занятый PNG",
+                    ("Файл занят другой программой — чаще всего это открытый "
+                     "просмотрщик или проводник с превью на Windows. "
+                     "Закройте его и повторите сохранение.\n\n"
+                     f"{error}"),
+                )
+            else:
+                QMessageBox.critical(
+                    self,
+                    "Не удалось сохранить PNG",
+                    f"Проверьте доступ к папке и свободное место.\n\n{error}",
+                )
         finally:
             self._saving = False
             self.save_button.setText("Сохранить PNG")
