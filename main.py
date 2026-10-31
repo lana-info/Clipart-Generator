@@ -50,6 +50,7 @@ ensure_gui_standard_streams()
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from background_mask import has_usable_alpha
 from alpha_cleanup import DEBRIS_MIN_GAP, DELIVERY_EDGE_GAIN, HARD_EDGE_MAX_WIDTH, clean_alpha, remove_key_residue
+from alpha_upscale import upscale_alpha
 from chroma_matting import matte_edges
 from edge_tint import suppress_key_tint
 from chroma_key import (
@@ -4437,8 +4438,31 @@ class WorkerThread(QThread):
             if temp_dir is not None:
                 temp_dir.cleanup()
         if alpha_channel is not None:
-            self._restore_upscaled_alpha(output_path, alpha_channel, upscaled_alpha)
+            # Path C (prototype AC-C1, owner 2026-10-30): the local upscale composites its
+            # RGB with the alpha-aware leg below instead of the bilinear stretch, which
+            # multiplied the faint remnants x178 on the owner's files.
+            self._restore_upscaled_alpha_alpha_aware(output_path, scale, alpha_channel, upscaled_alpha)
         return output_path
+
+    def _restore_upscaled_alpha_alpha_aware(self, output_path, scale, alpha_channel, model_alpha=None):
+        """Rebuild the upscaled alpha with the Lanczos leg, the remnant gate and hole closing.
+
+        The alpha leg (``alpha_upscale.upscale_alpha``) stretches the cut-out matte with
+        Lanczos, drops the sub-tau film and closes interior holes under 32 px; the
+        transparent periphery and intentional soft alpha above the tau keep their values.
+        A network-drawn matte (matted edges) is still bounded by this leg as before.
+        """
+        with Image.open(output_path) as result_img:
+            result = result_img.convert("RGBA")
+            alpha_leg = upscale_alpha(alpha_channel, scale)
+            if alpha_leg.size != result.size:
+                # A Real-ESRGAN frame padded by tile rounding keeps its alpha leg;
+                # putalpha would reject the off-grid size with "images do not match".
+                alpha_leg = alpha_leg.resize(result.size, Image.Resampling.LANCZOS)
+            if model_alpha is not None and model_alpha.size == result.size:
+                alpha_leg = self._bound_model_alpha(model_alpha, alpha_leg, scale)
+            result.putalpha(alpha_leg)
+            self._save_image_object_as_png(result, output_path)
 
     def _execute_realesrgan(self, exe_path, input_path, output_path, model_name, scale):
         command = [exe_path, "-i", input_path, "-o", output_path, "-n", model_name, "-s", str(scale)]
