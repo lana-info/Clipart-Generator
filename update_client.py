@@ -44,6 +44,10 @@ class UpdateError(RuntimeError):
     """Bounded user-safe update failure."""
 
 
+class _RetryableDownload(Exception):
+    """Транзиентный сбой сети/сервера во время скачивания — попытку можно повторить."""
+
+
 @dataclass(frozen=True)
 class UpdateRelease:
     version: str
@@ -181,6 +185,10 @@ class UpdateClient:
         self._artifact_max_bytes = MAX_UPDATE_INSTALLER_BYTES
         self.download_directory = Path(download_directory)
         self.timeout = max(1, min(int(timeout), self.lifecycle_policy.timeout_seconds))
+        # Скачивание артефакта (сотни МБ) живёт дольше API-запросов: свой щедрый таймаут
+        # на сокет-операцию и мелкие чанки (жалоба владельца 2026-10-31: 243 МБ при
+        # 20 с на чанк 1 МБ рвались на медленном канале).
+        self._download_timeout = max(self.timeout, int(self.lifecycle_policy.download_timeout_seconds))
         self._public_keys = {
             name: _decode_public_key(value) for name, value in (public_keys or {}).items()
         }
@@ -335,12 +343,42 @@ class UpdateClient:
     ) -> Path:
         self._validate_download_url(release.download_url)
         self.download_directory.mkdir(parents=True, exist_ok=True)
-        fd, temporary_name = tempfile.mkstemp(
-            dir=str(self.download_directory), prefix=".update-", suffix=".part"
-        )
-        os.close(fd)
-        temporary = Path(temporary_name)
         final = self.download_directory / release.filename
+        attempts = max(1, int(self.lifecycle_policy.download_attempts))
+        last_message = "Не удалось скачать обновление"
+        for attempt in range(1, attempts + 1):
+            fd, temporary_name = tempfile.mkstemp(
+                dir=str(self.download_directory), prefix=".update-", suffix=".part"
+            )
+            os.close(fd)
+            temporary = Path(temporary_name)
+            try:
+                self._download_attempt(release, temporary, cancelled=cancelled, progress=progress)
+                os.replace(temporary, final)
+                return final
+            except UpdateError:
+                temporary.unlink(missing_ok=True)
+                raise
+            except _RetryableDownload as retry:
+                temporary.unlink(missing_ok=True)
+                last_message = self._download_error_message(retry.__cause__ or retry)
+                if attempt == attempts:
+                    break
+            except (error.HTTPError, error.URLError, TimeoutError, OSError, ValueError) as exc:
+                temporary.unlink(missing_ok=True)
+                raise UpdateError(self._download_error_message(exc)) from None
+        final.unlink(missing_ok=True)
+        raise UpdateError(last_message)
+
+    def _download_attempt(
+        self,
+        release: UpdateRelease,
+        temporary: Path,
+        *,
+        cancelled: Callable[[], bool] | None,
+        progress: Callable[[int, int], None] | None,
+    ) -> None:
+        """Одна попытка скачать артефакт целиком (исходный поток download)."""
         digest = hashlib.sha256()
         received = 0
         req = request.Request(
@@ -350,14 +388,20 @@ class UpdateClient:
         )
         try:
             opener = request.build_opener(NoRedirectHandler())
-            with opener.open(req, timeout=self.timeout) as response, temporary.open("wb") as handle:
+            with opener.open(req, timeout=self._download_timeout) as response, temporary.open("wb") as handle:
                 declared = response.headers.get("Content-Length")
                 if declared is None or int(declared) != release.size:
                     raise UpdateError("Сервер вернул другой размер обновления")
                 while received < release.size:
                     if cancelled is not None and cancelled():
                         raise UpdateError("Скачивание обновления отменено")
-                    chunk = response.read(min(1024 * 1024, release.size - received))
+                    try:
+                        chunk = response.read(
+                            min(self.lifecycle_policy.download_chunk_bytes, release.size - received)
+                        )
+                    except (TimeoutError, error.URLError) as exc:
+                        # Транзиентный сбой сети: попытку можно повторить целиком.
+                        raise _RetryableDownload() from exc
                     if not chunk:
                         break
                     received += len(chunk)
@@ -367,20 +411,31 @@ class UpdateClient:
                         progress(received, release.size)
                 handle.flush()
                 os.fsync(handle.fileno())
-            if received != release.size:
-                raise UpdateError("Обновление скачано не полностью")
-            if not hmac.compare_digest(digest.hexdigest(), release.sha256):
-                raise UpdateError("Контрольная сумма обновления не совпадает")
-            os.replace(temporary, final)
-            return final
-        except UpdateError:
-            temporary.unlink(missing_ok=True)
-            final.unlink(missing_ok=True)
-            raise
-        except (error.HTTPError, error.URLError, TimeoutError, OSError, ValueError):
-            temporary.unlink(missing_ok=True)
-            final.unlink(missing_ok=True)
-            raise UpdateError("Не удалось скачать обновление") from None
+        except error.HTTPError as exc:
+            if 500 <= exc.code < 600:
+                raise _RetryableDownload() from exc
+            raise UpdateError(f"Сервер обновлений вернул ошибку HTTP {exc.code}.") from None
+        except error.URLError as exc:
+            raise _RetryableDownload() from exc
+        except TimeoutError as exc:
+            raise _RetryableDownload() from exc
+        if received != release.size:
+            raise UpdateError("Обновление скачано не полностью")
+        if not hmac.compare_digest(digest.hexdigest(), release.sha256):
+            raise UpdateError("Контрольная сумма обновления не совпадает")
+
+    @staticmethod
+    def _download_error_message(exc: BaseException) -> str:
+        """Причина скачивания — конкретным текстом (правило диагностики AGENTS.md)."""
+        reason = getattr(exc, "reason", None)
+        if isinstance(exc, TimeoutError) or isinstance(reason, TimeoutError):
+            return ("Соединение прервалось во время скачивания обновления (канал медленный или нестабильный). "
+                    "Попробуйте ещё раз; если повторится — установщик можно скачать вручную.")
+        if isinstance(exc, error.HTTPError):
+            return f"Сервер обновлений вернул ошибку HTTP {exc.code}."
+        if isinstance(exc, error.URLError):
+            return "Не удалось соединиться с сервером обновлений."
+        return "Не удалось скачать обновление."
 
     def verify_download(self, release: UpdateRelease, path: str | Path) -> None:
         """Repeat the artifact size and digest checks immediately before launch."""

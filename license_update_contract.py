@@ -19,6 +19,11 @@ class LicenseLifecycleState(StrEnum):
 class LicenseUpdatePolicy:
     endpoint_version: str = "v1"
     timeout_seconds: int = 30
+    # Скачивание артефакта (сотни МБ) — щедрее API-запросов (владелец 2026-10-31:
+    # 243 МБ при 20 с на чанк 1 МБ рвались на медленном канале).
+    download_timeout_seconds: int = 120
+    download_chunk_bytes: int = 256 * 1024
+    download_attempts: int = 2
     clock_skew_seconds: int = 300
     accepted_key_ids: tuple[str, ...] = ("license-v1",)
     outage_allows_cached_access: bool = False

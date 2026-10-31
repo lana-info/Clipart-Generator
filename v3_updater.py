@@ -356,10 +356,11 @@ class UpdateController(QObject):
             details={"error_message": message},
         )
         if not cancelled:
+            # Причина — конкретным текстом (правило диагностики AGENTS.md), а не общая фраза.
             QMessageBox.warning(
                 self.parent_widget,
                 "Обновление",
-                "Не удалось скачать или проверить обновление. Текущая версия продолжит работать.",
+                f"Не удалось скачать обновление: {message}\nТекущая версия продолжит работать.",
             )
 
     def _check_failed(self, message: str) -> None:
