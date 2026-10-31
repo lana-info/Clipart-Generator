@@ -1158,6 +1158,31 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
         opaque = rgba[..., 3] == 255
         np.testing.assert_array_equal(np.asarray(prepared)[opaque], rgba[..., :3][opaque])
 
+    def test_upscale_rgb_far_background_is_flat_for_the_transparency_brush(self):
+        """Дальний фон — плоская заливка средним цветом объекта (жалоба 2026-10-31).
+
+        Кисть редактора прозрачности проявляет RGB под альфой; «ближайший пиксель»
+        рисовал там вороной из цветов краёв. Негативный контроль: на старом коде
+        углы получали разные цвета (красная и зелёная половины) и тест падал.
+        """
+        image = Image.new("RGBA", (12, 12), (0, 15, 255, 0))
+        for y in range(4, 8):
+            for x in range(2, 5):
+                image.putpixel((x, y), (200, 110, 140, 255))   # красная половина объекта
+            for x in range(7, 10):
+                image.putpixel((x, y), (60, 180, 90, 255))     # зелёная половина объекта
+        image.putpixel((1, 1), (255, 0, 0, 0))                 # прозрачный «мусор» далеко слева
+        image.putpixel((10, 1), (0, 255, 0, 0))                # и далеко справа
+        prepared = main.WorkerThread._prepare_upscale_rgb(image)
+        corners = [prepared.getpixel(point) for point in ((0, 0), (11, 0), (0, 11), (11, 11))]
+        self.assertEqual(len(set(corners)), 1, f"дальний фон должен быть плоским, сейчас {corners}")
+        flat = corners[0]
+        self.assertNotIn(flat, ((200, 110, 140), (60, 180, 90)))  # не «вороной» конкретного края
+        subject_red = {prepared.getpixel((x, y)) for y in range(4, 8) for x in range(2, 5)}
+        subject_green = {prepared.getpixel((x, y)) for y in range(4, 8) for x in range(7, 10)}
+        self.assertEqual(subject_red, {(200, 110, 140)})  # объект не тронут
+        self.assertEqual(subject_green, {(60, 180, 90)})
+
     def test_restored_hard_alpha_stays_binary(self):
         with tempfile.TemporaryDirectory(prefix="clipart-hard-alpha-") as temp_dir:
             root = Path(temp_dir)
