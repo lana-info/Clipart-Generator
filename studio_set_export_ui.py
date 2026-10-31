@@ -7,7 +7,10 @@ from pathlib import Path
 from threading import Event
 from uuid import uuid4
 
-from PyQt6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, QThread, Qt, pyqtSignal
+from PyQt6.QtCore import (
+    QEvent, QItemSelection, QItemSelectionModel, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, QThread,
+    Qt, pyqtSignal,
+)
 from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QImage, QImageReader, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QDialog, QFileDialog, QFrame,
@@ -816,6 +819,9 @@ class SetExportDialog(QDialog):
         self.quality_list.setSpacing(6)
         self.quality_list.setUniformItemSizes(True)
         self.quality_list.setMinimumWidth(330)
+        # Владелец 2026-10-31: CTRL выделяет по одной, SHIFT — группу между картинками;
+        # существующие кнопки применяются ко всей выделенной группе (новых кнопок нет).
+        self.quality_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.quality_list.currentRowChanged.connect(self._quality_selected)
         body.addWidget(self.quality_list, 2)
         detail = QFrame()
@@ -877,16 +883,14 @@ class SetExportDialog(QDialog):
         self.quality_regenerate_button.setProperty('v3Button', True)
         self.quality_regenerate_button.setProperty('variant', 'secondary')
         self.quality_regenerate_button.setToolTip('Новая платная генерация этой картинки; цена и модель — в подтверждении')
-        self.quality_regenerate_button.clicked.connect(
-            lambda: self.regenerate_requested.emit(self._current_quality_key()))
+        self.quality_regenerate_button.clicked.connect(self._regenerate_selected_quality)
         self.quality_regenerate_button.hide()  # next to «Изменить промпт»: only for «Брак генерации»
         action_row.addWidget(self.quality_regenerate_button)
         self.quality_cutout_button = QPushButton('Убрать фон')
         self.quality_cutout_button.setProperty('v3Button', True)
         self.quality_cutout_button.setProperty('variant', 'secondary')
         self.quality_cutout_button.setToolTip('Заново вырезать фон этой картинки на компьютере: бесплатно, прежняя картинка сохранится как версия')
-        self.quality_cutout_button.clicked.connect(
-            lambda: self.cutout_requested.emit(self._current_quality_key()))
+        self.quality_cutout_button.clicked.connect(self._cutout_selected_quality)
         self.quality_cutout_button.hide()  # only for «Брак вырезания»
         action_row.addWidget(self.quality_cutout_button)
         action_row.addStretch(1)
@@ -1250,6 +1254,9 @@ class SetExportDialog(QDialog):
         current = self.quality_list.currentItem()
         if current is not None and not selected_path:
             selected_path = str(current.data(Qt.ItemDataRole.UserRole) or '')
+        # Owner 2026-10-31: a rebuild keeps the whole CTRL/SHIFT selection, not only the
+        # current picture — a mark on a group rebuilds the grid, the group must stay.
+        selected_keys = self._selected_quality_keys()
         # Owner 2026-10-30: a rebuild (the check fills in, a picture is redone) used to drop the place —
         # the grid jumped to the first picture. Keep the position and the scroll, not the top of the list.
         previous_row = self.quality_list.currentRow()
@@ -1316,12 +1323,27 @@ class SetExportDialog(QDialog):
             selected_row = next((row for row in range(self.quality_list.count())
                                  if self.quality_list.item(row).data(Qt.ItemDataRole.UserRole)), -1)
         if selected_row >= 0:
-            self.quality_list.setCurrentRow(selected_row)
+            # Явный ClearAndSelect: одноаргументная форма после программного выделения
+            # группы оставляет устаревшие выделенные строки (проверено офлайн).
+            self.quality_list.setCurrentRow(selected_row, QItemSelectionModel.SelectionFlag.ClearAndSelect)
             if focus:
                 self.quality_list.scrollToItem(
                     self.quality_list.item(selected_row), QAbstractItemView.ScrollHint.PositionAtCenter)
         else:
             self._quality_selected(-1)
+        if selected_keys:
+            # Группа возвращается одним ClearAndSelect по выделению: построчный
+            # setSelected(True) оставляет модель выделения «отравленной» — после него
+            # одноаргументный setCurrentRow перестаёт снимать прежние строки.
+            group = QItemSelection()
+            for row in range(self.quality_list.count()):
+                key = str(self.quality_list.item(row).data(Qt.ItemDataRole.UserRole) or '')
+                if key and (key in selected_keys or row == self.quality_list.currentRow()):
+                    index = self.quality_list.model().index(row, 0)
+                    group.select(index, index)
+            if not group.isEmpty():
+                self.quality_list.selectionModel().select(
+                    group, QItemSelectionModel.SelectionFlag.ClearAndSelect)
         self.quality_list.verticalScrollBar().setValue(scroll)
 
     def _placeholder_icon(self):
@@ -1491,6 +1513,29 @@ class SetExportDialog(QDialog):
         item = self.quality_list.currentItem()
         return str(item.data(Qt.ItemDataRole.UserRole) or '') if item is not None else ''
 
+    def _selected_quality_keys(self):
+        """Все выделенные картинки сетки в порядке списка (CTRL/SHIFT, владелец 2026-10-31).
+
+        Строки без ключа (квадрат «проверяется…») в действия не попадают.
+        """
+        keys = []
+        for row in range(self.quality_list.count()):
+            item = self.quality_list.item(row)
+            if item is not None and item.isSelected():
+                key = str(item.data(Qt.ItemDataRole.UserRole) or '')
+                if key:
+                    keys.append(key)
+        return keys
+
+    def _action_quality_keys(self):
+        """Картинки, к которым применяется нажатая кнопка: выделенная группа, а если
+        выделения нет — та, что сейчас открыта (как было при одиночном выборе)."""
+        keys = self._selected_quality_keys()
+        if keys:
+            return keys
+        current = self._current_quality_key()
+        return [current] if current else []
+
     def _sync_mark_buttons(self, key):
         known = self._marks_enabled and key in self._marks
         self.quality_marks_row.setVisible(known)
@@ -1527,17 +1572,29 @@ class SetExportDialog(QDialog):
         self.quality_drop_notice.setVisible(bool(text))
 
     def _quality_mark_clicked(self, mark):
-        key = self._current_quality_key()
-        if not key or key not in self._marks:
+        # Владелец 2026-10-31: метка ставится всем выделенным картинкам сразу.
+        selected = self._action_quality_keys()
+        keys = [key for key in selected if key in self._marks]
+        if not keys:
             return
-        if self._marks.get(key) == mark:
-            mark = 'unchecked'  # the same button again takes the mark off (owner 2026-10-28)
-        self._marks[key] = mark
-        # Show the new mark before the (slow) save runs, so two buttons are never lit while it works.
-        self._sync_mark_buttons(key)
-        self.quality_marks_row.repaint()
-        self.mark_requested.emit(key, mark)
+        # The same button again takes the mark off (owner 2026-10-28); with a group
+        # that means: only when every highlighted picture already carries this mark.
+        if all(self._marks.get(key) == mark for key in keys):
+            mark = 'unchecked'
+        for key in keys:
+            self._marks[key] = mark
+        current = self._current_quality_key()
+        if current in keys:
+            # Show the new mark before the (slow) save runs, so two buttons are never lit while it works.
+            self._sync_mark_buttons(current)
+            self.quality_marks_row.repaint()
+        for key in keys:
+            self.mark_requested.emit(key, mark)
         self._refresh_quality_page()
+        skipped = len(selected) - len(keys)
+        if skipped:
+            self.show_drop_notice(
+                f'Помечено картинок: {len(keys)}. Пропущено: {skipped} — у них нет быстрой пометки проекта.')
 
     def _needs_attention(self, key):
         """A PNG the owner still has to look at: the check flags it and no mark says she has seen it."""
@@ -1583,7 +1640,9 @@ class SetExportDialog(QDialog):
         self._show_quality_review()
         for row in range(self.quality_list.count()):
             if not self._is_checked(str(self.quality_list.item(row).data(Qt.ItemDataRole.UserRole) or '')):
-                self.quality_list.setCurrentRow(row)
+                # Явный ClearAndSelect — как в _refresh_quality_page: одноаргументная
+                # форма после выделения группы оставляет устаревшие выделенные строки.
+                self.quality_list.setCurrentRow(row, QItemSelectionModel.SelectionFlag.ClearAndSelect)
                 break
 
     def set_background_job(self, text):
@@ -1626,33 +1685,67 @@ class SetExportDialog(QDialog):
         self.fix_requested.emit(path)
 
     def _exclude_quality_selected(self):
-        """Take the picture out of every set, or bring it back into every set (one button, owner 2026-10-30)."""
+        """Take the highlighted pictures out of every set, or bring them back (one button, owner 2026-10-30).
+
+        Владелец 2026-10-31: кнопка действует на всю выделенную группу — исключает
+        её целиком, а когда вся группа уже вне наборов, возвращает целиком. Картинки
+        без записи о наборах пропускаются с пометкой в плашке, остальные работают.
+        """
         if self.worker is not None:
             return
-        item = self.quality_list.currentItem()
-        if item is None:
-            return
-        path = str(item.data(Qt.ItemDataRole.UserRole) or '')
-        report = self.quality_reports.get(path)
-        if not path or report is None:
-            return
+        selected = self._action_quality_keys()
         from studio_export_membership import validate_export_membership
         value = validate_export_membership(self.saved_membership)
-        entry = value.get(path)
-        if entry is None:
+        entries = {}
+        for path in selected:
+            if path and self.quality_reports.get(path) is not None:
+                entry = value.get(path)
+                if entry is not None:
+                    entries[path] = entry
+        if not entries:
             return
-        excluded = not any(link.get('included') for link in entry['memberships'])
-        for link in entry['memberships']:
-            link['included'] = excluded  # excluded → back into every set; in sets → out of every set
+        excluded = all(not any(link.get('included') for link in entry['memberships'])
+                       for entry in entries.values())
+        for entry in entries.values():
+            for link in entry['memberships']:
+                link['included'] = excluded  # excluded → back into every set; in sets → out of every set
         value = validate_export_membership(value)
         self.saved_membership = value
         self._resolve_review_issues(value)
         self.membership_saved.emit(value)
-        self.status.setText('Дизайн возвращён во все свои наборы. Файл всё это время оставался на диске.'
-                            if excluded else
-                            'Дизайн исключён из наборов. Файл на диске не удалён.')
+        if len(entries) == 1:
+            self.status.setText('Дизайн возвращён во все свои наборы. Файл всё это время оставался на диске.'
+                                if excluded else
+                                'Дизайн исключён из наборов. Файл на диске не удалён.')
+        else:
+            self.status.setText(f'Возвращены в наборы: {len(entries)}. Файлы всё это время оставались на диске.'
+                                if excluded else
+                                f'Исключены из наборов: {len(entries)}. Файлы на диске не удалены.')
         self._refresh_summary()
         self._refresh_quality_page()
+        skipped = len(selected) - len(entries)
+        if skipped:
+            self.show_drop_notice(
+                f'Обработано картинок: {len(entries)}. Пропущено: {skipped} — их нет в наборах проекта.')
+
+    def _regenerate_selected_quality(self):
+        """«Перегенерировать» for every highlighted picture (владелец 2026-10-31).
+
+        Each picture goes through the same paid, confirmed re-creation as before:
+        the module shows its own price confirmation and queues the rest one by one,
+        so nothing starts without the owner's approval.
+        """
+        for key in self._action_quality_keys():
+            self.regenerate_requested.emit(key)
+
+    def _cutout_selected_quality(self):
+        """«Убрать фон» for every highlighted picture: free, each with its own progress.
+
+        The module starts the first one and waits the others out in its redo queue,
+        so a group runs one by one exactly like a single picture.
+        """
+        for key in self._action_quality_keys():
+            self.cutout_requested.emit(key)
 
     def _manual_changed(self, *_):
         if self.worker is not None:
