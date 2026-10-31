@@ -1041,7 +1041,8 @@ class ImageReview:
         rows = []
         for index in self._rows:
             if index is None:
-                rows.append(None)
+                # A folder file no position owns: the list says so, the strip explains why (2026-10-31).
+                rows.append((UNCHECKED, "не подключён к позиции", True, False))
                 continue
             item = items[index]
             state = mark_state(item)
@@ -1057,15 +1058,25 @@ class ImageReview:
         strip, editor = self.strip, self._editor
         row, index = self._current()
         if index is None:
-            editor.set_canvas_notice(None)
+            # Owner 2026-10-31: a folder file that no position owns kept its dead marks silent —
+            # the only explanation was a hover tooltip, and it sent her to «Вернуть готовые файлы»
+            # even when that item can never attach this file. Say the truth where she looks.
+            editor.set_canvas_notice(
+                "Файл не подключён к позиции набора",
+                "Метки «Ок» и брака хранятся у позиции запуска — у этого файла позиции нет. "
+                "Подключить можно PNG с номером позиции в имени (…_01_ready.png), чья позиция "
+                "свободна или показывает другой файл: «Ещё» → «Вернуть готовые файлы».")
             strip.set_note("")
-            strip.show_state(None, status="Файл не из этого запуска: метки недоступны. Нажмите «Ещё» → «Вернуть готовые файлы», чтобы подключить его.",
-                             enabled=False)
+            strip.show_state(None, status=(
+                "Файл не подключён к позиции набора — метку ставить некуда. «Вернуть готовые файлы» "
+                "подключает PNG с номером позиции в имени (…_01_ready.png), чья позиция свободна "
+                "или показывает другой файл."), enabled=False)
             return
         item = self.session.items[index]
         strip.set_note(item.review_note)
         history = len(item.versions)
         if self._job is not None:
+            editor.set_canvas_notice(None)
             strip.show_state(item.review_mark, status="Вырезаю заново из исходной картинки…",
                              history=history, enabled=False)
             return
