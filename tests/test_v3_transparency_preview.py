@@ -1,3 +1,4 @@
+import errno
 import os
 import tempfile
 import unittest
@@ -15,6 +16,7 @@ from v3_transparency_preview import (
     ClipartTransparencyEditorPage,
     ClipartTransparencyPreview,
     MaskEditDocument,
+    MaskSaveFallbackNotice,
     TransparencyCanvas,
 )
 
@@ -582,6 +584,309 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
                 page._back_clicked()
             self.assertEqual(sorted(seen), ["Не сохранять", "Остаться"])
             page.deleteLater()
+
+
+class MaskSaveBusyOutcomeTests(unittest.TestCase):
+    """Owner 2026-10-30 (Windows): the ready PNG can be held open by a viewer
+    or Explorer thumbnails (WinError 32/«используется другим процессом»).
+
+    Invariant under test: every save outcome is explicit — target written and
+    dirty reset, timestamped copy with a notice, or a loud error. No silent
+    saves, no lost edits, no leftover .tmp files.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _dirty_document(self) -> MaskEditDocument:
+        document = MaskEditDocument(Image.new("RGBA", (12, 12), (7, 8, 9, 255)))
+        document.begin_stroke()
+        document.extend_stroke(((6, 6),), radius=2, action="remove", hardness=100)
+        document.end_stroke()
+        return document
+
+    def _pair_paths(self, root: Path, pre_existing: bool = True) -> tuple[Path, Path]:
+        output = root / "output" / "flowers_ready.png"
+        mask = root / "rough" / "flowers_ready_alpha-mask.png"
+        output.parent.mkdir(parents=True)
+        mask.parent.mkdir(parents=True)
+        if pre_existing:
+            Image.new("RGBA", (12, 12), (7, 8, 9, 255)).save(output)
+            Image.new("L", (12, 12), 255).save(mask)
+        return output, mask
+
+    @staticmethod
+    def _new_editor_page(root: Path) -> tuple[ClipartTransparencyEditorPage, Path]:
+        (root / "output").mkdir(parents=True)
+        (root / "rough").mkdir(parents=True)
+        target = root / "output" / "flowers_ready.png"
+        Image.new("RGBA", (12, 12), (7, 8, 9, 255)).save(target)
+        page = ClipartTransparencyEditorPage()
+        page.set_files((target,), rough_dir=root / "rough")
+        page.document.begin_stroke()
+        page.document.extend_stroke(((6, 6),), radius=2, action="remove", hardness=100)
+        page.document.end_stroke()
+        return page, target
+
+    @staticmethod
+    def _leftovers(root: Path) -> list[Path]:
+        return [
+            path for path in root.rglob("*")
+            if path.is_file() and (
+                path.name.endswith(".tmp")
+                or ".backup" in path.name
+                or (path.name.startswith(".vibix-pair-") and path.suffix == ".json")
+            )
+        ]
+
+    @staticmethod
+    def _busy_replace(busy_targets: set[Path] | None = None, limit: int | None = None):
+        """Patch os.replace: tmp->busy_target fails like a Windows sharing violation."""
+        original_replace = os.replace
+        hits: list[Path] = []
+
+        def replace(source, destination):  # type: ignore[no-untyped-def]
+            source_path, destination_path = Path(source), Path(destination)
+            if (
+                source_path.suffix == ".tmp"
+                and (busy_targets is None or destination_path in busy_targets)
+                and (limit is None or len(hits) < limit)
+            ):
+                hits.append(destination_path)
+                raise PermissionError(errno.EACCES, "simulated sharing violation")
+            return original_replace(source, destination)
+
+        return replace, hits
+
+    def test_busy_classifier_flags_windows_and_posix_busy_errors(self):
+        from v3_transparency_preview import _is_target_busy_error
+
+        self.assertTrue(_is_target_busy_error(PermissionError(errno.EACCES, "busy")))
+        self.assertTrue(_is_target_busy_error(PermissionError(errno.EPERM, "busy")))
+        self.assertTrue(_is_target_busy_error(OSError(errno.EBUSY, "busy")))
+        self.assertFalse(_is_target_busy_error(OSError(errno.EIO, "disk failure")))
+        self.assertFalse(_is_target_busy_error(ValueError("unrelated")))
+
+    def test_document_save_retries_busy_target_and_writes_it(self):
+        document = self._dirty_document()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output, mask = self._pair_paths(root)
+            before = output.read_bytes()
+            replace, hits = self._busy_replace(busy_targets={output}, limit=1)
+            sleeps: list[float] = []
+
+            with patch("v3_transparency_preview.os.replace", side_effect=replace), patch(
+                "v3_transparency_preview.time.sleep", side_effect=sleeps.append
+            ):
+                document.save(output, mask)
+
+            self.assertEqual(len(hits), 1, "transient lock: one retry must be enough")
+            self.assertEqual(sleeps, [0.3], "retry pause ~0.3s, total well below 1s")
+            self.assertFalse(document.is_dirty)
+            with Image.open(output) as corrected:
+                self.assertEqual(corrected.getpixel((6, 6))[-1], 0)
+            self.assertNotEqual(output.read_bytes(), before)
+            with Image.open(mask) as saved_mask:
+                self.assertEqual(saved_mask.getpixel((6, 6)), 0)
+            self.assertEqual(self._leftovers(root), [])
+
+    def test_document_save_persistent_busy_commits_timestamped_copy_with_notice(self):
+        document = self._dirty_document()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output, mask = self._pair_paths(root)
+            before_output = output.read_bytes()
+            before_mask = mask.read_bytes()
+            replace, hits = self._busy_replace(busy_targets={output})
+            sleeps: list[float] = []
+
+            with patch("v3_transparency_preview.os.replace", side_effect=replace), patch(
+                "v3_transparency_preview.time.sleep", side_effect=sleeps.append
+            ):
+                with self.assertRaises(MaskSaveFallbackNotice) as raised:
+                    document.save(output, mask)
+
+            notice = raised.exception
+            self.assertEqual(len(hits), 3, "initial attempt + two short retries")
+            self.assertEqual(sleeps, [0.3, 0.4])
+            self.assertLessEqual(sum(sleeps), 1.0)
+            self.assertEqual(notice.target_path, output)
+            self.assertEqual(
+                notice.output_path.parent, output.parent, "copy stays near the target"
+            )
+            self.assertRegex(notice.output_path.name, r"flowers_ready_saved_\d{8}_\d{6}\.png")
+            with Image.open(notice.output_path) as copied:
+                self.assertEqual(copied.getpixel((6, 6))[-1], 0)
+            with Image.open(notice.mask_path) as copied_mask:
+                self.assertEqual(copied_mask.getpixel((6, 6)), 0)
+            self.assertEqual(
+                notice.mask_path.parent, mask.parent, "mask copy pairs with the png copy"
+            )
+            self.assertEqual(
+                output.read_bytes(), before_output, "locked target stays untouched"
+            )
+            self.assertEqual(mask.read_bytes(), before_mask)
+            self.assertFalse(document.is_dirty, "fallback copy is the saved state")
+            self.assertEqual(self._leftovers(root), [])
+
+    def test_document_save_non_busy_error_fails_loudly_without_retries(self):
+        document = self._dirty_document()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output, mask = self._pair_paths(root, pre_existing=False)
+            original_replace = os.replace
+            hits: list[Path] = []
+
+            def replace(source, destination):  # type: ignore[no-untyped-def]
+                if Path(source).suffix == ".tmp" and Path(destination) == output:
+                    hits.append(Path(destination))
+                    raise OSError(errno.EIO, "simulated disk failure")
+                return original_replace(source, destination)
+
+            sleeps: list[float] = []
+            with patch("v3_transparency_preview.os.replace", side_effect=replace), patch(
+                "v3_transparency_preview.time.sleep", side_effect=sleeps.append
+            ):
+                with self.assertRaises(OSError):
+                    document.save(output, mask)
+
+            self.assertEqual(len(hits), 1, "a non-busy error must not be retried as busy")
+            self.assertEqual(sleeps, [])
+            self.assertFalse(list((root / "output").glob("flowers_ready_saved_*.png")))
+            self.assertTrue(document.is_dirty, "failed save keeps the unsaved state")
+            self.assertEqual(self._leftovers(root), [])
+
+    def test_document_save_without_busy_saves_directly(self):
+        document = self._dirty_document()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output, mask = self._pair_paths(root)
+            sleeps: list[float] = []
+            with patch(
+                "v3_transparency_preview.time.sleep", side_effect=sleeps.append
+            ):
+                document.save(output, mask)
+
+            self.assertEqual(sleeps, [], "no busy: no retries, no pauses")
+            self.assertFalse(document.is_dirty)
+            self.assertFalse(list((root / "output").glob("flowers_ready_saved_*.png")))
+            self.assertEqual(self._leftovers(root), [])
+
+    def test_editor_transient_busy_then_save_success_sets_mask_saved_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            page, target = self._new_editor_page(root)
+            replace, hits = self._busy_replace(busy_targets={target}, limit=1)
+            sleeps: list[float] = []
+            with patch("v3_transparency_preview.os.replace", side_effect=replace), patch(
+                "v3_transparency_preview.time.sleep", side_effect=sleeps.append
+            ), patch("v3_transparency_preview.QMessageBox.critical") as critical, patch(
+                "v3_transparency_preview.QMessageBox.warning"
+            ) as warning:
+                page._save_clicked()
+
+            self.assertEqual(len(hits), 1)
+            self.assertEqual(sleeps, [0.3])
+            critical.assert_not_called()
+            warning.assert_not_called()
+            self.assertIn("Маска сохранена", page.contour_status.text())
+            self.assertIn(target.name, page.contour_status.text())
+            self.assertFalse(page.document.is_dirty)
+            self.assertFalse(page._has_unsaved_changes())
+            self.assertEqual(self._leftovers(root), [])
+            page.deleteLater()
+
+    def test_editor_persistent_busy_saves_timestamped_copy_and_reports_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            page, target = self._new_editor_page(root)
+            replace, hits = self._busy_replace(busy_targets={target})
+            sleeps: list[float] = []
+            with patch("v3_transparency_preview.os.replace", side_effect=replace), patch(
+                "v3_transparency_preview.time.sleep", side_effect=sleeps.append
+            ), patch("v3_transparency_preview.QMessageBox.critical") as critical, patch(
+                "v3_transparency_preview.QMessageBox.warning"
+            ) as warning:
+                page._save_clicked()
+
+            warning.assert_called_once()
+            text = warning.call_args.args[2]
+            self.assertIn("копию", text)
+            self.assertIn("проводник", text)
+            self.assertIn("Ничего не потеряно", text)
+            critical.assert_not_called()
+            self.assertEqual(len(hits), 3)
+            self.assertLessEqual(sum(sleeps), 1.0)
+            fallback_path = page._busy_fallback_path
+            self.assertIsNotNone(fallback_path)
+            assert fallback_path is not None
+            self.assertTrue(fallback_path.is_file())
+            self.assertRegex(fallback_path.name, r"flowers_ready_saved_\d{8}_\d{6}\.png")
+            self.assertIn("Сохранено в копию", page.contour_status.text())
+            self.assertFalse(page.document.is_dirty)
+            self.assertFalse(
+                page._has_unsaved_changes(), "saved copy clears the close-dialog loop"
+            )
+            self.assertEqual(page._saved_copies[target], fallback_path)
+            self.assertEqual(self._leftovers(root), [])
+            page.deleteLater()
+
+    def test_editor_unwritable_busy_target_reports_busy_cause_and_keeps_dirty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            page, target = self._new_editor_page(root)
+            replace, hits = self._busy_replace()
+            with patch("v3_transparency_preview.os.replace", side_effect=replace), patch(
+                "v3_transparency_preview.time.sleep"
+            ), patch("v3_transparency_preview.QMessageBox.critical") as critical:
+                page._save_clicked()
+
+            self.assertGreaterEqual(len(hits), 3, "target and every copy name fought back")
+            critical.assert_called_once()
+            self.assertEqual(critical.call_args.args[1], "Не удалось заменить занятый PNG")
+            self.assertIn("просмотрщик", critical.call_args.args[2])
+            self.assertIn("проводник", critical.call_args.args[2])
+            self.assertTrue(page.document.is_dirty)
+            self.assertTrue(
+                page._has_unsaved_changes(), "failed save keeps the close dialog honest"
+            )
+            self.assertIsNone(page._busy_fallback_path)
+            self.assertEqual(self._leftovers(root), [])
+            page.deleteLater()
+
+    def test_transparency_dialog_close_save_keeps_window_on_failure_only(self):
+        from studio_auto_clipart_flow import _TransparencyDialog
+
+        with tempfile.TemporaryDirectory() as directory:
+            page, target = self._new_editor_page(Path(directory))
+            dialog = _TransparencyDialog()
+            dialog.editor = page
+            dialog.ask_unsaved = lambda: QMessageBox.StandardButton.Save
+            dialog.show()
+            self.assertTrue(page.document.is_dirty)
+            with patch.object(
+                page._document, "save", side_effect=OSError(errno.EIO, "disk failure")
+            ), patch("v3_transparency_preview.QMessageBox.critical") as critical:
+                dialog.reject()
+            critical.assert_called_once()
+            self.assertTrue(
+                dialog.isVisible(), "failed save: the close dialog must stay loud"
+            )
+            self.assertTrue(page.document.is_dirty)
+            self.assertTrue(page._has_unsaved_changes())
+
+            with patch("v3_transparency_preview.time.sleep"):
+                dialog.reject()
+
+            self.assertFalse(page.document.is_dirty)
+            self.assertTrue(target.is_file())
+            self.assertFalse(
+                dialog.isVisible(), "successful save closes the window immediately"
+            )
+            page.deleteLater()
+            dialog.deleteLater()
 
 
 if __name__ == "__main__":
