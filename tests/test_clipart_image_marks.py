@@ -397,6 +397,124 @@ def test_bad_cutout_without_raw_source_offers_brush_or_generation(tmp_path):
     editor.deleteLater()
 
 
+# --- folder files no position owns (owner 2026-10-31: «метки не реагируют») --------
+
+def open_review_after_folder_load(tmp_path, monkeypatch):
+    """The owner's path: «Ещё» → «Вернуть готовые файлы», then «Проверка PNG».
+
+    Position 1 keeps its picture; position 2 arrives from the folder. The folder also
+    holds files no position can own: a number beyond the set, a name without a number
+    and an older copy of the occupied position 1.
+    """
+    from types import MethodType, SimpleNamespace
+
+    from studio_auto_clipart_flow import AutoClipartFlowController
+    from v3_run_queue import transparency_candidate_paths
+
+    request = ClipartRunRequest(
+        mode="mode1_generate_only", work_dir=str(tmp_path),
+        settings={"output_dir": str(tmp_path / "output")},
+        generated_prompts=[{"prompt": "goose", "references": [], "object_id": "o0"},
+                           {"prompt": "cat", "references": [], "object_id": "o1"}])
+    session = RunQueueSession(request, ProjectMode.CLIPART)
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    session.items[0].output_path = str(png(tmp_path / "output" / "goose_01_ready.png"))
+    session.items[0].review_mark, session.items[0].review_checked = "ok", True
+    session.running = False  # item 1: interrupted, its PNG lies in the folder
+    for name in ("cat_02_ready.png", "far_09_ready.png", "gift_ready.png"):
+        png(tmp_path / "output" / name, (40, 200, 40, 255))
+    old = png(tmp_path / "output" / "goose_01_ready_2.png", (40, 40, 200, 255))
+    os.utime(old, (1_000, 1_000))  # older copy: position 1 shows the newer file
+
+    state = ProjectState(mode=ProjectMode.CLIPART, common=CommonProjectData(work_dir=str(tmp_path)))
+    state.data = SimpleNamespace(automatic={})  # what the real shell keeps project data in
+    flow = FakeFlow(session, state)
+    monkeypatch.setattr(
+        "studio_auto_clipart_flow.QMessageBox.question",
+        staticmethod(lambda *args, **kwargs: QMessageBox.StandardButton.Yes))
+    flow.recover_results = MethodType(AutoClipartFlowController.recover_results, flow)
+    flow._recoverable_outputs = MethodType(AutoClipartFlowController._recoverable_outputs, flow)
+    flow.recover_results()
+    assert session.items[1].output_path.endswith("cat_02_ready.png")  # подключение сработало
+
+    from studio_clipart_review_ui import ImageReview
+    from v3_transparency_preview import ClipartTransparencyEditorPage
+    review = ImageReview(flow)
+    review.install_results_page()
+    editor = ClipartTransparencyEditorPage()
+    paths = transparency_candidate_paths(session)
+    editor.set_files(paths, selected_index=0)
+    review.attach_editor(editor, paths)
+    return review, editor, session, flow
+
+
+def row_of(editor, name):
+    return next(index for index, path in enumerate(editor._paths) if path.name == name)
+
+
+def test_a_folder_file_without_a_position_explains_its_dead_marks(tmp_path, monkeypatch):
+    """«Просто не реагирует» — больше нет: файл без позиции говорит, почему метки мертвы."""
+    review, editor, session, flow = open_review_after_folder_load(tmp_path, monkeypatch)
+    editor.file_list.setCurrentRow(row_of(editor, "gift_ready.png"))
+    notice = editor._canvas_notice
+    assert notice is not None and notice.isVisibleTo(editor), "объяснение должно быть видно на холсте"
+    assert "не подключён" in notice.text()
+    strip = review.strip
+    assert not strip.mark_buttons["ok"].isEnabled() and not strip.mark_buttons["bad_generation"].isEnabled()
+    assert "не подключён" in strip.toolTip()
+    editor.deleteLater()
+
+
+def test_unconnected_files_are_labelled_in_the_check_list(tmp_path, monkeypatch):
+    """В списке видно, какая картинка без позиции, — наравне с подписями меток."""
+    review, editor, session, flow = open_review_after_folder_load(tmp_path, monkeypatch)
+    assert "не подключён" in editor.file_list.item(row_of(editor, "far_09_ready.png")).text()
+    assert "не подключён" in editor.file_list.item(row_of(editor, "goose_01_ready_2.png")).text()
+    assert "Не проверено" in editor.file_list.item(row_of(editor, "cat_02_ready.png")).text()
+    editor.deleteLater()
+
+
+def test_a_connected_picture_hides_the_not_connected_notice(tmp_path, monkeypatch):
+    """Объяснение показано только у файла без позиции; подключённая картинка метится как раньше."""
+    review, editor, session, flow = open_review_after_folder_load(tmp_path, monkeypatch)
+    editor.file_list.setCurrentRow(row_of(editor, "gift_ready.png"))
+    assert editor._canvas_notice.isVisibleTo(editor)
+    editor.file_list.setCurrentRow(row_of(editor, "goose_01_ready.png"))
+    assert not editor._canvas_notice.isVisibleTo(editor)
+    strip = review.strip
+    assert strip.mark_buttons["ok"].isEnabled()
+    strip.mark_buttons["ok"].click()
+    assert session.items[0].review_mark == "ok" and session.items[0].review_checked is True
+    editor.deleteLater()
+
+
+def test_marks_of_an_unconnected_file_cannot_leak_into_the_run(tmp_path, monkeypatch):
+    """Негативный контроль: метки без позиции не появляются ни у одной записи запуска (SET-0)."""
+    review, editor, session, flow = open_review_after_folder_load(tmp_path, monkeypatch)
+    before = [(item.review_mark, item.review_checked, item.output_path) for item in session.items]
+    for name in ("far_09_ready.png", "gift_ready.png", "goose_01_ready_2.png"):
+        editor.file_list.setCurrentRow(row_of(editor, name))
+        for mark in ("ok", "bad_generation", "bad_cutout", "deleted"):
+            review.strip.mark_buttons[mark].click()  # кнопки мертвы: клик ничего не меняет
+        review._set_mark("ok")  # и сам обработчик метку не ставит
+    after = [(item.review_mark, item.review_checked, item.output_path) for item in session.items]
+    assert after == before
+    confirmed = {Path(path).name for path in flow.run_queue.page._export_paths()}
+    assert confirmed == {"goose_01_ready.png"}
+    editor.deleteLater()
+
+
+def test_the_not_connected_notice_does_not_leak_onto_a_connected_picture(tmp_path, monkeypatch):
+    """Даже во время пересоздания соседней картинки объяснение не висит над подключённой."""
+    review, editor, session, flow = open_review_after_folder_load(tmp_path, monkeypatch)
+    editor.file_list.setCurrentRow(row_of(editor, "gift_ready.png"))
+    assert editor._canvas_notice.isVisibleTo(editor)
+    review._job = object()  # идёт пересоздание: полоса выключена, список жив
+    editor.file_list.setCurrentRow(row_of(editor, "cat_02_ready.png"))
+    assert not editor._canvas_notice.isVisibleTo(editor)
+    editor.deleteLater()
+
+
 def test_try_cutout_starts_free_redo_from_raw_source(tmp_path):
     review, editor, session, flow = open_review(tmp_path)
     session.items[0].source_path = str(png(session.transient_dir / "rough_object0.png"))
