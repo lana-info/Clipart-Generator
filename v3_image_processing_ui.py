@@ -860,8 +860,10 @@ class ProcessingPipelineEditor(QScrollArea):
             "fal_upscale_after_scale": (
                 operations.upscale_after
                 and operations.upscale_after_provider == "fal"
-                and operations.fal_upscale_after_model
-                == FAL_BRIA_INCREASE_RESOLUTION_MODEL_ID
+                and operations.fal_upscale_after_model in {
+                    FAL_TOPAZ_PRECISION_MODEL_ID,
+                    FAL_BRIA_INCREASE_RESOLUTION_MODEL_ID,
+                }
             ),
             "upscale_factor": (
                 operations.upscale_before
