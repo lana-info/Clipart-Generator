@@ -18,6 +18,7 @@ LEGACY_LAYER_MODULES = {
         "studio_alpha_qc",
         "studio_bundle_planner",
         "studio_clipart_builder_ui",
+        "studio_clipart_drop",
         "studio_clipart_objects",
         "studio_clipart_planner",
         "studio_clipart_recipe",
@@ -80,6 +81,12 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('clipart_prompt_schema', 'v3_project_state'),
     ('pinterest_pin_composer', 'main'),
     ('studio_clipart_builder_ui', 'v3_project_state'),
+    # Dropped PNGs from the file manager are named like the position's own output;
+    # the shared filename budget (Windows UTF-8/UTF-16 limits) lives in output_naming.
+    ('studio_clipart_drop', 'output_naming'),
+    # The drop attaches a file through the same recovery constants (PNG signature,
+    # READY_NUMBER template) the «Вернуть готовые файлы» flow already uses.
+    ('studio_clipart_drop', 'studio_clipart_recovery'),
     ('studio_clipart_objects', 'v3_project_state'),
     ('studio_planning_ui', 'studio_text_pricing'),
     ('studio_planning_ui', 'v3_api_settings'),
