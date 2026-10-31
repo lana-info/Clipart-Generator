@@ -11,7 +11,7 @@ from PyQt6.QtCore import (
     QEvent, QItemSelection, QItemSelectionModel, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, QThread,
     Qt, pyqtSignal,
 )
-from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QImage, QImageReader, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QBrush, QColor, QCursor, QFont, QFontMetrics, QIcon, QImage, QImageReader, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QCheckBox, QDialog, QFileDialog, QFrame,
     QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem,
@@ -390,22 +390,35 @@ class _SetsHeader(QHeaderView):
     sort_clicked = pyqtSignal(int)
 
     GLYPH = 16
+    GAP = 4
+    EDGE = 10  # space between the last glyph and the column border
+    ACCENT = '#24cabb'
 
     def __init__(self, parent=None):
         super().__init__(Qt.Orientation.Horizontal, parent)
         self.setSectionsClickable(True)
         self.setHighlightSections(False)
         self.setSectionsMovable(False)
+        # The glyphs live in a strip of their own at the right edge of every section; the padding makes
+        # «ResizeToContents» reserve it and keeps the centred title away from it (owner 2026-10-31: the glyphs
+        # were lost on narrow columns). Only the right padding is overridden, the rest comes from the theme.
+        self.setStyleSheet(f'QHeaderView::section {{ padding-right: {self.glyph_strip()}px; }}')
         self.setToolTip("✓ — отметить или снять весь столбец; ✎ — переименовать или удалить набор; "
                         "⇅ — сортировка по отметкам")
         self.marked_state = None  # callable(column) -> bool, set by the dialog
+        self.chosen_state = None  # callable(column) -> bool: the column the buttons below act on
+
+    @classmethod
+    def glyph_strip(cls):
+        """Width kept free at the right of a section: three glyphs, gaps, edge and a gap before the title."""
+        return cls.EDGE + 3 * cls.GLYPH + 2 * cls.GAP + 6
 
     def _glyph_rects(self, index):
         right = self.sectionViewportPosition(index) + self.sectionSize(index)
         height = max(self.GLYPH, self.height() - 10)
-        sort_rect = QRect(right - 10 - self.GLYPH, 5, self.GLYPH, height)
-        pencil_rect = QRect(sort_rect.left() - 4 - self.GLYPH, 5, self.GLYPH, height)
-        marks_rect = QRect(pencil_rect.left() - 4 - self.GLYPH, 5, self.GLYPH, height)
+        sort_rect = QRect(right - self.EDGE - self.GLYPH, 5, self.GLYPH, height)
+        pencil_rect = QRect(sort_rect.left() - self.GAP - self.GLYPH, 5, self.GLYPH, height)
+        marks_rect = QRect(pencil_rect.left() - self.GAP - self.GLYPH, 5, self.GLYPH, height)
         return marks_rect, pencil_rect, sort_rect
 
     def _column_marked(self, index):
@@ -416,19 +429,38 @@ class _SetsHeader(QHeaderView):
         except Exception:
             return False
 
+    def _column_chosen(self, index):
+        if not callable(self.chosen_state):
+            return False
+        try:
+            return bool(self.chosen_state(index))
+        except Exception:
+            return False
+
     def paintSection(self, painter, rect, index):
-        super().paintSection(painter, rect, index)
+        # `QHeaderView.paintSection` leaves an empty clip region on the painter: everything drawn after it was
+        # cut away and the glyphs never appeared (owner 2026-10-31). The state is restored around the call.
+        painter.save()
+        try:
+            super().paintSection(painter, rect, index)
+        finally:
+            painter.restore()
         if index <= 0:
             return
+        if self._column_chosen(index):
+            tint = QColor(self.ACCENT)
+            tint.setAlpha(55)
+            painter.fillRect(rect, tint)
+            painter.fillRect(QRect(rect.left(), rect.bottom() - 2, rect.width(), 3), QColor(self.ACCENT))
         marks_rect, pencil_rect, sort_rect = self._glyph_rects(index)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         font = QFont(painter.font())
         font.setPixelSize(14)
         painter.setFont(font)
-        painter.setPen(QColor('#24cabb') if self._column_marked(index) else QColor('#8ea3b8'))
+        painter.setPen(QColor(self.ACCENT) if self._column_marked(index) else QColor('#8ea3b8'))
         painter.drawText(marks_rect, int(Qt.AlignmentFlag.AlignCenter), '✓')
-        painter.setPen(QColor('#24cabb'))
+        painter.setPen(QColor(self.ACCENT))
         painter.drawText(pencil_rect, int(Qt.AlignmentFlag.AlignCenter), '✎')
         painter.drawText(sort_rect, int(Qt.AlignmentFlag.AlignCenter), '⇅')
         painter.restore()
@@ -965,6 +997,7 @@ class SetExportDialog(QDialog):
         header.pencil_clicked.connect(self._column_pencil_menu)
         header.sort_clicked.connect(self._sort_column_by_marks)
         header.marked_state = self._column_all_marked
+        header.chosen_state = self._column_is_chosen
         self.table.setHorizontalHeader(header)
         header.setSectionsClickable(True)
         # A click on the title only remembers the column (owner 2026-10-30: the title must never mark).
@@ -977,6 +1010,27 @@ class SetExportDialog(QDialog):
         self._editing_set_id = self._set_columns[column - 1][0]
         self.rename_set_button.setEnabled(True)
         self.delete_set_button.setEnabled(True)
+        self._apply_column_highlight()
+
+    def _column_is_chosen(self, column):
+        return (self._editing_set_id is not None and 1 <= column <= len(self._set_columns)
+                and self._set_columns[column - 1][0] == self._editing_set_id)
+
+    def _apply_column_highlight(self):
+        """Owner 2026-10-31: the column the buttons act on is tinted in the header and in every row."""
+        tint = QColor(_SetsHeader.ACCENT)
+        tint.setAlpha(40)
+        self.table.blockSignals(True)  # a background change is not a membership change
+        try:
+            for column in range(1, self.table.columnCount()):
+                brush = QBrush(tint) if self._column_is_chosen(column) else QBrush()
+                for row in range(self.table.rowCount()):
+                    item = self.table.item(row, column)
+                    if item is not None:
+                        item.setBackground(brush)
+        finally:
+            self.table.blockSignals(False)
+        self.table.horizontalHeader().viewport().update()
 
     def _build_create_page(self):
         page = QWidget()
@@ -1169,6 +1223,7 @@ class SetExportDialog(QDialog):
                     self.table.setItem(row, column, cell)
         finally:
             self.table.blockSignals(False)
+        self._apply_column_highlight()
 
     def _membership(self):
         from studio_export_membership import validate_export_membership
