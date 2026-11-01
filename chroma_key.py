@@ -2403,9 +2403,15 @@ def finish_rim_cleanup(result: Image.Image, subject_profile: str = "opaque_clipa
     """Production step after remove_chroma_key_automatic: recolour saturated rim specks.
 
     It recolours opaque pixels, which remove_chroma_key_automatic promises never
-    to do, so it is a separate step on top of it.
+    to do, so it is a separate step on top of it. It also replaces the colour
+    hidden under alpha == 0 (despilled key, noise) with one flat subject colour,
+    so no later brush, upscaler or external editor can reveal it as odd patches.
     """
-    return recolour_rim_specks(result) if subject_profile == "opaque_clipart" else result
+    from foreground_colour import with_clean_hidden_rgb
+
+    if subject_profile == "opaque_clipart":
+        result = recolour_rim_specks(result)
+    return with_clean_hidden_rgb(result)
 
 
 def remove_chroma_key_with_rim_cleanup(image: Image.Image, key_color: str, **kwargs) -> Image.Image:
