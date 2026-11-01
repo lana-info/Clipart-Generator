@@ -16,8 +16,9 @@ from PIL import Image
 
 from chroma_key import KEY_COLORS
 
+BODY_PIXELS = 1.5            # an opaque pixel this far from the silhouette is solid body and gives the reference colour
 ZONE_PIXELS = 8.0            # pixels this close to the silhouette are checked
-SIGMA = 6.0                  # reach of the neighbouring-subject reference; widened where it finds nothing
+SIGMA = 2.0                  # reach of the neighbouring-subject reference; widened where it finds nothing
 FAR_REACH = 2.7              # widening factor for long hairs far from the opaque body
 CAST_LO, CAST_HI = 3.0, 14.0     # Lab chroma shift toward the key that starts / fully triggers the correction
 PARTIAL_CAST = 6.0           # a partial-alpha pixel is a mixture: this shift already means full correction
@@ -49,7 +50,7 @@ def suppress_key_tint(image: Image.Image, key_color: str) -> Image.Image:
 
     inside = cv2.distanceTransform((alpha >= 0.5).astype(np.uint8), cv2.DIST_L2, 5)
     zone = (alpha > 0) & ((inside <= ZONE_PIXELS) | (alpha < 0.5))
-    deep = ((alpha >= 1.0) & (inside > ZONE_PIXELS)).astype(np.float32)
+    deep = ((alpha >= 1.0) & (inside > BODY_PIXELS)).astype(np.float32)
     if not zone.any() or not deep.any():
         return image
     fields = np.dstack([lab[..., 0], lab[..., 1], lab[..., 2], lab[..., 1] ** 2, lab[..., 2] ** 2]) * deep[..., None]
@@ -69,7 +70,7 @@ def suppress_key_tint(image: Image.Image, key_color: str) -> Image.Image:
     cast = (lab[..., 1] - ref_a) * direction[0] + (lab[..., 2] - ref_b) * direction[1]
     partial = alpha < PARTIAL_ALPHA
     strength = np.clip((cast - CAST_LO) / (CAST_HI - CAST_LO), 0, 1)
-    strength = np.maximum(strength, np.where(partial, np.clip(cast / PARTIAL_CAST, 0, 1), 0.0))
+    strength = np.where(partial, np.maximum(strength, np.clip(cast / PARTIAL_CAST, 0, 1)), 0.0)
     strength = strength * (1 - np.clip((spread - SPREAD_LO) / (SPREAD_HI - SPREAD_LO), 0, 1))
     strength = np.where(known, strength, 0.0)
     if not strength.any():
