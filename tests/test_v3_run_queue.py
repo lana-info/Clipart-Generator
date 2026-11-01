@@ -2027,7 +2027,8 @@ def test_run_results_quality_fix_maps_output_path_back_to_item(tmp_path):
     page = RunResultsPage(state)
     page.session = type('Session', (), {
         'items': [RunItem(1, 'clipart', status=RunItemStatus.SUCCEEDED,
-                          output_path=str(output), payload={'result_kind': 'clipart'})]
+                          output_path=str(output), payload={'result_kind': 'clipart'})],
+        'running': False,
     })()
     opened = []
     page.transparency_requested.connect(opened.append)

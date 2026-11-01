@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QProgressBar,
     QScrollArea,
     QSizePolicy,
@@ -2496,22 +2497,35 @@ class RunResultsPage(QWidget):
         ))
 
     def _request_quality_fix(self, path):
+        """Open the transparency editor for the picture at ``path``; never leave the owner without an answer."""
+        name = Path(str(path)).name
         if self.session is None:
+            self._explain_no_editor("Нет сохранённого запуска, к которому относится эта картинка. "
+                                    "Откройте проект с запуском или запустите набор заново.")
+            return
+        if self.session.running:
+            self._explain_no_editor("Идёт обработка — редактор прозрачности откроется, когда она закончится.")
             return
         try:
             target = Path(path).resolve()
         except OSError:
+            self._explain_no_editor(f"Файл «{name}» недоступен.")
             return
         for index, item in enumerate(self.session.items):
             if item.status is not RunItemStatus.SUCCEEDED or not item.output_path:
                 continue
-            try:
-                candidate = Path(item.output_path).resolve()
-            except OSError:
-                continue
-            if candidate == target:
-                self.transparency_requested.emit(index)
-                return
+            for raw in (item.output_path, getattr(item, "editor_output_path", "")):
+                try:
+                    if raw and Path(raw).resolve() == target:
+                        self.transparency_requested.emit(index)
+                        return
+                except OSError:
+                    continue
+        self._explain_no_editor(f"Картинки «{name}» нет среди готовых позиций запуска, "
+                                "поэтому редактор прозрачности для неё открыть нельзя.")
+
+    def _explain_no_editor(self, text):
+        QMessageBox.information(self, "Редактор прозрачности", text)
 
     def _export_sets(self):
         if self.results_extension is None:
