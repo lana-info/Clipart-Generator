@@ -35,6 +35,7 @@ OFFICIAL_WORKFLOW_FILES = {
         "studio_style_profiles.py", "studio_palette_library.py",
         "clipart_prompt_generator.py", "clipart_prompt_schema.py",
         "studio_clipart_versions.py", "studio_clipart_review_ui.py", "studio_clipart_recovery.py",
+        "studio_clipart_drop.py",
     ),
     "clipart": ("v3_clipart_flow.py", "clipart_prompt_generator.py", "clipart_prompt_schema.py"),
     "processing": ("v3_processing_flow.py",),

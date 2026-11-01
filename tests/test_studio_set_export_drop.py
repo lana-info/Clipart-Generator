@@ -51,7 +51,8 @@ class FakeDropEvent:
         self.accepted = None
 
     def mimeData(self):
-        return SimpleNamespace(urls=[QUrl.fromLocalFile(str(item)) for item in self._files])
+        urls = [QUrl.fromLocalFile(str(item)) for item in self._files]
+        return SimpleNamespace(urls=lambda: urls)
 
     def position(self):
         return self._point
@@ -217,3 +218,50 @@ def test_flow_version_failure_leaves_no_orphan_copy_in_the_result_folder(app, tm
     auto_flow.AutoClipartFlowController._attach_dropped_to_png_check(stub, [str(source)], None)
     assert _output_files(session) == before
     assert any("не подключ" in notice for notice in notices)
+
+
+def _real_drop(widget, files, point):
+    """Настоящие QMimeData + QDropEvent, отправленные во viewport, как делает Qt при дропе из проводника."""
+    from PyQt6.QtCore import QMimeData, Qt
+    from PyQt6.QtGui import QDragEnterEvent, QDropEvent
+
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(item)) for item in files])
+    actions = Qt.DropAction.CopyAction
+    enter = QDragEnterEvent(point, actions, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+    QApplication.sendEvent(widget, enter)
+    drop = QDropEvent(QPointF(point), actions, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+    QApplication.sendEvent(widget, drop)
+    return enter, drop
+
+
+def test_quality_grid_real_drop_of_several_files_reaches_flow(app, tmp_path):
+    dialog, paths = quality_dialog(tmp_path)
+    dialog.show()
+    first = png(tmp_path / "a.png")
+    second = png(tmp_path / "b.png")
+    seen = []
+    dialog.files_dropped.connect(lambda files, target: seen.append((list(files), target)))
+    viewport = dialog.quality_list.viewport()
+    rect = dialog.quality_list.visualItemRect(dialog.quality_list.item(1))
+    enter, drop = _real_drop(viewport, [first, second], rect.center())
+    assert enter.isAccepted() and drop.isAccepted()
+    assert seen == [([str(first), str(second)], str(paths[1].resolve()))]
+
+
+def test_other_drop_targets_still_take_real_events(app, tmp_path):
+    from PyQt6.QtCore import QPoint
+    from studio_reference_editor import ReferenceEditor
+    editor = ReferenceEditor.__new__(ReferenceEditor)  # only the drop handlers are under test
+    added = []
+    editor.add_reference = added.append
+    editor.status = SimpleNamespace(setText=lambda text: None)
+    first, second = png(tmp_path / "r1.png"), png(tmp_path / "r2.png")
+    from PyQt6.QtCore import QMimeData, Qt
+    from PyQt6.QtGui import QDropEvent
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(first)), QUrl.fromLocalFile(str(second))])
+    drop = QDropEvent(QPointF(QPoint(1, 1)), Qt.DropAction.CopyAction, mime,
+                      Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+    ReferenceEditor.dropEvent(editor, drop)
+    assert added == [str(first), str(second)]
