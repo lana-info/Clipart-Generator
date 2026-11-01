@@ -17,15 +17,17 @@ def _text(role, language):
 ))
 def test_colour_ban_follows_the_chosen_key(key, banned, allowed):
     block = chroma_key_prompt_block(key)
-    assert f"Use no {banned} anywhere in the subject" in block
-    assert "every part stays clearly different from the" in block
+    assert f"Use no saturated {banned} in the subject" in block
+    assert "anywhere" not in block
+    assert f"any {key} part the brief asks for is painted pale and muted" in block
+    assert f"clearly different from the {key} background" in block
     for other in allowed:
-        assert f"Use no {other}" not in block
+        assert f"Use no saturated {other}" not in block
 
 
 def test_colour_ban_comes_after_the_background_rules_and_before_the_opaque_rule():
     block = chroma_key_prompt_block("blue")
-    assert block.index("No white or cream backing") < block.index("Use no blue") < block.index("fully opaque and solid")
+    assert block.index("No white or cream backing") < block.index("Use no saturated blue") < block.index("fully opaque and solid")
 
 
 def test_custom_key_has_no_colour_ban():
