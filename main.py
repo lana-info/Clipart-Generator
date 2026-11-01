@@ -51,7 +51,9 @@ from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImag
 from background_mask import has_usable_alpha
 from alpha_cleanup import DEBRIS_MIN_GAP, DELIVERY_EDGE_GAIN, HARD_EDGE_MAX_WIDTH, clean_alpha, remove_key_residue
 from alpha_upscale import upscale_alpha
-from foreground_colour import RIM_PIXELS as UPSCALE_ALPHA_RIM_PIXELS, extend_foreground_rgb
+from foreground_colour import (
+    RIM_PIXELS as UPSCALE_ALPHA_RIM_PIXELS, extend_foreground_rgb, with_clean_hidden_rgb, with_revealed_rgb_from_subject,
+)
 from chroma_matting import matte_edges
 from edge_tint import suppress_key_tint
 from chroma_key import (
@@ -2732,9 +2734,11 @@ class WorkerThread(QThread):
         if matted is result:
             return result, False
         try:
-            # Haze, weak specks and far debris go, narrow smooth edges are narrowed; detached hair fragments next
-            # to the fur stay, and wide soft bands (fur) are left as they are.
-            cleaned = clean_alpha(matted, island_min_gap=DEBRIS_MIN_GAP)
+            # Haze, weak specks and far debris go, narrow smooth edges are narrowed and hard contours anti-aliased;
+            # detached hair fragments next to the fur stay, and wide soft bands (fur) are left as they are.
+            cleaned = clean_alpha(matted, island_min_gap=DEBRIS_MIN_GAP, antialias=True)
+            # Anti-aliasing opens pixels that sat under alpha zero with key-tinted colour: they take the subject's.
+            cleaned = with_revealed_rgb_from_subject(cleaned, matted.getchannel("A"))
             cleaned.info.update(matted.info)
             matted = cleaned
         except Exception:
@@ -2746,6 +2750,13 @@ class WorkerThread(QThread):
             matted = toned
         except Exception:
             self.progress.emit("  Выравнивание цвета края пропущено.")
+        try:
+            # Matting extends the subject colour under alpha zero for its own solve; the file keeps one flat colour.
+            flat = with_clean_hidden_rgb(matted)
+            flat.info.update(matted.info)
+            matted = flat
+        except Exception:
+            self.progress.emit("  Очистка цвета под прозрачностью пропущена.")
         return matted, True
 
     def _chroma_engine(self):

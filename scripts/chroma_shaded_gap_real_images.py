@@ -67,7 +67,7 @@ def production(source: Image.Image, key_module, matting_module, key_color: str =
         from alpha_cleanup import DEBRIS_MIN_GAP, clean_alpha
         from edge_tint import suppress_key_tint
 
-        matted = suppress_key_tint(clean_alpha(matted, island_min_gap=DEBRIS_MIN_GAP), key_color)
+        matted = suppress_key_tint(clean_alpha(matted, island_min_gap=DEBRIS_MIN_GAP, antialias=True), key_color)
     return engine, matted
 
 

@@ -91,3 +91,28 @@ def with_clean_hidden_rgb(image: Image.Image) -> Image.Image:
         return rgba
     pixels[hidden, :3] = np.asarray(extend_foreground_rgb(rgba))[hidden]
     return Image.fromarray(pixels)
+
+
+def with_revealed_rgb_from_subject(image: Image.Image, previous_alpha) -> Image.Image:
+    """RGBA copy of ``image`` whose pixels that were fully transparent in ``previous_alpha`` take the nearest solid colour.
+
+    Anti-aliasing opens pixels that sat under alpha zero, where the matting left key-tinted colour;
+    only those pixels change, alpha and every other pixel stay as they are.
+    """
+    import cv2
+    import numpy as np
+
+    rgba = image.convert("RGBA")
+    pixels = np.array(rgba)
+    alpha = pixels[:, :, 3]
+    revealed = (np.asarray(previous_alpha) == 0) & (alpha > 0)
+    solid = alpha == 255
+    if not revealed.any() or not solid.any():
+        return rgba
+    _, labels = cv2.distanceTransformWithLabels(
+        (~solid).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL
+    )
+    palette = np.zeros((int(labels.max()) + 1, 3), np.uint8)
+    palette[labels[solid]] = pixels[solid][:, :3]
+    pixels[revealed, :3] = palette[labels][revealed]
+    return Image.fromarray(pixels)

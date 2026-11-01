@@ -47,7 +47,7 @@ def cutout(source: Image.Image) -> tuple[Image.Image, Image.Image]:
     )
     matted = matte_edges(source, engine, "blue")
     if matted is not engine:
-        matted = suppress_key_tint(clean_alpha(matted, island_min_gap=DEBRIS_MIN_GAP), "blue")
+        matted = suppress_key_tint(clean_alpha(matted, island_min_gap=DEBRIS_MIN_GAP, antialias=True), "blue")
     return engine, matted
 
 
