@@ -15,8 +15,8 @@ from PyQt6.QtWidgets import (
 
 from studio_clipart_builder_ui import ClipartBuilderDialog
 from studio_clipart_drop import (
-    PositionPickerDialog, copy_for_position, position_options, same_file_content,
-    suggest_position, validate_dropped_files,
+    DROPPED_MARK, NO_PROMPT_TEXT, FileDropFilter, _dropped_for_path, _is_dropped, copy_for_position,
+    same_file_content, validate_dropped_files,
 )
 from v3_components import ButtonVariant, V3Button
 from studio_clipart_versions import restore_review, review_fields
@@ -51,7 +51,6 @@ def _run_settings_fingerprint(request):
     ).encode('utf-8')).hexdigest()
 
 
-
 def _plural_ru(count, one, few, many):
     count = abs(int(count))
     if count % 100 in range(11, 15):
@@ -60,6 +59,9 @@ def _plural_ru(count, one, few, many):
 
 
 PREVIOUS_RUNS_MAX_BYTES = 1024 * 1024
+# Позиция, добавленная перетаскиванием PNG: без промпта, вне состава набора из настроек.
+def _planned_items(session):
+    return [item for item in session.items if not _is_dropped(item)]
 
 
 def launch_confirmation_html(*, object_count, models, cost, references=(), reference_model="",
@@ -383,6 +385,8 @@ class AutoClipartFlowController(ClipartFlowController):
         check_button.setText("Проверка PNG")
         check_button.setToolTip("Просмотреть готовые PNG перед экспортом и при необходимости открыть проверку прозрачности")
         self.run_queue.page.refresh_from_state()
+        self._results_drop = FileDropFilter(self.run_queue.page,
+                                            lambda paths: self._attach_dropped_to_png_check(paths, None))
         self.export_page = QWidget()
         layout = QVBoxLayout(self.export_page)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -712,6 +716,7 @@ class AutoClipartFlowController(ClipartFlowController):
             panel.regenerate_requested.connect(self._regenerate_from_png_check)
             panel.cutout_requested.connect(self._cutout_from_png_check)
             panel.files_dropped.connect(self._attach_dropped_to_png_check)
+            self._panel_drop = FileDropFilter(panel, lambda paths: self._attach_dropped_to_png_check(paths, None))
         if keep_view is not None:
             panel._select_path = keep_view
             panel._show_quality_review()
@@ -896,6 +901,10 @@ class AutoClipartFlowController(ClipartFlowController):
 
     def _regenerate_from_png_check(self, path):
         """Start the confirmed paid re-creation of one picture; the PNG check stays on screen with a progress line."""
+        session = self.run_queue.session
+        if session is not None and _dropped_for_path(session, path):
+            self._show_drop_notice_on_panel(NO_PROMPT_TEXT)
+            return
         if self._queue_redo("regenerate", path):
             return
         if self.review is not None and self.review.regenerate_path(path) is not None:
@@ -1157,7 +1166,7 @@ class AutoClipartFlowController(ClipartFlowController):
         history = deepcopy(data.automatic.get('previous_runs', []))
         session = self.run_queue.session
         recorded_prompts = (
-            [PromptEntry.from_value(item.payload).to_dict() for item in session.items]
+            [PromptEntry.from_value(item.payload).to_dict() for item in _planned_items(session)]
             if session is not None else [prompt.to_dict() for prompt in data.prompts]
         )
         entry = {'prompts': recorded_prompts, 'run': deepcopy(saved)}
@@ -1216,6 +1225,15 @@ class AutoClipartFlowController(ClipartFlowController):
             item.attempts = 0
         if not reused:
             return
+        for old in previous.items:
+            if _is_dropped(old):  # добавленные перетаскиванием PNG остаются в наборе
+                retained = deepcopy(old)
+                retained.index = len(session.items) + 1
+                if old.status is RunItemStatus.SUCCEEDED and (
+                        not old.output_path or Path(old.output_path).resolve() not in ready):
+                    retained.status = RunItemStatus.FAILED
+                    retained.short_message = 'Сохранённый PNG недоступен. Проверьте файл результата.'
+                session.items.append(retained)
         session._settings_fingerprint = fingerprint
         session.handle_finished()
         self.run_queue.session = session
@@ -1240,6 +1258,7 @@ class AutoClipartFlowController(ClipartFlowController):
              "paid_completed_stages": list(item.paid_history_stages()),
              "stage_statuses": item.saved_stages(), "source_path": item.source_path or "",
              "cutout_path": item.cutout_path or "",
+             **({DROPPED_MARK: True, "name": item.display_name} if _is_dropped(item) else {}),
              **review_fields(item)}
             for item in session.items
         ]
@@ -1324,7 +1343,8 @@ class AutoClipartFlowController(ClipartFlowController):
         session = self.run_queue.session
         if session is None or session.running:
             return {}
-        prompts = [PromptEntry.from_value(item.payload).to_dict() for item in session.items]
+        planned = _planned_items(session)
+        prompts = [PromptEntry.from_value(item.payload).to_dict() for item in planned]
 
         def is_done(item):
             # Owner 2026-10-30: a recorded path is not a picture. A file removed or moved away (working
@@ -1334,7 +1354,7 @@ class AutoClipartFlowController(ClipartFlowController):
                     and Path(item.output_path).is_file())
 
         return recoverable(
-            session.items, prompts, self.shell.state.data.automatic.get("previous_runs", []),
+            planned, prompts, self.shell.state.data.automatic.get("previous_runs", []),
             session.output_dir, is_done=is_done)
 
     def _refresh_recovery(self):
@@ -1382,12 +1402,12 @@ class AutoClipartFlowController(ClipartFlowController):
         page.refresh_from_state()
 
     def _attach_dropped_to_png_check(self, paths, target_path):
-        """PNG из проводника упал на проверку PNG — подключить к позиции (макет 2026-10-30).
+        """PNG из проводника упал на проверку PNG (правило 2026-11-01).
 
-        Тот же механизм, что «Вернуть готовые файлы»: копия под шаблон позиции
-        (`_<NN>_ready`), прежняя картинка — в «Историю версий», метка «Не проверено»,
-        SET-0 не нарушается, новых позиций и платных запросов нет. Отказы — красной
-        плашкой на странице (панель.show_drop_notice), причины — из макета.
+        Бросок добавляет новые позиции в конец набора: «Не проверено», без промпта и платных
+        запросов. Заменить картинку позиции можно только явно: Shift + бросок на неё
+        (страница передаёт её путь в `target_path`); цель относится к первому файлу дропа.
+        Отказы — красной плашкой на странице, причины — из макета.
         """
         session = self.run_queue.session
         if session is None:
@@ -1397,75 +1417,56 @@ class AutoClipartFlowController(ClipartFlowController):
             return
         accepted, reasons = validate_dropped_files(paths)
         notices = list(reasons)
-        sources = accepted
-        attached: list[int] = []
-        from studio_clipart_versions import keep_version
-        from v3_run_queue import RunItemStatus
-        for source in sources:
-            index = None
-            for hint in (target_path, source):
-                if hint:
-                    # suggest_position возвращает 0-based индекс позиции запуска.
-                    index = suggest_position(Path(hint).name, len(session.items))
-                    if index is not None:
-                        break
-            if index is None:
-                picked = None
-                if self.run_queue.page is not None:
-                    picked = PositionPickerDialog.ask(
-                        Path(source).name, position_options(session.items), self.run_queue.page,
-                    )
-                # Диалог возвращает номер позиции (1-based) — переводим в индекс.
-                index = (picked - 1) if picked else None
-            if index is None:
-                notices.append(f"{Path(source).name}: позицию не выбрали — файл не подключён.")
+        added: list[int] = []
+        replaced: list[int] = []
+        for source in accepted:
+            name = Path(source).name
+            twin = next((number for number, item in enumerate(session.items, 1)
+                         if item.output_path and Path(item.output_path).is_file()
+                         and same_file_content(source, Path(item.output_path))), None)
+            if twin is not None:
+                notices.append(f"{name}: уже есть в наборе на позиции {twin}.")
                 continue
-            if not 0 <= index < len(session.items):
-                notices.append(f"{Path(source).name}: позиции {index + 1} в наборе нет.")
+            target = _dropped_target_index(session, target_path)
+            target_path = None  # явная цель — только первому файлу
+            if target is not None:
+                outcome = _replace_with_dropped(session, target, source)
+                if outcome is True:
+                    replaced.append(target + 1)
+                else:
+                    notices.append(outcome)
                 continue
-            item = session.items[index]
-            if item.output_path and Path(item.output_path).is_file() and same_file_content(
-                    source, Path(item.output_path)):
-                notices.append(f"Позиция {index + 1}: уже показывает этот файл.")
-                continue
-            try:
-                copied = copy_for_position(source, session.output_dir, index + 1)
-            except OSError:
-                # Файл держит антивирус/другая программа или нет места — остальные файлы дропа не теряем.
-                notices.append(f"{Path(source).name}: не удалось скопировать в папку результата — файл не подключён.")
-                continue
-            if item.output_path:
-                try:
-                    keep_version(item, session.output_dir)
-                except (OSError, ValueError):
-                    _discard_copy(copied)
-                    notices.append(f"Позиция {index + 1}: прежнюю картинку нельзя сохранить в версии — файл не подключён.")
-                    continue
-            item.status = RunItemStatus.SUCCEEDED
-            item.output_path = str(copied)
-            item.editor_output_path = ""
-            item.attempts = max(1, item.attempts)
-            item.short_message = "PNG подключён перетаскиванием."
-            item.review_mark, item.review_checked = "ok", False
-            attached.append(index + 1)
-        if attached:
+            number = _add_dropped_position(session, source)
+            if number is None:
+                notices.append(f"{name}: не удалось скопировать в папку результата — файл не добавлен.")
+            else:
+                added.append(number)
+        if added or replaced:
             session.changed.emit()
             self._save_run()
             if self.run_queue.page is not None:
                 self.run_queue.page.refresh_from_state()
-        if attached:
-            summary = f"Подключено перетаскиванием: позиции {', '.join(str(number) for number in sorted(attached))}."
-        else:
-            summary = "Подключить не удалось."
-        if notices:
-            summary = f"{summary} " + " ".join(notices)
-        self._show_drop_notice_on_panel(summary)
+        parts = []
+        if added:
+            parts.append(f"Добавлено перетаскиванием: позиции {', '.join(map(str, added))}.")
+        if replaced:
+            parts.append(f"Заменено: позиции {', '.join(map(str, replaced))}.")
+        if not parts:
+            parts.append("Добавить не удалось.")
+        self._show_drop_notice_on_panel(" ".join(parts + notices))
+
+    def refuse_redo_of_dropped(self, session, rows):
+        """Сообщает, что у брошенных картинок промта нет; True, если такие были среди rows."""
+        if not any(_is_dropped(session.items[row]) for row in rows if row < len(session.items)):
+            return False
+        self._show_drop_notice_on_panel(NO_PROMPT_TEXT)
+        return True
 
     def _show_drop_notice_on_panel(self, text):
-        panel = getattr(self, "png_check_panel", None)
-        show = getattr(panel, "show_drop_notice", None)
-        if callable(show):
-            show(text)
+        for owner in (getattr(self, "png_check_panel", None), self.run_queue.page):
+            show = getattr(owner, "show_drop_notice", None)
+            if callable(show):
+                show(text)
 
     def _restore_run(self):
         self._ensure_delivery_operations()
@@ -1477,9 +1478,17 @@ class AutoClipartFlowController(ClipartFlowController):
         # Legacy runs did not record their settings. Rebuilding a request from
         # today's settings cannot prove that an older paid result used them.
         session._settings_fingerprint = self.shell.state.data.automatic.get('run_settings_fingerprint')
-        if len(saved) != len(session.items):
+        planned_rows = [row for row in saved if not row.get(DROPPED_MARK)]
+        if len(planned_rows) != len(session.items):
             raise ValueError("Сохранённые результаты не соответствуют составу набора")
-        for item, row in zip(session.items, saved):
+        from v3_run_queue import RunItem
+        session.items.extend(
+            RunItem(index=number, display_name=row.get("name") or f"Позиция {number}",
+                    payload={"prompt": "", "references": [], DROPPED_MARK: True})
+            for number, row in enumerate((row for row in saved if row.get(DROPPED_MARK)),
+                                         len(session.items) + 1))
+        # Базовые позиции идут первыми, брошенные — в конец (так их и добавляет бросок).
+        for item, row in zip(session.items, planned_rows + [row for row in saved if row.get(DROPPED_MARK)]):
             status = RunItemStatus(row["status"])
             item.status = status if status in {RunItemStatus.SUCCEEDED, RunItemStatus.CANCELLED} else RunItemStatus.FAILED
             item.output_path = row["output_path"] or None
@@ -1506,6 +1515,58 @@ class AutoClipartFlowController(ClipartFlowController):
         self.run_queue.session = session
         self.run_queue.page.set_session(session)
         session.changed.connect(self._save_run)
+
+
+def _dropped_target_index(session, target_path):
+    if not target_path:
+        return None
+    wanted = Path(target_path).resolve(strict=False)
+    for index, item in enumerate(session.items):
+        for path in (item.output_path, item.editor_output_path):
+            if path and Path(path).resolve(strict=False) == wanted:
+                return index
+    return None
+
+
+def _replace_with_dropped(session, index, source):
+    """Явная замена (Shift): прежняя картинка уходит в «Историю версий». True или текст отказа."""
+    from studio_clipart_versions import keep_version
+    from v3_run_queue import RunItemStatus
+    item = session.items[index]
+    name = Path(source).name
+    try:
+        copied = copy_for_position(source, session.output_dir, index + 1)
+    except OSError:
+        # Файл держит антивирус/другая программа или нет места — остальные файлы дропа не теряем.
+        return f"{name}: не удалось скопировать в папку результата — файл не подключён."
+    if item.output_path:
+        try:
+            keep_version(item, session.output_dir)
+        except (OSError, ValueError):
+            _discard_copy(copied)
+            return f"Позиция {index + 1}: прежнюю картинку нельзя сохранить в версии — файл не подключён."
+    item.status = RunItemStatus.SUCCEEDED
+    item.output_path = str(copied)
+    item.editor_output_path = ""
+    item.attempts = max(1, item.attempts)
+    item.short_message = "PNG подключён перетаскиванием."
+    item.review_mark, item.review_checked = "ok", False
+    return True
+
+
+def _add_dropped_position(session, source):
+    """Новая позиция из файла: номер позиции или None, если копия не удалась."""
+    from v3_run_queue import RunItem, RunItemStatus
+    number = len(session.items) + 1
+    try:
+        copied = copy_for_position(source, session.output_dir, number)
+    except OSError:
+        return None
+    session.items.append(RunItem(
+        index=number, display_name=Path(source).stem, status=RunItemStatus.SUCCEEDED,
+        short_message="PNG подключён перетаскиванием.", attempts=1, output_path=str(copied),
+        payload={"prompt": "", "references": [], DROPPED_MARK: True}))
+    return number
 
 
 def _discard_copy(path):

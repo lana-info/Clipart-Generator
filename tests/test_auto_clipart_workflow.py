@@ -135,6 +135,28 @@ def test_old_automatic_run_restores_delivery_flags(workspace):
     assert settings["export_300_dpi"] is True
 
 
+def test_dropped_position_survives_save_and_restore_and_stays_out_of_the_plan(workspace, tmp_path):
+    _view, controller, _gate, _worker = workspace
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    controller.run_queue.session = session
+    session.running = False
+    planned = len(session.items)
+    source = tmp_path / "from_explorer.png"
+    Image.new("RGBA", (24, 24), (200, 40, 40, 255)).save(source)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    controller._attach_dropped_to_png_check([str(source)], None)
+    assert len(session.items) == planned + 1
+    assert controller.shell.state.data.automatic["run"][-1]["dropped"] is True
+    controller._restore_run()
+    restored = controller.run_queue.session.items
+    assert len(restored) == planned + 1
+    assert restored[-1].display_name == "from_explorer"
+    assert Path(restored[-1].output_path).is_file()
+    assert restored[-1].review_mark == "ok" and not restored[-1].review_checked
+    assert not controller._recoverable_outputs().get(planned)
+
+
 def test_restored_run_and_its_regeneration_keep_chroma_cutout_and_upscale(workspace):
     _view, controller, _gate, _worker = workspace
     prepare_launch(controller)

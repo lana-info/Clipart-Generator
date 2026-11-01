@@ -817,9 +817,12 @@ class ImageReview:
         page = self.flow.run_queue.page
         if session is None or session.running or self.flow.is_busy():
             return
-        rows = session.regenerable_indices(page.queue.selected_rows())
+        chosen = page.queue.selected_rows()
+        rows = session.regenerable_indices(chosen)
+        refused = self.flow.refuse_redo_of_dropped(session, chosen)
         if not rows:
-            QMessageBox.information(page, "Перегенерировать", "Выделите готовые картинки в списке.")
+            if not refused:
+                QMessageBox.information(page, "Перегенерировать", "Выделите готовые картинки в списке.")
             return
         self._pending_cutout = []
         started = self.flow.run_queue.regenerate_selected(rows)

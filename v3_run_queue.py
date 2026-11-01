@@ -2093,6 +2093,10 @@ class RunResultsPage(QWidget):
         self.progress_bar.setRange(0, 100)
         self.current_label = QLabel("Текущий файл: —")
         self.current_label.setWordWrap(True)
+        self.drop_notice = QLabel("")  # отказы/итог перетаскивания PNG из папки (модуль Авто-клипарта)
+        self.drop_notice.setWordWrap(True)
+        self.drop_notice.setStyleSheet("color: #e88b8b;")
+        self.drop_notice.hide()
         self.queue = RunQueue(tokens=tokens)
         self.queue.setAccessibleName("Очередь выполнения")
         self.queue.setMinimumHeight(360)
@@ -2269,6 +2273,7 @@ class RunResultsPage(QWidget):
             self.summary_label,
             self.progress_bar,
             self.current_label,
+            self.drop_notice,
             self.queue,
             self.transparency_preview,
             self.processing_label,
@@ -2670,6 +2675,10 @@ class RunResultsPage(QWidget):
             visible or any(button.isVisibleTo(self.workflow_actions) for button in (
                 self.stop_button, self.immediate_stop_button, self.retry_button,
                 self.process_more_button)))
+
+    def show_drop_notice(self, text: str) -> None:
+        self.drop_notice.setText(text)
+        self.drop_notice.setVisible(bool(text))
 
     def _selection_changed(self, row: int) -> None:
         self._update_regenerate_button()
