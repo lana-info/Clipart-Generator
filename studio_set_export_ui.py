@@ -855,6 +855,7 @@ class SetExportDialog(QDialog):
         # существующие кнопки применяются ко всей выделенной группе (новых кнопок нет).
         self.quality_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.quality_list.currentRowChanged.connect(self._quality_selected)
+        self.quality_list.itemDoubleClicked.connect(self._quality_double_clicked)
         body.addWidget(self.quality_list, 2)
         detail = QFrame()
         detail.setProperty('v3Card', True)
@@ -1726,9 +1727,16 @@ class SetExportDialog(QDialog):
         self.status.clear()
 
     def _request_quality_fix(self):
+        self._request_quality_fix_for(self.quality_list.currentItem())
+
+    def _quality_double_clicked(self, item):
+        """Double click on a picture of the PNG check opens its transparency editor (owner 2026-11-01)."""
+        self._request_quality_fix_for(item)
+
+    def _request_quality_fix_for(self, item):
         if self.worker is not None:
+            self.show_drop_notice('Идёт обработка — редактор прозрачности откроется, когда она закончится.')
             return
-        item = self.quality_list.currentItem()
         if item is None:
             return
         path = str(item.data(Qt.ItemDataRole.UserRole) or '')
@@ -2041,6 +2049,7 @@ class SetExportDialog(QDialog):
         itself, so a sorted table cannot send the wrong one.
         """
         if self.worker is not None:
+            self.status.setText('Идёт обработка — редактор прозрачности откроется, когда она закончится.')
             return
         holder = self.table.item(row, 0)
         key = str(holder.data(Qt.ItemDataRole.UserRole) if holder is not None else '')
