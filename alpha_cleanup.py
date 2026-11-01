@@ -46,6 +46,7 @@ ANTIALIAS_PROFILE = 1.3    # px; width of the contour's alpha ramp: soft to the 
 ANTIALIAS_MAX_SHIFT = 1.0  # px; how far the contour may move
 ANTIALIAS_THIN_RADIUS = 2  # px; subject this thin (cords, threads) keeps its alpha exactly
 ANTIALIAS_THIN_MIN_PIXELS = 4  # a piece of subject this small is a corner of the staircase, not a thread
+ANTIALIAS_SLIT_CAP = 0.2   # a gap as narrow as a thread may be softened up to this alpha, never filled
 ANTIALIAS_HARD_WIDTH = 4.5 # px of transition up to which an edge is rebuilt in full; RULER_SOFT_WIDTH ends it
 
 
@@ -141,10 +142,10 @@ def _antialias_hard_contours(a: np.ndarray) -> np.ndarray:
     distance = np.where(core, _distance_to_zero(core) - 0.5, 0.5 - _distance_to_zero(~core)).astype(np.float32)
     partial = (a > 0.02) & (a < 0.98)
     # A background gap as narrow as the thin structures stays as it is: the walls around it must not move it,
-    # nor may its own faint pixels move the walls.
+    # nor may its own faint pixels move the walls, and the smoothing may only soften its alpha, not fill it (fringe slits).
     closing = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * ANTIALIAS_THIN_RADIUS + 1,) * 2)
-    narrow = cv2.morphologyEx(core.astype(np.uint8), cv2.MORPH_CLOSE, closing) > core
-    narrow = cv2.dilate(narrow.astype(np.uint8), closing) > 0
+    slit = cv2.morphologyEx(core.astype(np.uint8), cv2.MORPH_CLOSE, closing) > core
+    narrow = cv2.dilate(slit.astype(np.uint8), closing) > 0
     source = partial & ~narrow
     if source.any():
         _, nearest = cv2.distanceTransformWithLabels(
@@ -171,7 +172,8 @@ def _antialias_hard_contours(a: np.ndarray) -> np.ndarray:
                     -ANTIALIAS_MAX_SHIFT, ANTIALIAS_MAX_SHIFT)
     rebuilt = np.clip(0.5 + (distance + shift) / ANTIALIAS_PROFILE, 0.0, 1.0)
     near = np.abs(distance) <= ANTIALIAS_PROFILE
-    return np.where(near, a + (rebuilt - a) * protect * hard, a)
+    smoothed = np.where(near, a + (rebuilt - a) * protect * hard, a)
+    return np.where(slit, np.minimum(smoothed, np.maximum(a, ANTIALIAS_SLIT_CAP)), smoothed)
 
 
 def _drop_weak_specks(a: np.ndarray) -> np.ndarray:
