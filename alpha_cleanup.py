@@ -34,6 +34,7 @@ EDGE_GAIN = 2.0            # steepening around 50 % alpha
 DELIVERY_EDGE_GAIN = 1.0   # the pipeline keeps the soft transition of fur and edges (owner 2026-10-28)
 OPAQUE_CEILING = 0.985
 DEBRIS_MIN_GAP = 8.0       # px; a small solid island this far from the subject is debris, closer it is a hair fragment
+DEBRIS_GAP_PER_SIDE = 4.0  # px of gap per px of island side: a ball on a broken antenna stalk is no debris
 RULER_SIGMA = 3.0          # px; the reach over which the straightening averages the border
 RULER_PROFILE = 1.0        # px; width of the transition around 50 % alpha that the alpha keeps
 RULER_MAX_SHIFT = 1.0      # px; how far the straightening may move the border
@@ -198,7 +199,7 @@ def clean_alpha_array(alpha: np.ndarray, *, haze_floor: float = HAZE_FLOOR,
     """Return a cleaned copy of ``alpha`` (float32 in 0..1).
 
     Step 1b drops small solid islands that lie more than ``island_min_gap`` px from the rest of the subject:
-    0 drops every small island, ``DEBRIS_MIN_GAP`` keeps detached hair fragments next to matted fur,
+    0 drops every small island, ``DEBRIS_MIN_GAP`` keeps detached hair fragments next to matted fur (and, further out, larger islands),
     ``None`` skips the step. ``straighten`` turns step 3 off for a cut that must keep the matte it
     was given exactly as it is (the delivery cut of an existing alpha). ``antialias`` replaces step 3
     with a rebuild of the whole hard contour, for a cut matted from the key frame.
@@ -228,7 +229,9 @@ def clean_alpha_array(alpha: np.ndarray, *, haze_floor: float = HAZE_FLOOR,
             gaps = np.full(count, np.inf, np.float32)
             island_pixels = np.isin(labels, small)
             np.minimum.at(gaps, labels[island_pixels], gap[island_pixels])
-            small = small[gaps[small] > island_min_gap]
+            # A larger island may lie further away: the tip of a thin antenna or hair whose stalk the matting broke.
+            reach = np.maximum(island_min_gap, DEBRIS_GAP_PER_SIDE * np.sqrt(stats[:, cv2.CC_STAT_AREA]))
+            small = small[gaps[small] > reach[small]]
         if small.size:
             removed = np.isin(labels, small)
             ring = cv2.dilate(removed.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
