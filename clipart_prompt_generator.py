@@ -19,6 +19,20 @@ from v3_prompt_generator import (
 )
 
 
+# Shared by ordinary and automatic Clipart; append after choosing the key so
+# color words in the rules cannot influence subject-palette detection.
+_CUTOUT_PROMPT_RULES = (
+    "Flat clean background: no gradients, shadows or textures. The background color "
+    "must be absent from the subject; never yellow or green beside yellow or green details. "
+    "Wide empty margins; separate elements must not touch each other or frame edges. "
+    "Crisp contours: no blur, glow, halo or soft shadows. "
+    "Omit nonessential threads and hairs; essential ones must be thick, bright and continuous. "
+    "No tiny detached fragments, confetti, splinters or splashes. "
+    "Fully opaque subject; no background color inside its solid parts. "
+    "Prefer fewer clean elements over dense ornament."
+)
+
+
 def _prompt_language(data: PromptGeneratorData) -> str:
     values = (
         data.theme,
@@ -107,7 +121,7 @@ def generate_clipart_prompt_series(
                     )
                 except ValueError as error:
                     raise PromptGeneratorError(str(error)) from error
-                prompt += "\n" + key_block
+                prompt += "\n" + key_block + "\n" + _CUTOUT_PROMPT_RULES
             prompts.append(PromptEntry(prompt=prompt, chroma_key_color=chroma_key_color))
     return normalize_prompt_entries(
         prompts,

@@ -32,6 +32,42 @@ def test_chroma_block_keeps_gaps_as_bright_as_the_background():
         assert "ambient-occlusion" in block
 
 
+@pytest.mark.parametrize("automatic", (False, True))
+@pytest.mark.parametrize("subject", ("Yellow flowers with green leaves", "Жёлтые цветы с зелёными листьями"))
+@pytest.mark.parametrize("enabled", (False, True))
+def test_final_prompt_contains_cutout_rules_once(automatic, subject, enabled):
+    from clipart_prompt_generator import generate_clipart_prompt_series
+    from studio_clipart_objects import compile_objects, fill_recipe
+    from studio_clipart_recipe import ClipartRecipe
+    from v3_project_state import PromptGeneratorData
+
+    data = PromptGeneratorData(subjects=[subject], chroma_key_enabled=enabled)
+    if automatic:
+        recipe = ClipartRecipe(theme=subject)
+        recipe.select(1)
+        recipe.objects = fill_recipe([], recipe.counts)
+        recipe.objects[0]['name'] = subject
+        entry = compile_objects(recipe, data)[0]
+    else:
+        entry = generate_clipart_prompt_series(data)[0]
+
+    clauses = (
+        "Flat clean background: no gradients, shadows or textures",
+        "background color must be absent from the subject",
+        "never yellow or green beside yellow or green details",
+        "Wide empty margins; separate elements must not touch each other or frame edges",
+        "Crisp contours: no blur, glow, halo or soft shadows",
+        "Omit nonessential threads and hairs; essential ones must be thick, bright and continuous",
+        "No tiny detached fragments, confetti, splinters or splashes",
+        "Fully opaque subject; no background color inside its solid parts",
+        "Prefer fewer clean elements over dense ornament",
+    )
+    for clause in clauses:
+        assert entry.prompt.count(clause) == int(enabled)
+    assert subject in entry.prompt
+    assert entry.chroma_key_color == ("blue" if enabled else "")
+
+
 def _flatten(value):
     if isinstance(value, str):
         return [value]
