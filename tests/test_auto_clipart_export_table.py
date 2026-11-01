@@ -46,7 +46,6 @@ def test_legacy_failed_jobs_export_ready_png_without_erasing_saved_work(workspac
     assert not view.shell.next_button.isEnabled()
     assert not panel.export_button.isVisible()  # One export action in the footer.
     panel.table.item(0, 1).setCheckState(Qt.CheckState.Unchecked)
-    panel.ready_only.setChecked(True)
     wait_png_check(panel)
     assert view.shell.next_button.isEnabled()
     before = path.read_bytes()
@@ -81,8 +80,8 @@ def test_legacy_failed_jobs_export_ready_png_without_erasing_saved_work(workspac
     assert len(reopened.run_queue.session.items) == 20
     assert sum(item.status is RunItemStatus.FAILED for item in reopened.run_queue.session.items) == 19
     assert reopened.export_panel.table.item(0, 1).checkState() == Qt.CheckState.Unchecked
-    assert not reopened.export_panel.ready_only.isChecked()
-    assert not view.shell.next_button.isEnabled()
+    wait_png_check(reopened.export_panel)
+    assert view.shell.next_button.isEnabled()  # no «только готовые» tick to repeat after reopening
     factory.assert_not_called()
 
 

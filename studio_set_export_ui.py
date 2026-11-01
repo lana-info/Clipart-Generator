@@ -632,10 +632,6 @@ class SetExportDialog(QDialog):
             action = QWidgetAction(options_menu)
             action.setDefaultWidget(checkbox)
             options_menu.addAction(action)
-        # «Только готовые PNG» lives in the options menu (owner 2026-10-28).
-        ready_action = QWidgetAction(options_menu)
-        ready_action.setDefaultWidget(self.ready_only)
-        options_menu.addAction(ready_action)
         self.export_options_button = QPushButton('Параметры экспорта')
         self.export_options_button.setProperty('v3Button', True)
         self.export_options_button.setProperty('variant', 'ghost')
@@ -767,9 +763,6 @@ class SetExportDialog(QDialog):
         self.review_now_button.clicked.connect(self._review_incomplete)
         issue_layout.addWidget(self.review_now_button)
         layout.addWidget(self.issue_panel)
-        self.ready_only = QCheckBox('Экспортировать только готовые PNG')
-        self.ready_only.toggled.connect(lambda: self._refresh_summary(rebuild=False))
-        layout.addWidget(self.ready_only)
         self.quality_panel = QFrame()
         self.quality_panel.setProperty('v3Card', True)
         quality_layout = QHBoxLayout(self.quality_panel)
@@ -802,8 +795,8 @@ class SetExportDialog(QDialog):
             self._show_manual_editor()
 
     def _blocking_review_issues(self):
-        return [issue for issue in self.review_issues
-                if issue.get('kind') != 'missing' or not self.ready_only.isChecked()]
+        # Owner 2026-11-01: only pictures marked «Ок» are listed, so unfinished ones never block the export.
+        return [issue for issue in self.review_issues if issue.get('kind') != 'missing']
 
     def _build_quality_page(self):
         page = QWidget()
@@ -1887,7 +1880,6 @@ class SetExportDialog(QDialog):
         # Owner 2026-10-28: one message only (how many pictures are not marked «Ок»); no «Готово/Не завершено» panel
         # and no «только готовые» tick on this screen.
         self.issue_panel.setVisible(False)
-        self.ready_only.setEnabled(missing_count > 0 and self.worker is None)
         if issue_count:
             parts = [f'Готово: {count} PNG']
             if missing_count:
@@ -2134,7 +2126,6 @@ class SetExportDialog(QDialog):
             project_name=self.project_name, translator=translator,
         )
         self.table.setEnabled(False)
-        self.ready_only.setEnabled(False)
         self.delete_intermediates.setEnabled(False)
         self.delete_originals.setEnabled(False)
         self.worker.finished.connect(self._finished)

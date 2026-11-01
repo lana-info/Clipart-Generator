@@ -467,8 +467,8 @@ def test_summary_warning_explains_action_and_blocks_export(images):
     assert 'Не завершено: 1' in dialog.issue_text.text()
     assert 'Нужно выбрать вариант: 1' in dialog.issue_text.text()
     assert dialog.review_now_button.text() == 'Разобрать неготовые'
-    assert not dialog.ready_only.isChecked()
-    assert not dialog.export_button.isEnabled()
+    assert not hasattr(dialog, 'ready_only')
+    assert not dialog.export_button.isEnabled()  # the open «выбрать вариант» still blocks
     dialog.review_now_button.click()
     assert dialog.stack.currentWidget() is dialog.manual_page
     dialog.close()
@@ -523,7 +523,6 @@ def test_reselecting_second_variant_restores_ambiguity_and_blocks_partial_export
     dialog = SetExportDialog(images[:2],
         membership=_membership_for_sets(images[:2], ['Full Bundle']),
         review_issues=[ambiguous, missing])
-    dialog.ready_only.setChecked(True)
     assert not dialog.export_button.isEnabled()
     dialog.table.item(1, 1).setCheckState(Qt.CheckState.Unchecked)
     assert dialog.review_issues == [missing]
@@ -544,7 +543,7 @@ def test_reselecting_second_variant_restores_ambiguity_and_blocks_partial_export
     dialog.reject()
 
 
-def test_saved_manual_choice_resolves_ambiguous_issue_but_missing_stays_blocking(images):
+def test_saved_manual_choice_resolves_ambiguous_issue_but_missing_no_longer_blocks(images):
     membership = _membership_for_sets(images, ['Мини', 'Полный'])
     ambiguous_paths = [str(images[0].resolve()), str(images[1].resolve())]
     issues = [
@@ -558,7 +557,7 @@ def test_saved_manual_choice_resolves_ambiguous_issue_but_missing_stays_blocking
         dialog.table.item(1, column).setCheckState(Qt.CheckState.Unchecked)
     dialog._save_membership()
     assert [issue['kind'] for issue in dialog.review_issues] == ['missing']
-    assert not dialog.export_button.isEnabled()
+    assert dialog.export_button.isEnabled()  # unfinished pictures are not listed, so they cannot block
     dialog.close()
 
 
@@ -835,23 +834,20 @@ def test_quality_controls_lock_while_export_worker_is_active(images, tmp_path, m
     dialog.reject()
 
 
-def test_partial_export_needs_explicit_choice_and_preserves_missing_issues(images, tmp_path, monkeypatch):
+def test_partial_export_needs_no_extra_tick_and_preserves_missing_issues(images, tmp_path, monkeypatch):
     issues = [{'kind': 'missing', 'object_id': str(n), 'count': 0, 'paths': []} for n in range(19)]
     dialog = SetExportDialog(images[:1], review_issues=issues)
     assert dialog.table.rowCount() == 1
-    assert not dialog.ready_only.isChecked()
-    assert not dialog.export_button.isEnabled()
+    assert dialog.export_button.isEnabled()  # only «Ок» pictures are listed: nothing to tick
     assert 'Не завершено: 19' in dialog.issue_text.text()
     originals = images[0].read_bytes()
-    dialog.ready_only.setChecked(True)
-    assert dialog.export_button.isEnabled()
     assert dialog.review_issues == issues
     monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: str(tmp_path / 'archives'))
     (tmp_path / 'archives').mkdir()
     dialog._export()
     worker = dialog.worker
     assert worker is not None
-    assert not dialog.table.isEnabled() and not dialog.ready_only.isEnabled()
+    assert not dialog.table.isEnabled()
     loop = QEventLoop()
     worker.finished.connect(loop.quit)
     QTimer.singleShot(5000, loop.quit)
@@ -862,8 +858,7 @@ def test_partial_export_needs_explicit_choice_and_preserves_missing_issues(image
         pngs = [name for name in stream.namelist() if name.endswith('.png')]
         assert len(pngs) == 1 and stream.read(pngs[0]) == originals
     reopened = SetExportDialog(images[:1], review_issues=issues, membership=dialog.saved_membership)
-    assert not reopened.ready_only.isChecked()
-    assert not reopened.export_button.isEnabled()
+    assert reopened.export_button.isEnabled()
     reopened.close()
     dialog.close()
 
@@ -873,14 +868,12 @@ def test_partial_export_does_not_override_ambiguous_or_invalid_png(images):
     missing = {'kind': 'missing', 'object_id': 'missing', 'count': 0, 'paths': []}
     ambiguous = {'kind': 'ambiguous', 'object_id': 'two', 'count': 2, 'paths': [str(p) for p in images[:2]]}
     dialog = SetExportDialog(images, review_issues=[missing, ambiguous])
-    dialog.ready_only.setChecked(True)
     assert not dialog.export_button.isEnabled()
     assert dialog._blocking_review_issues() == [ambiguous]
     dialog.close()
     report = AlphaQcReport(str(images[0].resolve()), 'block',
         (AlphaQcIssue('opaque', 'block', 'PNG непрозрачен.', 'Проверьте фон.'),), width=32, height=32)
     dialog = SetExportDialog(images[:1], review_issues=[missing], quality_reports=[report])
-    dialog.ready_only.setChecked(True)
     assert dialog.export_button.isEnabled()  # the automatic check never blocks the export (owner 2026-10-28)
     dialog.close()
 
