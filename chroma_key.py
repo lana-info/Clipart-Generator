@@ -2439,13 +2439,28 @@ EDGE_SILHOUETTE_STANDARD = (
     "details and repeated motifs, stays individually recognisable and "
     "cleanly drawn, never merged into blotches or mush. The subject holds "
     "one continuous closed silhouette that separates cleanly from the "
-    "flat background. Fur, down and feather tips keep their natural soft, "
-    "fluffy edge: fine individual hairs and wisps, each drawn sharply "
-    "against the flat background, with a gentle feathered outline and "
+    "flat background. Crisp hard edges, everything in sharp focus, with "
     "no jagged saw-tooth steps, no watercolor bleed, no halo, glow or "
     "pale rim reaching into the background, and no specks or dots "
     "detached from the subject. "
 )
+
+# Colours the subject must avoid, named per key: a subject colour close to the key cannot be cut out.
+KEY_AVOID_COLOURS: Final[dict[str, str]] = {
+    "blue": "blue, navy, cyan or teal",
+    "green": "green, lime, mint or olive",
+    "red": "red, crimson, scarlet or hot pink",
+}
+
+
+def _avoid_key_colours_clause(color_name: str | None) -> str:
+    avoided = KEY_AVOID_COLOURS.get(color_name or "")
+    if avoided is None:
+        return ""
+    return (
+        f"Use no {avoided} anywhere in the subject: every part stays "
+        f"clearly different from the {color_name} background. "
+    )
 
 
 def chroma_key_prompt_block(
@@ -2474,8 +2489,9 @@ def chroma_key_prompt_block(
         "darker or black shade. No reflection, tint, shadow, contact "
         "shadow, ambient-occlusion shading, glow, haze or "
         "color spill on the subject. No white or cream backing, halo, sticker "
-        "outline or white patches behind or between flowers, leaves and twigs. "
-        "The subject is fully opaque and solid: "
+        "outline or white patches behind or between parts of the subject. "
+        + _avoid_key_colours_clause(color_name)
+        + "The subject is fully opaque and solid: "
         "no transparency, translucency, semi-transparent materials, glass, "
         "tulle, lace mesh, veil, smoke, mist, haze or see-through parts. "
     )

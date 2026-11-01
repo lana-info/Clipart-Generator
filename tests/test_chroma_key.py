@@ -194,7 +194,7 @@ class ChromaKeyTests(unittest.TestCase):
         self.assertIn("individually recognisable", standard)
         self.assertIn("never merged into blotches or mush", standard)
         self.assertIn("one continuous closed silhouette", standard)
-        self.assertIn("fluffy edge", standard)
+        self.assertIn("Crisp hard edges, everything in sharp focus", standard)
         self.assertNotIn("firm contour", standard)
         self.assertNotIn("no soft transition band", standard)
         self.assertIn("pale rim reaching into the background", standard)
