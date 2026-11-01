@@ -385,7 +385,6 @@ class _SetsHeader(QHeaderView):
     every picture at once. Each action has its own small glyph on the right, and the tick shows the state.
     """
 
-    marks_clicked = pyqtSignal(int)
     pencil_clicked = pyqtSignal(int)
     sort_clicked = pyqtSignal(int)
 
@@ -403,7 +402,7 @@ class _SetsHeader(QHeaderView):
         # «ResizeToContents» reserve it and keeps the centred title away from it (owner 2026-10-31: the glyphs
         # were lost on narrow columns). Only the right padding is overridden, the rest comes from the theme.
         self.setStyleSheet(f'QHeaderView::section {{ padding-right: {self.glyph_strip()}px; }}')
-        self.setToolTip("✓ — отметить или снять весь столбец; ✎ — переименовать или удалить набор; "
+        self.setToolTip("✓ — столбец отмечен целиком; ✎ — отметить или снять весь столбец, переименовать или удалить набор; "
                         "⇅ — сортировка по отметкам")
         self.marked_state = None  # callable(column) -> bool, set by the dialog
         self.chosen_state = None  # callable(column) -> bool: the column the buttons below act on
@@ -470,9 +469,6 @@ class _SetsHeader(QHeaderView):
         index = self.logicalIndexAt(point)
         if index > 0:
             marks_rect, pencil_rect, sort_rect = self._glyph_rects(index)
-            if marks_rect.contains(point):
-                self.marks_clicked.emit(index)
-                return
             if pencil_rect.contains(point):
                 self.pencil_clicked.emit(index)
                 return
@@ -992,7 +988,6 @@ class SetExportDialog(QDialog):
         layout.addWidget(self.table, 1)
 
         header = _SetsHeader(self.table)
-        header.marks_clicked.connect(self._marks_glyph_clicked)
         header.pencil_clicked.connect(self._column_pencil_menu)
         header.sort_clicked.connect(self._sort_column_by_marks)
         header.marked_state = self._column_all_marked
@@ -1117,22 +1112,20 @@ class SetExportDialog(QDialog):
         if self._editing_set_id is None:
             return
         menu = QMenu(self.table)
+        mark_all = menu.addAction('Отметить все')
+        clear_all = menu.addAction('Снять отметку со всех')
+        menu.addSeparator()
         rename = menu.addAction('Переименовать набор…')
         delete = menu.addAction('Удалить набор…')
         chosen = menu.exec(QCursor.pos())
-        if chosen is rename:
+        if chosen is mark_all:
+            self._mark_column(column, True)
+        elif chosen is clear_all:
+            self._mark_column(column, False)
+        elif chosen is rename:
             self._rename_current_set()
         elif chosen is delete:
             self._delete_current_set()
-
-    def _marks_glyph_clicked(self, column):
-        """«✓» in a column header marks or clears the whole column.
-
-        Owner 2026-10-28 asked for mass marking; owner 2026-10-30 moved it off the title onto this glyph,
-        so an accidental click on the name can no longer tick every picture.
-        """
-        self._choose_set_column(column)
-        self._toggle_column_marks(column)
 
     def _column_all_marked(self, column):
         """Whether every selectable cell of this column is ticked: the state the ✓ glyph shows."""
@@ -1142,27 +1135,35 @@ class SetExportDialog(QDialog):
                   for row in range(self.table.rowCount()) if self.table.item(row, column) is not None]
         return bool(states) and all(state == Qt.CheckState.Checked for state in states)
 
-    def _toggle_column_marks(self, column):
+    def _mark_column(self, column, checked):
+        """Tick or clear every selectable cell of one column (menu of the ✎ glyph; the ✓ glyph only shows the state).
+
+        Owner 2026-11-01: a click on a header glyph must never change many marks at once; clearing the whole
+        column is confirmed because the table has no undo.
+        """
         if self.worker is not None or not 1 <= column <= len(self._set_columns):
             return
-        states = [self.table.item(row, column).checkState() for row in range(self.table.rowCount())]
-        if not states:
-            return
-        target = (Qt.CheckState.Unchecked if all(state == Qt.CheckState.Checked for state in states)
-                  else Qt.CheckState.Checked)
+        cells = [self.table.item(row, column) for row in range(self.table.rowCount())]
+        cells = [cell for cell in cells if cell is not None and cell.flags() & Qt.ItemFlag.ItemIsUserCheckable]
+        title = dict(self._set_columns).get(self._set_columns[column - 1][0], '')
+        if not checked and any(cell.checkState() == Qt.CheckState.Checked for cell in cells):
+            answer = QMessageBox.question(
+                self, 'Снять отметку со всех', f'Снять отметку со всех изображений в «{title}»?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        target = Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
         self.table.blockSignals(True)
         try:
-            for row in range(self.table.rowCount()):
-                cell = self.table.item(row, column)
-                if cell.flags() & Qt.ItemFlag.ItemIsUserCheckable:
-                    cell.setCheckState(target)
+            for cell in cells:
+                cell.setCheckState(target)
         finally:
             self.table.blockSignals(False)
         self._manual_changed()
         self.table.horizontalHeader().viewport().update()
-        title = dict(self._set_columns).get(self._set_columns[column - 1][0], '')
-        self.status.setText(f'Столбец «{title}»: '
-                            + ('все отметки сняты.' if target == Qt.CheckState.Unchecked else 'отмечены все изображения.'))
+        self.status.setText(f'Столбец «{title}»: ' + ('отмечены все изображения.' if checked else 'все отметки сняты.'))
 
     def _rebuild_manual_table(self):
         self.table.horizontalHeader().viewport().update()  # the ✓ glyph follows the column state
