@@ -54,3 +54,17 @@ def test_dark_slate_window_line_is_paint_not_a_navy_pocket():
     out = np.asarray(remove_chroma_key_automatic(padded, "blue", subject_profile="opaque_clipart")).astype(int)
     inside = out[MARGIN + 3 : MARGIN + crop.height - 3, MARGIN + 3 : MARGIN + crop.width - 3, 3]
     assert (inside < 250).sum() <= 5, f"{(inside < 250).sum()} subject px cut out of the window"
+
+
+def test_slate_fold_beside_a_star_is_paint_not_a_navy_pocket():
+    """A mid-dark slate-blue drape fold is subject paint, unlike navy-black shade.
+
+    Its blue channel sits near 80 of 255 and its saturation just clears the
+    slate-line gate; a real navy pocket is nearly black. The crop is real (rough_23).
+    """
+    crop = Image.open(FIXTURES / "slate_fold_by_star_20261101.png").convert("RGB")
+    padded = Image.new("RGB", (crop.width + 2 * MARGIN, crop.height + 2 * MARGIN), KEY)
+    padded.paste(crop, (MARGIN, MARGIN))
+    out = np.asarray(remove_chroma_key_automatic(padded, "blue", subject_profile="opaque_clipart")).astype(int)
+    inside = out[MARGIN + 3 : MARGIN + crop.height - 3, MARGIN + 3 : MARGIN + crop.width - 3, 3]
+    assert (inside < 250).sum() <= 3, f"{(inside < 250).sum()} subject px cut out of the fold"
