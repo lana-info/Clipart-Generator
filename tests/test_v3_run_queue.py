@@ -2415,9 +2415,9 @@ def test_retry_restores_the_chroma_block_for_edited_prompts(tmp_path):
 def test_edited_prompt_without_the_chroma_block_gets_it_back():
     from v3_project_state import with_chroma_block
     plain = with_chroma_block("A duck.", "blue", "clipart")
-    assert "chroma-key background" in plain and "fluffy edge" in plain
+    assert "chroma-key background" in plain and "Crisp hard edges" in plain
     assert with_chroma_block(plain, "blue", "clipart") == plain  # only once
-    assert "fluffy edge" not in with_chroma_block("A duck.", "blue", "legacy")
+    assert "Crisp hard edges" not in with_chroma_block("A duck.", "blue", "legacy")
     assert with_chroma_block("A duck.", "", "clipart") == "A duck."
 
 

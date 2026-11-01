@@ -72,9 +72,7 @@ _PROMPT_GUIDANCE = {
             "каждый лепесток и лист различим, центры цветов оформлены, стебли непрерывны, "
             "соединения ветвей естественны; сохранять заданное количество элементов, "
             "иначе предпочитать меньше ясно прорисованных деталей вместо скопления "
-            "микродеталей; для венков и рамок 5-8 крупных ясно прорисованных цветков, "
-            "без россыпи мелких цветов, полевых трав и заполняющих веточек; "
-            "почти белые тона палитры только для лепестков, не для подложки; "
+            "микродеталей; "
             "мягкость стиля относится к цвету и фактуре, не к резкости контура"
         ),
         "common_restrictions": (
@@ -86,7 +84,7 @@ _PROMPT_GUIDANCE = {
             "без стекла, просвечивающих лепестков, полупрозрачных материалов, "
             "тюля, вуалей, дыма, тумана и свечения; фон не просвечивает сквозь объект",
             "без белой или кремовой подложки, ореола, контура-наклейки и белых пятен "
-            "за цветами, листьями и между веточками; фон между элементами чистый",
+            "за частями объекта и между ними; фон между элементами чистый",
         ),
         "composition": {
             "hero": "ясный главный объект с читаемой позой или действием",
@@ -113,10 +111,8 @@ _PROMPT_GUIDANCE = {
             "small decorative use does not mean a tiny image on the canvas; "
             "distinct petals and leaves, coherent flower centres, continuous stems "
             "and natural branch junctions; preserve requested counts, otherwise prefer "
-            "fewer clearly formed details over crowded micro-detail; for wreaths and borders "
-            "use 5-8 large clearly formed flowers, no clusters of tiny flowers, wildflower "
-            "grass or filler sprigs; near-white palette tones only for petals, never for "
-            "a backing; softness describes colour and texture, not edge focus"
+            "fewer clearly formed details over crowded micro-detail; "
+            "softness describes colour and texture, not edge focus"
         ),
         "common_restrictions": (
             "no cropping",
@@ -126,7 +122,7 @@ _PROMPT_GUIDANCE = {
             "no glass, see-through petals, translucent or semi-transparent materials, "
             "tulle, veils, smoke, mist or glow; background never shows through the subject",
             "no white or cream backing, halo, sticker outline or white patches behind "
-            "flowers, leaves or between twigs; the background between elements stays clean",
+            "or between parts of the subject; the background between elements stays clean",
         ),
         "composition": {
             "hero": "clear main subject with a readable pose or action",
@@ -146,6 +142,22 @@ _PROMPT_GUIDANCE = {
 }
 
 
+# Only wreaths and borders are made of flowers; any other subject must not be told to grow them.
+_FLOWER_RULE = {
+    "ru": (
+        "для венков и рамок 5-8 крупных ясно прорисованных цветков, "
+        "без россыпи мелких цветов, полевых трав и заполняющих веточек; "
+        "почти белые тона палитры только для лепестков, не для подложки"
+    ),
+    "en": (
+        "for wreaths and borders use 5-8 large clearly formed flowers, no clusters of "
+        "tiny flowers, wildflower grass or filler sprigs; near-white palette tones "
+        "only for petals, never for a backing"
+    ),
+}
+_FLOWER_ROLES = ("wreath", "border")
+
+
 def commercial_planning_hints():
     """Return bounded local guidance; never calls a provider."""
     return deepcopy(_PLANNING)
@@ -158,9 +170,12 @@ def prompt_guidance_for_role(role, *, language="ru"):
     if language not in _PROMPT_GUIDANCE:
         raise ValueError("language must be 'ru' or 'en'")
     values = _PROMPT_GUIDANCE[language]
+    consistency = values["consistency"]
+    if role in _FLOWER_ROLES:
+        consistency = f"{consistency}; {_FLOWER_RULE[language]}"
     return {
         "composition": values["composition"][role],
-        "consistency": values["consistency"],
+        "consistency": consistency,
         "restrictions": tuple(
             values["common_restrictions"] + values["role_restrictions"][role]
         ),
