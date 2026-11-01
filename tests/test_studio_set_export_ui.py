@@ -5,7 +5,8 @@ from zipfile import ZipFile
 import pytest
 from PIL import Image
 from PyQt6.QtCore import QEvent, QEventLoop, QTimer, Qt
-from PyQt6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
+from PyQt6.QtTest import QTest
+from PyQt6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMenu, QMessageBox
 
 from studio_set_export import export_clipart_sets, ExportCancelled
 from studio_set_export_ui import SetExportDialog
@@ -1282,32 +1283,61 @@ def test_running_png_check_is_one_neutral_line_without_a_second_check_button(ima
     dialog.close()
 
 
-def test_column_tick_marks_and_clears_the_whole_column(images):
-    """SET-2 (owner 2026-10-28) moved onto the ✓ glyph (owner 2026-10-30): the title must never mark.
+def _column_states(dialog, column):
+    return [dialog.table.item(row, column).checkState() for row in range(dialog.table.rowCount())]
 
-    A stray click on the column name used to tick every picture in it at once — the owner asked to stop
-    that and give mass marking its own small glyph, which also shows whether the column is marked.
-    """
+
+def _click_glyph(dialog, column, glyph):
+    """A real left click on one of the header glyphs (0 — ✓, 1 — ✎, 2 — ⇅)."""
+    header = dialog.table.horizontalHeader()
+    QTest.mouseClick(header.viewport(), Qt.MouseButton.LeftButton,
+                     pos=header._glyph_rects(column)[glyph].center())
+
+
+def _pick_menu_item(monkeypatch, text):
+    shown = []
+
+    def fake_exec(menu, *args):
+        shown.append([action.text() for action in menu.actions() if not action.isSeparator()])
+        return next((action for action in menu.actions() if action.text() == text), None)
+
+    monkeypatch.setattr(QMenu, 'exec', fake_exec)
+    return shown
+
+
+def test_clicking_a_header_glyph_or_title_never_changes_many_marks(images):
+    """Owner 2026-11-01: the ✓ glyph (and the title) must not tick or clear a whole column by a click."""
     dialog = SetExportDialog(images)
     dialog._show_manual_editor()
     column = 1
-    header = dialog.table.horizontalHeader()
-    # Часть столбца отмечена: значок показывает это состояние.
     dialog.table.item(0, column).setCheckState(Qt.CheckState.Unchecked)
     assert not dialog._column_all_marked(column)
-    # Название столбца ничего не отмечает — только запоминает столбец.
-    marks_before = [dialog.table.item(row, column).checkState() for row in range(dialog.table.rowCount())]
-    header.sectionClicked.emit(column)
-    assert [dialog.table.item(row, column).checkState() for row in range(dialog.table.rowCount())] == marks_before
-    assert dialog._editing_set_id is not None
-    # Значок ✓ заполняет пропуски, второе нажатие снимает весь столбец; значок следует за состоянием.
-    header.marks_clicked.emit(column)
-    assert all(dialog.table.item(row, column).checkState() == Qt.CheckState.Checked
-               for row in range(dialog.table.rowCount()))
+    before = _column_states(dialog, column)
+    dialog.table.horizontalHeader().sectionClicked.emit(column)
+    _click_glyph(dialog, column, 0)
+    _click_glyph(dialog, column, 0)
+    assert _column_states(dialog, column) == before
+    assert dialog._editing_set_id is not None  # the click only picks the column
+    dialog.reject()
+
+
+def test_pencil_menu_marks_and_clears_the_whole_column(images, monkeypatch):
+    dialog = SetExportDialog(images)
+    dialog._show_manual_editor()
+    column = 1
+    dialog.table.item(0, column).setCheckState(Qt.CheckState.Unchecked)
+    shown = _pick_menu_item(monkeypatch, 'Отметить все')
+    _click_glyph(dialog, column, 1)
+    assert shown[-1][:2] == ['Отметить все', 'Снять отметку со всех']
+    assert all(state == Qt.CheckState.Checked for state in _column_states(dialog, column))
     assert dialog._column_all_marked(column)
-    header.marks_clicked.emit(column)
-    assert all(dialog.table.item(row, column).checkState() == Qt.CheckState.Unchecked
-               for row in range(dialog.table.rowCount()))
+    monkeypatch.setattr(QMessageBox, 'question', lambda *a, **k: QMessageBox.StandardButton.No)
+    _pick_menu_item(monkeypatch, 'Снять отметку со всех')
+    _click_glyph(dialog, column, 1)
+    assert dialog._column_all_marked(column)  # «Нет» in the confirmation cancels
+    monkeypatch.setattr(QMessageBox, 'question', lambda *a, **k: QMessageBox.StandardButton.Yes)
+    _click_glyph(dialog, column, 1)
+    assert all(state == Qt.CheckState.Unchecked for state in _column_states(dialog, column))
     assert not dialog._column_all_marked(column)
     assert all(not [link for link in item['memberships'] if link['included']]
                for item in dialog.saved_membership.values())
