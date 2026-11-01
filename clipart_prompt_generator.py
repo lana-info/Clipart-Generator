@@ -26,7 +26,7 @@ _CUTOUT_PROMPT_RULES = (
     "must be absent from the subject; never yellow or green beside yellow or green details. "
     "Wide empty margins; separate elements must not touch each other or frame edges. "
     "Crisp contours: no blur, glow, halo or soft shadows. "
-    "Omit nonessential threads and hairs; essential ones must be thick, bright and continuous. "
+    "Omit nonessential loose threads and strings; essential ones must be thick, bright and continuous. "
     "No tiny detached fragments, confetti, splinters or splashes. "
     "Fully opaque subject; no background color inside its solid parts. "
     "Prefer fewer clean elements over dense ornament."

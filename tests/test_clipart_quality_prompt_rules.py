@@ -57,7 +57,7 @@ def test_final_prompt_contains_cutout_rules_once(automatic, subject, enabled):
         "never yellow or green beside yellow or green details",
         "Wide empty margins; separate elements must not touch each other or frame edges",
         "Crisp contours: no blur, glow, halo or soft shadows",
-        "Omit nonessential threads and hairs; essential ones must be thick, bright and continuous",
+        "Omit nonessential loose threads and strings; essential ones must be thick, bright and continuous",
         "No tiny detached fragments, confetti, splinters or splashes",
         "Fully opaque subject; no background color inside its solid parts",
         "Prefer fewer clean elements over dense ornament",
@@ -66,6 +66,29 @@ def test_final_prompt_contains_cutout_rules_once(automatic, subject, enabled):
         assert entry.prompt.count(clause) == int(enabled)
     assert subject in entry.prompt
     assert entry.chroma_key_color == ("blue" if enabled else "")
+
+
+def test_cutout_rules_do_not_contradict_fur_edge_standard():
+    from clipart_prompt_generator import generate_clipart_prompt_series
+    from v3_project_state import PromptGeneratorData
+
+    data = PromptGeneratorData(subjects=["Fluffy fox"], chroma_key_enabled=True)
+    prompt = generate_clipart_prompt_series(data, edge_quality_standard=True)[0].prompt
+    assert "fine individual hairs and wisps" in prompt
+    assert "Omit nonessential loose threads and strings" in prompt
+    assert "threads and hairs" not in prompt
+
+
+@pytest.mark.parametrize("subject", ("Blue and red toy car", "Blue and green toy car", "Yellow flowers"))
+def test_cutout_rules_do_not_change_chosen_key(subject):
+    # The rules name yellow and green; the key must still come from the author text alone.
+    from chroma_key_selection import select_chroma_key_color
+    from clipart_prompt_generator import generate_clipart_prompt_series
+    from v3_project_state import PromptGeneratorData
+
+    plain = generate_clipart_prompt_series(PromptGeneratorData(subjects=[subject]))[0].prompt
+    entry = generate_clipart_prompt_series(PromptGeneratorData(subjects=[subject], chroma_key_enabled=True))[0]
+    assert entry.chroma_key_color == select_chroma_key_color(plain).color
 
 
 def _flatten(value):
