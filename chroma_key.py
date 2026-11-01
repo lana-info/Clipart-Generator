@@ -60,6 +60,10 @@ SHADED_KEY_MIN_RAMP: Final[float] = 0.12       # share of the key level a shade 
 SHADED_KEY_DEEP_LEVEL: Final[float] = 0.40     # key channel below this share of the key's level
 SHADED_KEY_DEEP_LEAD_FRACTION: Final[float] = 0.03  # a deep shade still leads in the key channel
 SHADED_KEY_DEEP_MAX_ANGLE: Final[float] = 60.0  # degrees off the key chroma: deep shade is nearly neutral
+SHADED_KEY_DEEP_MIN_RAMP: Final[float] = 0.05  # a deep shade is nearly flat navy-black: it need not ramp much
+SHADED_KEY_DEEP_MAX_GAP_WIDTH: Final[float] = 60.0  # px wall to wall: the space under a star or a bow
+#                                                    is wider than a crack, yet only a deep shade has
+#                                                    so little of the key left that it cannot be paint
 
 MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
     "watercolor": (
@@ -202,13 +206,14 @@ def shaded_key_pocket(rgb: np.ndarray, measured_key: np.ndarray) -> np.ndarray:
     highest = np.full(count, -np.inf, np.float32)
     np.minimum.at(lowest, labels.ravel(), level.ravel())
     np.maximum.at(highest, labels.ravel(), level.ravel())
-    shadow = (highest - lowest)[labels] >= SHADED_KEY_MIN_RAMP * measured_key[channel]
+    min_ramp = np.where(deep_shade, SHADED_KEY_DEEP_MIN_RAMP, SHADED_KEY_MIN_RAMP) * measured_key[channel]
+    shadow = (highest - lowest)[labels] >= min_ramp
     return (
         shade
         & seam[labels]
         & shadow
         & (background_clearance > SHADED_KEY_BACKGROUND_CLEARANCE)
-        & (gap_width <= SHADED_KEY_MAX_GAP_WIDTH)
+        & (gap_width <= np.where(deep_shade, SHADED_KEY_DEEP_MAX_GAP_WIDTH, SHADED_KEY_MAX_GAP_WIDTH))
     )
 
 
