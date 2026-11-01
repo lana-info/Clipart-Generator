@@ -16,7 +16,7 @@ for name in ("rough_01", "rough_02", "rough_03", "rough_04", "rough_05"):
     with Image.open(f"/tmp/edge_control/{name}_generated.png") as opened:
         source = opened.convert("RGBA")
     engine = ck.finish_rim_cleanup(ck.remove_chroma_key_automatic(source, "blue", subject_profile="opaque_clipart"), "opaque_clipart")
-    final = suppress_key_tint(clean_alpha(matte_edges(source, engine, "blue"), island_min_gap=DEBRIS_MIN_GAP), "blue")
+    final = suppress_key_tint(clean_alpha(matte_edges(source, engine, "blue"), island_min_gap=DEBRIS_MIN_GAP, antialias=True), "blue")
     rgb = np.asarray(source.convert("RGB"), np.float32) / 255.0
     key = np.array(ck._measured_border_key(source), np.float32) / 255.0
     e_alpha = np.asarray(engine)[..., 3]

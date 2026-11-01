@@ -126,7 +126,7 @@ def production(source: Image.Image, key_module, matting_module, key_color: str =
     )
     matted = matting_module.matte_edges(source, engine, key_color)
     if matted is not engine:
-        matted = suppress_key_tint(clean_alpha(matted, island_min_gap=DEBRIS_MIN_GAP), key_color)
+        matted = suppress_key_tint(clean_alpha(matted, island_min_gap=DEBRIS_MIN_GAP, antialias=True), key_color)
     return source, engine, matted
 
 
