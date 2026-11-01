@@ -53,6 +53,13 @@ SHADED_KEY_MIN_CORE: Final[float] = 1.5        # px half-width of the darkest co
 SHADED_KEY_MIN_EXTENT: Final[float] = 5.0      # px: a thin gap is also a long seam, not a compact dot
 SHADED_KEY_MIN_RAMP: Final[float] = 0.12       # share of the key level a shade must span from mouth to
 #                                                depth: a crevice ramps, a flat key-like patch does not
+# A very dark crevice (a navy-black shadow under a star or a flag) has so little
+# key left that its chroma angle and relative lead are noise; the level alone says
+# it is shade. It is accepted on a looser hue, and only the geometry tests above
+# (walls on both sides, a ramp, clearance from the open key) can promote it.
+SHADED_KEY_DEEP_LEVEL: Final[float] = 0.40     # key channel below this share of the key's level
+SHADED_KEY_DEEP_LEAD_FRACTION: Final[float] = 0.03  # a deep shade still leads in the key channel
+SHADED_KEY_DEEP_MAX_ANGLE: Final[float] = 60.0  # degrees off the key chroma: deep shade is nearly neutral
 
 MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
     "watercolor": (
@@ -158,12 +165,17 @@ def shaded_key_pocket(rgb: np.ndarray, measured_key: np.ndarray) -> np.ndarray:
         np.linalg.norm(rgb - measured_key, axis=2)
         < SHADED_KEY_KEY_DISTANCE * max(float(np.linalg.norm(measured_key)), 1e-6)
     )
-    shade = (
+    hued_shade = (
         (lead >= SHADED_KEY_LEAD_FRACTION * key_lead)
         & (rgb[..., channel] <= SHADED_KEY_MAX_LEVEL * measured_key[channel])
         & (angle <= SHADED_KEY_MAX_ANGLE)
-        & ~near_background
     )
+    deep_shade = (
+        (lead >= SHADED_KEY_DEEP_LEAD_FRACTION * key_lead)
+        & (rgb[..., channel] <= SHADED_KEY_DEEP_LEVEL * measured_key[channel])
+        & (angle <= SHADED_KEY_DEEP_MAX_ANGLE)
+    )
+    shade = (hued_shade | deep_shade) & ~near_background
     if not np.any(shade):
         return shade
     # The unshaded key itself, judged against its own level so that a dark key

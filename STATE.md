@@ -6839,3 +6839,10 @@ Source handoff: codex/fix-large-contours-edge-quality-20261002.
 и снятие старого beta требуют успешной установленной/licensed приёмки.
 
 Remaining-edge-20261003: disk full193GB/0free. Product exactv16, newrules private. Own pytest temps cleaned, freed5MB vanished. Await owner answer for old ambiguous /tmp/vibix-size-audit/extracted1.5GB cleanup.
+
+## 2026-11-01: тёмные карманы при вырезании (R2 / CR-5, выбор владельца «Тёмные карманы»)
+
+- Выбрано владельцем из списка улучшений вырезания. Тёмно-синие кляксы в щелях между частями предмета теперь вырезаются как фон: в `shaded_key_pocket` добавлен признак «глубокой тени». На образцах владельца видимых тёмно-синих px: rough_20 2761→767, rough_23 965→829, rough_22 111→96. Подробности и проверка — `docs/ERRORS.md#dark-navy-pockets-20261101`.
+- Не сделано: карманы шире 18 px и тёмно-серо-зелёная кайма; живая приёмка владельцем. В сборку 3.2.55 НЕ входит, если сборка делается с develop на `bc0e0bd`: слияние меняет состав и требует свежих прогонов — решение за владельцем.
+
+`ветка codex/dark-pockets-20261101 → PR ниже · слито в develop/3.2: нет · в сборке: нет · опубликовано: нет`
