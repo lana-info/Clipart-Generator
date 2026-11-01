@@ -9,7 +9,9 @@ thin uncertain band properly:
 2. closed-form matting (Levin, Lischinski, Weiss) gives alpha in the unknown band;
 3. subject colour is estimated without key mixed in, alpha is re-derived from it by the compositing equation,
    and the colour is estimated again;
-4. remaining key tint on the edge is capped at what the nearest sure subject pixel has.
+4. remaining key tint on the edge is capped at what the nearest sure subject pixel has;
+5. thin painted lines (cords, threads) take coverage and colour from their own strongest pixels: the solid subject
+   around them is another object, and the engine's mask may have broken them into pieces.
 
 Pure numpy/scipy. Returns an RGBA image whose colour under alpha zero is the extended subject colour.
 """
@@ -45,6 +47,14 @@ WINDOW_CHUNK = 40000
 FOREGROUND_SMOOTHNESS = 2.0
 FOREGROUND_REACH = 9            # px around the subject where colour is solved; farther is copied from the nearest
 MAX_UNKNOWN_PIXELS = 400000
+THIN_PAINT_SIGNAL = 0.2         # a non-key channel this far above the key's: paint is mixed in, not a shade of the key
+THIN_PAINT_OPEN = 5             # px; paint that falls out of an opening this wide is a thin line
+THIN_PAINT_MIN_EXTENT = 12      # px; a shorter piece is a corner of a contour, not a line
+THIN_PAINT_REACH = 5            # px along the line from which a pixel takes the colour of its strongest neighbour
+THIN_PAINT_KEY_FREE_LO, THIN_PAINT_KEY_FREE_HI = 0.12, 0.25  # spread of the non-key channels: from HI a line is
+#                                 strongly coloured, and key left in it would only turn its colour towards the key
+THIN_PAINT_PALE_LO, THIN_PAINT_PALE_HI = 0.25, 0.40  # weaker non-key channel: from HI a line is pale, not key-mixed
+THIN_PAINT_KEY_SHARE = 0.25     # of that spread: how far above the weaker non-key channel the key channel may stay
 
 
 def _dilate(mask: np.ndarray, size: int) -> np.ndarray:
@@ -83,8 +93,30 @@ def _enclosed_shaded_key(rgb: np.ndarray, engine_alpha: np.ndarray, channel: int
     return candidate & enclosed_thin[labels]
 
 
+def _paint_signal(rgb: np.ndarray, channel: int, key: np.ndarray) -> np.ndarray:
+    """How far the strongest non-key channel rises above the key's own: the key's shades stay near zero."""
+    return (np.delete(rgb, channel, axis=2) - np.delete(key, channel)).max(axis=2)
+
+
+def _thin_paint_lines(rgb: np.ndarray, channel: int, key: np.ndarray, not_paint: np.ndarray) -> np.ndarray:
+    """Pixels of thin painted lines (a cord, a thread, a string), read from the key frame alone.
+
+    Paint mixed into the key lifts a non-key channel however little of it the pixel covers, so a line stays one
+    line where the engine's mask broke it into pieces. A wide subject survives the opening and a corner of its
+    contour is too short to count.
+    """
+    paint = (_paint_signal(rgb, channel, key) >= THIN_PAINT_SIGNAL) & ~not_paint
+    opened = cv2.morphologyEx(paint.astype(np.uint8), cv2.MORPH_OPEN,
+                              cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (THIN_PAINT_OPEN, THIN_PAINT_OPEN)))
+    residue = paint & (opened == 0)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(residue.astype(np.uint8), connectivity=8)
+    long_enough = np.maximum(stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT]) >= THIN_PAINT_MIN_EXTENT
+    long_enough[0] = False
+    return long_enough[labels]
+
+
 def _trimap(rgb: np.ndarray, engine_alpha: np.ndarray, channel: int, key: np.ndarray):
-    """Return (sure_background, sure_subject) boolean masks; everything else is unknown."""
+    """Return (sure_background, sure_subject, thin_lines) boolean masks; the rest of the frame is unknown."""
     key_lead = rgb[..., channel][..., None] - np.delete(rgb, channel, axis=2)
     near_key = np.linalg.norm(rgb - key, axis=2) < KEY_DISTANCE / 255.0
     opaque = engine_alpha >= 255
@@ -93,12 +125,46 @@ def _trimap(rgb: np.ndarray, engine_alpha: np.ndarray, channel: int, key: np.nda
     # coverage there; without this the closed-form solve would read the shade as
     # subject coverage and paint a film across the gap.
     shaded_pocket = shaded_key_pocket(rgb, key)
-    background = near_key | (engine_alpha == 0) | shaded_key | shaded_pocket
+    thin_lines = _thin_paint_lines(rgb, channel, key, near_key | shaded_key | shaded_pocket)
+    background = near_key | ((engine_alpha == 0) & ~thin_lines) | shaded_key | shaded_pocket
     untinted = (key_lead < SOLID_TINT / 255.0).all(axis=2)
     subject = opaque & (_erode(opaque, SOLID_EROSION) | untinted) & ~background
     # Key-like pixels deep inside the engine's opaque area are not trusted as background (only slivers are).
     background &= ~_erode(opaque, BACKGROUND_EROSION) | shaded_key | shaded_pocket
-    return background, subject
+    return background, subject, thin_lines
+
+
+def _thin_line_matte(rgb: np.ndarray, thin_lines: np.ndarray, channel: int, key: np.ndarray):
+    """Coverage and colour of thin lines, each pixel measured against the strongest pixel of its own line.
+
+    A line is too thin to borrow from the solid subject: the nearest solid pixel may be a star or a drum, and its
+    colour on a red cord reads as a splinter. The strongest pixel nearby holds the least key; it gives the line's
+    colour, and the coverage of the mixed pixels around it follows from the compositing equation.
+    """
+    signal = np.where(thin_lines, _paint_signal(rgb, channel, key), 0.0).astype(np.float32)
+    strongest = thin_lines & (signal >= cv2.dilate(signal, np.ones((THIN_PAINT_REACH, THIN_PAINT_REACH), np.uint8)))
+    others = np.delete(rgb, channel, axis=2).max(axis=2)
+    key_lead = max(float(key[channel] - np.delete(key, channel).max()), 1e-3)
+    coverage = np.clip(1.0 - (rgb[..., channel] - others) / key_lead, 0.05, 1.0)[..., None]
+    unmixed = np.clip((rgb - (1.0 - coverage) * key) / coverage, 0.0, 1.0)
+    _, labels = cv2.distanceTransformWithLabels((~strongest).astype(np.uint8), cv2.DIST_L2, 5,
+                                                labelType=cv2.DIST_LABEL_PIXEL)
+    palette = np.zeros((int(labels.max()) + 1, 3))
+    palette[labels[strongest]] = unmixed[strongest]
+    # A pixel that leads no key channel holds no key to take out: the line's other tones are its own.
+    keyless = coverage[..., 0] >= 1.0
+    colour = np.where(keyless[..., None], rgb, palette[labels])
+    # Even the strongest pixel of a one-pixel line holds key: red on blue stays violet until the key channel drops.
+    rest = np.delete(colour, channel, axis=2)
+    spread = rest.max(axis=2) - rest.min(axis=2)
+    weight = np.clip((spread - THIN_PAINT_KEY_FREE_LO) / (THIN_PAINT_KEY_FREE_HI - THIN_PAINT_KEY_FREE_LO), 0.0, 1.0)
+    # Mixing with the key cannot lift the weaker channel: a pale line (pink, lilac) is that colour in the drawing.
+    weight = weight * np.clip((THIN_PAINT_PALE_HI - rest.min(axis=2)) / (THIN_PAINT_PALE_HI - THIN_PAINT_PALE_LO), 0.0, 1.0)
+    ceiling = rest.min(axis=2) + THIN_PAINT_KEY_SHARE * spread
+    colour[..., channel] -= weight * np.maximum(colour[..., channel] - ceiling, 0.0)
+    direction = colour - key
+    alpha = ((rgb - key) * direction).sum(axis=2) / np.maximum((direction * direction).sum(axis=2), 1e-3)
+    return np.where(keyless, 1.0, np.clip(alpha, 0.0, 1.0)), colour
 
 
 def _closed_form_alpha(rgb: np.ndarray, known: np.ndarray, known_alpha: np.ndarray) -> np.ndarray:
@@ -252,7 +318,7 @@ def matte_edges(source: Image.Image, cutout: Image.Image, key_color: str,
     # One sample of the key hue is the key: a dark rendered key is not another colour.
     if chroma_gap(requested_key, key) > KEY_HUE_GAP:
         return cutout
-    background, subject = _trimap(rgb, engine[..., 3], channel, key)
+    background, subject, thin_lines = _trimap(rgb, engine[..., 3], channel, key)
     unknown = ~background & ~subject
     count = int(unknown.sum())
     dropped = background & (engine[..., 3] > 0)
@@ -301,6 +367,10 @@ def matte_edges(source: Image.Image, cutout: Image.Image, key_color: str,
     alpha[alpha < 0.01] = 0.0
     colour[window] = _estimate_subject_colour(rgb[window], alpha[window], local_window)
     colour[window] = _cap_key_tint(colour[window], alpha[window], channel)
+    if thin_lines.any():
+        line_alpha, line_colour = _thin_line_matte(rgb, thin_lines, channel, key)
+        alpha = np.where(thin_lines, line_alpha, alpha)
+        colour = np.where(thin_lines[..., None], line_colour, colour)
 
     outside = np.ones(alpha.shape, bool)
     outside[window] = False

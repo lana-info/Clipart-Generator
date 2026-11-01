@@ -14,7 +14,8 @@ Four independent steps, applied only to the alpha channel (RGB is never touched)
    a pixel or two no matter how smooth the drawing is. Near such an edge (narrow transition,
    subject thicker than a hair) the border is moved onto the level set of a blurred signed
    distance of the alpha core, which runs "along a ruler". Thin structures, fur and the
-   interior keep their alpha exactly.
+   interior keep their alpha exactly. A cut matted from the key frame asks for ``antialias``
+   instead: the whole contour, stairs of 0 next to 1 included, is rebuilt as a soft ramp.
 4. Opaque ceiling: alpha that is practically opaque becomes 255.
 """
 from __future__ import annotations
@@ -40,6 +41,12 @@ RULER_THIN_RADIUS = 3      # px; subject this thin (hairs, antennae) keeps its a
 RULER_HARD_WIDTH = 3.0     # px of transition up to which an edge is hard enough to straighten
 RULER_SOFT_WIDTH = 6.0     # px of transition from which an edge is soft (fur) and is left alone
 RULER_TRANSITION_REACH = 2.0  # px to the nearest partial pixel beyond which an edge has no transition to move
+ANTIALIAS_SIGMA = 1.5      # px; averages out one-pixel stairs, keeps drawn corners
+ANTIALIAS_PROFILE = 1.3    # px; width of the contour's alpha ramp: soft to the eye, still crisp
+ANTIALIAS_MAX_SHIFT = 1.0  # px; how far the contour may move
+ANTIALIAS_THIN_RADIUS = 2  # px; subject this thin (cords, threads) keeps its alpha exactly
+ANTIALIAS_THIN_MIN_PIXELS = 4  # a piece of subject this small is a corner of the staircase, not a thread
+ANTIALIAS_HARD_WIDTH = 4.5 # px of transition up to which an edge is rebuilt in full; RULER_SOFT_WIDTH ends it
 
 
 def _distance_to_zero(mask: np.ndarray) -> np.ndarray:
@@ -120,18 +127,79 @@ def _straighten_hard_contours(a: np.ndarray, *, sigma: float = RULER_SIGMA,
     return out
 
 
+def _antialias_hard_contours(a: np.ndarray) -> np.ndarray:
+    """Rebuild hard contours as a soft ramp around their blurred signed distance.
+
+    A key frame gives a staircase: the alpha jumps from 0 to 1 between neighbours, and the straightening
+    above cannot help, since it only rewrites pixels that are already partial. Here the border pixels on
+    both sides of the contour are rebuilt, so the stairs become a smooth line. Threads and fur are not hard
+    contours and keep their alpha.
+    """
+    core = a >= 0.5
+    if not core.any() or core.all():
+        return a
+    distance = np.where(core, _distance_to_zero(core) - 0.5, 0.5 - _distance_to_zero(~core)).astype(np.float32)
+    partial = (a > 0.02) & (a < 0.98)
+    # A background gap as narrow as the thin structures stays as it is: the walls around it must not move it,
+    # nor may its own faint pixels move the walls.
+    closing = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * ANTIALIAS_THIN_RADIUS + 1,) * 2)
+    narrow = cv2.morphologyEx(core.astype(np.uint8), cv2.MORPH_CLOSE, closing) > core
+    narrow = cv2.dilate(narrow.astype(np.uint8), closing) > 0
+    source = partial & ~narrow
+    if source.any():
+        _, nearest = cv2.distanceTransformWithLabels(
+            (~source).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+        correction = np.zeros(int(nearest.max()) + 1, np.float32)
+        correction[nearest[source]] = (a - 0.5 - distance)[source]
+        # The error of a partial pixel says where the border really runs; it is carried to the pixels around it
+        # (as in _straighten_hard_contours), or the blur of the distance would shift a straight border.
+        distance += np.where(narrow, 0.0, correction[nearest])
+    opened = cv2.morphologyEx(core.astype(np.uint8), cv2.MORPH_OPEN, cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (2 * ANTIALIAS_THIN_RADIUS + 1,) * 2))
+    residue = (core & (opened == 0)).astype(np.uint8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(residue, connectivity=8)
+    # A corner of the staircase also falls out of the opening, one or two pixels of it; it is no thread.
+    real = stats[:, cv2.CC_STAT_AREA] >= ANTIALIAS_THIN_MIN_PIXELS
+    real[0] = False
+    thin = cv2.dilate(real[labels].astype(np.uint8), np.ones((3, 3), np.uint8))
+    protect = 1.0 - np.maximum(thin.astype(np.float32), cv2.GaussianBlur(thin.astype(np.float32), (0, 0), 1.0))
+    # Where the strokes of a soft band (fur) come close, the edge is not hard and nothing is rebuilt.
+    width = np.where(partial, _distance_to_zero(a < 0.98) + _distance_to_zero(a > 0.02), 0.0).astype(np.float32)
+    nearby = cv2.dilate(width, np.ones((5, 5), np.uint8))
+    hard = 1.0 - np.clip((nearby - ANTIALIAS_HARD_WIDTH) / (RULER_SOFT_WIDTH - ANTIALIAS_HARD_WIDTH), 0.0, 1.0)
+    shift = np.clip(cv2.GaussianBlur(distance, (0, 0), ANTIALIAS_SIGMA) - distance,
+                    -ANTIALIAS_MAX_SHIFT, ANTIALIAS_MAX_SHIFT)
+    rebuilt = np.clip(0.5 + (distance + shift) / ANTIALIAS_PROFILE, 0.0, 1.0)
+    near = np.abs(distance) <= ANTIALIAS_PROFILE
+    return np.where(near, a + (rebuilt - a) * protect * hard, a)
+
+
+def _drop_weak_specks(a: np.ndarray) -> np.ndarray:
+    """Clear small blobs of faint alpha; a blob with a solid pixel in it stays whole."""
+    count, labels, stats, _ = cv2.connectedComponentsWithStats((a > 0).astype(np.uint8), connectivity=8)
+    if count > 1:
+        small = np.flatnonzero(stats[1:, cv2.CC_STAT_AREA] < MIN_SPECK_PIXELS) + 1
+        if small.size:
+            weak = np.isin(labels, small) & ~np.isin(labels, np.unique(labels[a >= 0.5]))
+            a = a.copy()
+            a[weak] = 0.0
+    return a
+
+
 def clean_alpha_array(alpha: np.ndarray, *, haze_floor: float = HAZE_FLOOR,
                       haze_distance: float = HAZE_DISTANCE,
                       hard_max_width: float = HARD_EDGE_MAX_WIDTH,
                       gain: float = EDGE_GAIN,
                       straighten: bool = True,
+                      antialias: bool = False,
                       island_min_gap: float | None = 0.0) -> np.ndarray:
     """Return a cleaned copy of ``alpha`` (float32 in 0..1).
 
     Step 1b drops small solid islands that lie more than ``island_min_gap`` px from the rest of the subject:
     0 drops every small island, ``DEBRIS_MIN_GAP`` keeps detached hair fragments next to matted fur,
     ``None`` skips the step. ``straighten`` turns step 3 off for a cut that must keep the matte it
-    was given exactly as it is (the delivery cut of an existing alpha).
+    was given exactly as it is (the delivery cut of an existing alpha). ``antialias`` replaces step 3
+    with a rebuild of the whole hard contour, for a cut matted from the key frame.
     """
     a = np.clip(alpha.astype(np.float32), 0.0, 1.0)
     if not a.any():
@@ -142,15 +210,7 @@ def clean_alpha_array(alpha: np.ndarray, *, haze_floor: float = HAZE_FLOOR,
     distance_from_core = _distance_to_zero(~core)
     a[(a < haze_floor) & (distance_from_core > haze_distance)] = 0.0
     a[a < 0.03] = 0.0
-    count, labels, stats, _ = cv2.connectedComponentsWithStats((a > 0).astype(np.uint8), connectivity=8)
-    if count > 1:
-        small = np.flatnonzero(stats[1:, cv2.CC_STAT_AREA] < MIN_SPECK_PIXELS) + 1
-        if small.size:
-            weak = np.isin(labels, small) & (a < 0.5)
-            # A speck is dropped only if no pixel of its blob is solid.
-            solid_labels = np.unique(labels[a >= 0.5])
-            weak &= ~np.isin(labels, solid_labels)
-            a[weak] = 0.0
+    a = _drop_weak_specks(a)
 
     # 1b. stray solid islands (generation debris): drop them with a thin ring around them.
     solid = (a >= 0.5).astype(np.uint8)
@@ -186,7 +246,10 @@ def clean_alpha_array(alpha: np.ndarray, *, haze_floor: float = HAZE_FLOOR,
         a = np.where(smooth, steep, a)
 
     # 3. straighten the border of hard edges ("along a ruler").
-    if straighten:
+    if antialias:
+        # Steepening cut the faint bridges that tied some specks to the subject; those crumbs go as well.
+        a = _drop_weak_specks(_antialias_hard_contours(a))
+    elif straighten:
         a = _straighten_hard_contours(a)
 
     # 4. practically opaque -> fully opaque.
