@@ -40,13 +40,24 @@ def test_lilac_rim_of_cream_fur_gets_the_fur_hue_back():
     assert _chroma_error(after[:3], CREAM) < 0.4 * _chroma_error(before[:3], CREAM)
 
 
-def test_spots_of_key_cast_just_inside_the_edge_are_corrected_too():
+def test_semi_transparent_spots_of_key_cast_just_inside_the_edge_are_corrected_too():
     grey_blue = (170, 175, 205)
-    image = _disc(lambda x, y, rim: grey_blue if (x, y) == (80, 50) else CREAM)
+    pixels = np.asarray(_disc(lambda x, y, rim: CREAM)).copy()
+    pixels[50, 80] = (*grey_blue, 200)
+    image = Image.fromarray(pixels, "RGBA")
 
     result = suppress_key_tint(image, "blue")
 
     assert _chroma_error(result.getpixel((80, 50))[:3], CREAM) < 0.5 * _chroma_error(grey_blue, CREAM)
+    assert result.getpixel((80, 50))[3] == 200
+
+
+def test_fully_opaque_pixels_keep_their_colour_even_with_a_key_cast():
+    """An opaque pixel is the artist's colour, not a mixture with the key: a bluish opaque spot stays."""
+    grey_blue = (170, 175, 205)
+    image = _disc(lambda x, y, rim: grey_blue if (x, y) == (80, 50) else CREAM)
+
+    assert suppress_key_tint(image, "blue").getpixel((80, 50)) == (*grey_blue, 255)
 
 
 def test_edge_pixels_between_two_different_subject_colours_are_left_alone():
@@ -60,7 +71,7 @@ def test_edge_pixels_between_two_different_subject_colours_are_left_alone():
     image = _disc(colour)
     result = suppress_key_tint(image, "blue")
 
-    for x in (53, 56, 46):
+    for x in (51, 52, 48):
         before, after = np.array(image.getpixel((x, 16))), np.array(result.getpixel((x, 16)))
         assert np.abs(before - after).max() <= 8, (x, before, after)
 
