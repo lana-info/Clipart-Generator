@@ -24,6 +24,14 @@ def test_chroma_block_forbids_white_backing():
     assert "No white or cream backing" in chroma_key_prompt_block("blue")
 
 
+def test_chroma_block_keeps_gaps_as_bright_as_the_background():
+    # The generator painted dark shade pockets in gaps between parts, which the cutter kept as subject.
+    for key in ("blue", "green"):
+        block = chroma_key_prompt_block(key)
+        assert "never a darker or black shade" in block
+        assert "ambient-occlusion" in block
+
+
 def _flatten(value):
     if isinstance(value, str):
         return [value]
