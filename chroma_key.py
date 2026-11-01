@@ -59,6 +59,8 @@ SHADED_KEY_MIN_RAMP: Final[float] = 0.12       # share of the key level a shade 
 # (walls on both sides, a ramp, clearance from the open key) can promote it.
 SHADED_KEY_DEEP_LEVEL: Final[float] = 0.40     # key channel below this share of the key's level
 SHADED_KEY_DEEP_LEAD_FRACTION: Final[float] = 0.03  # a deep shade still leads in the key channel
+SHADED_KEY_DEEP_MIN_SATURATION: Final[float] = 0.20  # key-channel lead over the pixel's own level: navy is
+#                                                    saturated, a slate-grey paint line (mullion) is not
 SHADED_KEY_DEEP_MAX_ANGLE: Final[float] = 60.0  # degrees off the key chroma: deep shade is nearly neutral
 SHADED_KEY_DEEP_MIN_RAMP: Final[float] = 0.05  # a deep shade is nearly flat navy-black: it need not ramp much
 SHADED_KEY_DEEP_MAX_GAP_WIDTH: Final[float] = 60.0  # px wall to wall: the space under a star or a bow
@@ -178,6 +180,7 @@ def shaded_key_pocket(rgb: np.ndarray, measured_key: np.ndarray) -> np.ndarray:
         (lead >= SHADED_KEY_DEEP_LEAD_FRACTION * key_lead)
         & (rgb[..., channel] <= SHADED_KEY_DEEP_LEVEL * measured_key[channel])
         & (angle <= SHADED_KEY_DEEP_MAX_ANGLE)
+        & (lead >= SHADED_KEY_DEEP_MIN_SATURATION * rgb[..., channel])
     )
     shade = (hued_shade | deep_shade) & ~near_background
     if not np.any(shade):
