@@ -92,7 +92,8 @@ class ModulePackagingTests(unittest.TestCase):
         self.assertTrue(all((root / 'assets' / 'style_previews' / f'{key}.jpg').is_file()
                             for key in AUTO_CLIPART_STYLE_PREVIEWS))
         self.assertTrue({'studio_clipart_recipe.py', 'studio_clipart_references.py',
-                         'studio_reference_editor.py', 'studio_palette_library.py'}
+                         'studio_reference_editor.py', 'studio_palette_library.py',
+                         'studio_clipart_recovery.py', 'studio_clipart_drop.py'}
                         <= set(OFFICIAL_WORKFLOW_FILES['auto-clipart']))
 
 

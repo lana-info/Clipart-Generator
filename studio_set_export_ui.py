@@ -1606,13 +1606,13 @@ class SetExportDialog(QDialog):
                 if url.isLocalFile() and url.toLocalFile().lower().endswith('.png')]
 
     def _quality_drag_enter(self, event):
-        if self._quality_drop_png_candidates(event.mimeData().urls):
+        if self._quality_drop_png_candidates(event.mimeData().urls()):
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def _quality_drop(self, event):
-        paths = self._quality_drop_png_candidates(event.mimeData().urls)
+        paths = self._quality_drop_png_candidates(event.mimeData().urls())
         if not paths:
             event.ignore()
             return
