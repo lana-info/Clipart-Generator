@@ -734,6 +734,11 @@ class SetExportDialog(QDialog):
         self.new_set_button.clicked.connect(self._show_create_page)
         heading.addWidget(self.new_set_button)
         layout.addLayout(heading)
+        self.summary_drop_notice = QLabel('')
+        self.summary_drop_notice.setWordWrap(True)
+        self.summary_drop_notice.setStyleSheet('color: #e88b8b;')
+        self.summary_drop_notice.hide()
+        layout.addWidget(self.summary_drop_notice)
         self._build_membership_table(layout)
         # Owner 2026-10-30: one row of column actions above the table is gone — rename, delete and the
         # sort order now live in the column headers (✎ and ⇅). The widgets below stay hidden so the
@@ -1618,14 +1623,17 @@ class SetExportDialog(QDialog):
             event.ignore()
             return
         event.acceptProposedAction()
-        item = self.quality_list.itemAt(event.position().toPoint())
+        # Бросок из папки добавляет позиции; заменить картинку можно только явно — Shift + бросок на неё.
+        replace = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        item = self.quality_list.itemAt(event.position().toPoint()) if replace else None
         target = str(item.data(Qt.ItemDataRole.UserRole) or '') if item is not None else None
         self.files_dropped.emit(paths, target or None)
 
     def show_drop_notice(self, text):
         """Красная плашка отказов/итога перетаскивания (макет drag-drop-png-20261030)."""
-        self.quality_drop_notice.setText(text)
-        self.quality_drop_notice.setVisible(bool(text))
+        for label in (self.quality_drop_notice, self.summary_drop_notice):
+            label.setText(text)
+            label.setVisible(bool(text))
 
     def _quality_mark_clicked(self, mark):
         # Владелец 2026-10-31: метка ставится всем выделенным картинкам сразу.

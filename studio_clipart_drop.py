@@ -1,44 +1,27 @@
-"""Перетаскивание PNG из проводника — приём файла и подготовка его к позиции запуска.
+"""Перетаскивание PNG из проводника — приём файлов и копия в папку результата.
 
-Одобренный владельцем макет: docs/ui/3.2/drag-drop-png-20261030/ (README — контракт семантики).
-Перетащенный файл копируется в папку результата под шаблон позиции «<stem>_<NN>_ready.png»
-и подключается ровно тем же существующим механизмом, каким работает «Вернуть готовые файлы»
-(studio_auto_clipart_flow.recover_results): прежняя картинка позиции переносится в
-«Историю версий» (studio_clipart_versions.keep_version), метка ставится «Не проверено»
-(review_mark="ok", review_checked=False), новые позиции не создаются — SET-0 не нарушается
-(«Ок» владелец ставит сама), платных запросов нет.
+Правило владелицы (2026-11-01): бросок из папки ДОБАВЛЯЕТ новую позицию в набор. Заменить
+картинку существующей позиции можно только явно — Shift + бросок точно на неё (макет
+drag-drop-png-20261030 описывал замену по имени `_NN_ready` и диалог «Куда поставить» —
+отменено). Перетащенный файл копируется в папку результата под шаблон «<stem>_<NN>_ready.png»;
+позиция получает метку «Не проверено» (review_mark="ok", review_checked=False), «Ок» владелец
+ставит сама; платных запросов нет.
 
-Правила приёмки одного дропа (таблица «Откуда принимаем» макета): только PNG
-(расширение + сигнатура, как _safe_png), не симлинки/ярлыки, ≤ 64 МБ, ≤ 8 файлов за раз,
-папки — отказ; каждый отказ возвращается конкретной причиной, тексты — ровно из макета.
-
-Выбор позиции — одно правило на все экраны (README): явная цель (строка/миниатюра)
-сильнее имени файла; «мимо» — цифру подсказывает имя «_NN_ready» (файлы, названные
-приложением); чужое имя — диалог «Куда поставить …?».
+Правила приёмки одного дропа: только PNG (расширение + сигнатура, как _safe_png), не симлинки/
+ярлыки, ≤ 64 МБ, ≤ 8 файлов за раз, папки — отказ; каждый отказ возвращается конкретной причиной.
 """
 from __future__ import annotations
 
 import re
 import shutil
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 
+from PyQt6.QtCore import QEvent, QObject
+
 from output_naming import _budgeted_filename
-from studio_clipart_recovery import PNG_SIGNATURE, READY_NUMBER
-from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QColor, QIcon, QImageReader, QPainter, QPen, QPixmap
-from PyQt6.QtWidgets import (
-    QAbstractItemView,
-    QDialog,
-    QHBoxLayout,
-    QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QListView,
-    QPushButton,
-    QVBoxLayout,
-)
+from studio_clipart_recovery import PNG_SIGNATURE
 
 # Лимиты дропа (макет 2026-10-30; размер — как MAX_PREVIEW_BYTES в v3_run_queue).
 MAX_DROP_FILES = 8
@@ -56,34 +39,6 @@ class DropVerdict:
     path: Path
     accepted: bool
     reason: str = ""
-
-
-@dataclass(frozen=True)
-class PlannedAttachment:
-    """Одна запись плана подключения: источник → позиция запуска (номер 1-based)."""
-
-    source: Path
-    number: int
-    busy: bool = False  # позиция уже показывает другую картинку — нужен вопрос «Прежняя станет версией»
-
-
-@dataclass(frozen=True)
-class PositionOption:
-    """Миниатюра одной позиции для диалога «Куда поставить …?»."""
-
-    number: int
-    path: str = ""  # текущая картинка позиции; пусто — позиция свободна
-    excluded: bool = False  # картинка исключена из наборов (макет отмечает её «исключена»)
-
-
-@dataclass
-class DropOutcome:
-    """Итог дропа для плашки экрана (макет: зелёная «успех», красная «отказ»)."""
-
-    error: bool = False
-    headline: str = ""
-    detail: str = ""
-    reasons: list[str] = field(default_factory=list)
 
 
 def _reject(path: Path, reason: str) -> DropVerdict:
@@ -149,26 +104,6 @@ def validate_dropped_files(
     return accepted, reasons
 
 
-def suggest_position(name: str, count: int) -> int | None:
-    """Цифра NN из «_NN_ready» в имени файла → позиция (0-based), только внутри набора.
-
-    Чужое имя (и номер вне диапазона) не угадываем — вернётся None, и экран
-    спросит позицию диалогом «Куда поставить …?» (макет «проверка-выбор-позиции»).
-    """
-    match = READY_NUMBER.search(name)
-    if match is None:
-        return None
-    position = int(match.group(1)) - 1
-    return position if 0 <= position < count else None
-
-
-def resolve_position(source: Path, items: Sequence, *, target_index: int | None) -> int | None:
-    """Позиция (0-based) одного файла: явная цель-строка/миниатюра сильнее имени файла."""
-    if target_index is not None:
-        return target_index if 0 <= target_index < len(items) else None
-    return suggest_position(Path(source).name, len(items))
-
-
 def same_file_content(first: Path, second: Path, *, chunk: int = 1 << 20) -> bool:
     """Один и тот же файл (путь или байты): дубликат «позиция уже показывает этот файл»."""
     first, second = Path(first), Path(second)
@@ -189,56 +124,6 @@ def same_file_content(first: Path, second: Path, *, chunk: int = 1 << 20) -> boo
         return False
 
 
-def _item_output(item) -> str:
-    return str(getattr(item, "output_path", "") or "")
-
-
-def plan_attachments(
-    sources: Sequence[Path],
-    items: Sequence,
-    numbers: dict[Path, int],
-    *,
-    same_file: Callable[[Path, Path], bool] = same_file_content,
-) -> tuple[list[PlannedAttachment], list[str]]:
-    """Спланировать подключение принятых файлов к СУЩЕСТВУЮЩИМ позициям запуска.
-
-    numbers — цель каждого источника (1-based номер): всё, что дошло до планирования
-    после явного дропа на миниатюру, подсказки имени «_NN_ready» и диалога выбора.
-    Порядок источников сохраняется («файлы обрабатываются по порядку»). Дубликат —
-    «позиция уже показывает этот самый файл» — отказ с текстом из макета. Файл на
-    занятую позицию планируется с busy=True: экран спросит «Прежняя станет версией».
-    Новые позиции не создаются (позиция = промпт): номер вне набора — противоречие вызова.
-    """
-    count = len(items)
-    planned: list[PlannedAttachment] = []
-    rejects: list[str] = []
-    for source in sources:
-        source = Path(source)
-        number = numbers.get(source)
-        if number is None:
-            continue  # позицию так и не выбрали — файл не подключается
-        if not 1 <= number <= count:
-            raise ValueError(f"Позиция {number} не существует — новые позиции не создаются")
-        current = _item_output(items[number - 1])
-        if current and same_file(source, Path(current)):
-            rejects.append(f"Эта картинка уже стоит на позиции {number}")
-            continue
-        planned.append(PlannedAttachment(source=source, number=number, busy=bool(current)))
-    return planned, rejects
-
-
-def position_options(
-    items: Sequence, *, is_excluded: Callable[[str], bool] | None = None
-) -> list[PositionOption]:
-    """Миниатюры всех позиций запуска для диалога «Куда поставить …?» (новых не создаём)."""
-    options: list[PositionOption] = []
-    for number, item in enumerate(items, start=1):
-        current = _item_output(item)
-        excluded = bool(current) and is_excluded is not None and is_excluded(current)
-        options.append(PositionOption(number=number, path=current, excluded=excluded))
-    return options
-
-
 def _position_stem(source_name: str) -> str:
     """Stem файла без запрещённых символов; кириллица сохраняется (README «Чужие имена»).
 
@@ -253,11 +138,6 @@ def _position_stem(source_name: str) -> str:
     cleaned = _FORBIDDEN_NAME_CHARS.sub(" ", name)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
     return cleaned or "clipart"
-
-
-def position_copy_name(source_name: str, number: int) -> str:
-    """Имя копии в папке результата: «<stem>_<NN>_ready.png» (бюджет длины — output_naming)."""
-    return _budgeted_filename(_position_stem(source_name), f"_{max(1, int(number)):02d}_ready.png")
 
 
 def copy_for_position(source, output_dir, number: int) -> Path:
@@ -277,139 +157,54 @@ def copy_for_position(source, output_dir, number: int) -> Path:
     return destination
 
 
-def _scaled_pixmap(path: str, bound: int) -> QPixmap:
-        """Миниатюра bounded-размера без полной загрузки больших PNG в память."""
-        reader = QImageReader(path)
-        source = reader.size()
-        if source.isValid() and source.width() > 0 and source.height() > 0:
-            reader.setScaledSize(source.scaled(
-                QSize(bound, bound), Qt.AspectRatioMode.KeepAspectRatio))
-        image = reader.read()
-        return QPixmap.fromImage(image) if not image.isNull() else QPixmap()
+DROPPED_MARK = "dropped"
 
 
-class PositionPickerDialog(QDialog):
-    """Диалог «Куда поставить …?» (макет «проверка-выбор-позиции»).
+def _is_dropped(item):
+    return isinstance(item.payload, dict) and item.payload.get(DROPPED_MARK) is True
 
-    Миниатюры всех существующих позиций с номерами; на позиции с картинкой она видна,
-    исключённая из наборов помечена «исключена»; выбор — «Поставить», отмена — «Отмена».
+
+NO_PROMPT_TEXT = "У добавленной картинки нет промта — переделать нельзя."
+
+
+def _dropped_for_path(session, path):
+    """Брошенная позиция с этим файлом (у неё нет промта, переделывать нечего)."""
+    target = str(Path(path).resolve())
+    return any(_is_dropped(item) and item.output_path and str(Path(item.output_path).resolve()) == target
+               for item in session.items)
+
+
+class FileDropFilter(QObject):
+    """Один механизм приёма файлов из папки для страниц «Результаты» и «Наборы» (и панели проверки PNG).
+
+    Ставится на виджет страницы; любые локальные файлы принимаются, причины отказов (не PNG, папка,
+    слишком большой) называет `validate_dropped_files` в обработчике `on_drop(paths)`.
     """
 
-    THUMB = 72
-
-    def __init__(self, source_name: str, options: Sequence[PositionOption], parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(f"Куда поставить {source_name}?")
-        self.setModal(True)
-        self.setObjectName("positionPickerDialog")
-        layout = QVBoxLayout(self)
-        note = QLabel(
-            "Имя файла не подсказывает номер (шаблон _NN_ready) — выберите позицию. "
-            "Если на позиции уже есть картинка, она станет версией.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        self.grid = QListWidget()
-        self.grid.setObjectName("positionPickerGrid")
-        self.grid.setViewMode(QListView.ViewMode.IconMode)
-        self.grid.setIconSize(QSize(self.THUMB, self.THUMB))
-        self.grid.setGridSize(QSize(self.THUMB + 26, self.THUMB + 40))
-        self.grid.setMovement(QListView.Movement.Static)
-        self.grid.setResizeMode(QListView.ResizeMode.Adjust)
-        self.grid.setWordWrap(True)
-        self.grid.setSpacing(8)
-        self.grid.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.grid.setStyleSheet(
-            'QListWidget { background: transparent; } '
-            'QListWidget::item { background: #1b2636; border: 1px solid #223045; '
-            'border-radius: 6px; } '
-            'QListWidget::item:selected { border: 2px dashed #24d8c5; background: #15243a; }'
-        )
-        for option in options:
-            row = QListWidgetItem(self._option_label(option))
-            row.setData(Qt.ItemDataRole.UserRole, option.number)
-            row.setIcon(self._option_icon(option))
-            row.setToolTip(self._option_tooltip(option))
-            self.grid.addItem(row)
-        layout.addWidget(self.grid, 1)
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        self.cancel_button = QPushButton("Отмена")
-        self.cancel_button.setProperty("v3Button", True)
-        self.cancel_button.setProperty("variant", "secondary")
-        self.cancel_button.clicked.connect(self.reject)
-        actions.addWidget(self.cancel_button)
-        self.apply_button = QPushButton("Поставить")
-        self.apply_button.setObjectName("positionPickerApply")
-        self.apply_button.setProperty("v3Button", True)
-        self.apply_button.setProperty("variant", "primary")
-        self.apply_button.setDefault(True)
-        self.apply_button.setEnabled(False)
-        self.apply_button.clicked.connect(self.accept)
-        actions.addWidget(self.apply_button)
-        layout.addLayout(actions)
-        self.grid.currentRowChanged.connect(
-            lambda current: self.apply_button.setEnabled(current >= 0))
-
-    def chosen_number(self) -> int | None:
-        """Выбранный номер позиции (1-based) или None, когда ничего не выбрано."""
-        item = self.grid.currentItem()
-        if item is None:
-            return None
-        number = item.data(Qt.ItemDataRole.UserRole)
-        return int(number) if number is not None else None
-
-    def select_position(self) -> int | None:
-        """Показать диалог и вернуть выбранный номер позиции (None — «Отмена»)."""
-        if self.exec() != int(QDialog.DialogCode.Accepted):
-            return None
-        return self.chosen_number()
-
-    @classmethod
-    def ask(cls, source_name: str, options: Sequence[PositionOption], parent=None) -> int | None:
-        """Собрать диалог «Куда поставить …?» и вернуть выбор (макет «проверка-выбор-позиции»)."""
-        return cls(source_name, options, parent).select_position()
-
-    def accept(self) -> None:  # noqa: D102 — QDialog.accept; без выбора кнопка «Поставить» мертва
-        if self.chosen_number() is None:
-            return
-        super().accept()
+    def __init__(self, widget, on_drop):
+        super().__init__(widget)
+        self._on_drop = on_drop
+        widget.setAcceptDrops(True)
+        widget.installEventFilter(self)
 
     @staticmethod
-    def _option_label(option: PositionOption) -> str:
-        if option.excluded:
-            return f"{option.number} · исключена"
-        if not option.path:
-            return f"{option.number} · пусто"
-        return str(option.number)
+    def _local_paths(event):
+        return [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
 
-    @staticmethod
-    def _option_tooltip(option: PositionOption) -> str:
-        if option.excluded:
-            return f"Позиция {option.number}: картинка исключена из наборов, позиция остаётся"
-        if not option.path:
-            return f"Позиция {option.number}: свободна (картинки нет после прерванного запуска)"
-        return f"Позиция {option.number}: {Path(option.path).name}"
-
-    def _option_icon(self, option: PositionOption) -> QIcon:
-        side = self.THUMB
-        canvas = QPixmap(QSize(side, side))
-        canvas.fill(QColor("#1b2636"))
-        painter = QPainter(canvas)
-        inset = 4
-        for y in range(inset, side - inset, 12):
-            for x in range(inset, side - inset, 12):
-                if x + 12 > side - inset or y + 12 > side - inset:
-                    continue  # клетка видна целиком, как на шахматке проверки PNG
-                painter.fillRect(x, y, 12, 12, QColor(
-                    "#d6dce4" if ((x - inset) // 12 + (y - inset) // 12) % 2 else "#ffffff"))
-        if option.path:
-            picture = _scaled_pixmap(option.path, side - inset * 2)
-            if not picture.isNull():
-                painter.drawPixmap((side - picture.width()) // 2, (side - picture.height()) // 2, picture)
-        if option.excluded:
-            painter.setPen(QPen(QColor("#8ea3b8"), 2))
-            painter.setBrush(QColor("#2b3340"))
-            painter.drawEllipse(3, 3, 18, 18)
-            painter.drawLine(6, 18, 18, 6)
-        painter.end()
-        return QIcon(canvas)
+    def eventFilter(self, watched, event):
+        kind = event.type()
+        if kind in (QEvent.Type.DragEnter, QEvent.Type.DragMove):
+            if self._local_paths(event):
+                event.acceptProposedAction()
+            else:
+                event.ignore()
+            return True
+        if kind == QEvent.Type.Drop:
+            paths = self._local_paths(event)
+            if not paths:
+                event.ignore()
+                return True
+            event.acceptProposedAction()
+            self._on_drop(paths)
+            return True
+        return False
