@@ -2458,8 +2458,9 @@ def _avoid_key_colours_clause(color_name: str | None) -> str:
     if avoided is None:
         return ""
     return (
-        f"Use no {avoided} anywhere in the subject: every part stays "
-        f"clearly different from the {color_name} background. "
+        f"Use no saturated {avoided} in the subject; any {color_name} part "
+        f"the brief asks for is painted pale and muted, clearly different "
+        f"from the {color_name} background. "
     )
 
 
