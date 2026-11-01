@@ -208,3 +208,30 @@ def test_matting_keeps_bright_key_hued_details_the_engine_kept_opaque():
             f"key-hued detail ({x},{y}) was deleted: {result.getpixel((x, y))}"
     assert result.getpixel((12, 12)) == (185, 185, 185, 255)
     assert result.getpixel((2, 2))[3] == 0
+
+
+YELLOW_FUR = np.array([240, 210, 45], np.float32)
+
+
+@pytest.mark.parametrize("key_name, key_rgb", [("red", (255, 0, 0)), ("green", (0, 255, 0)), ("blue", (0, 0, 255))])
+def test_yellow_fluff_keeps_its_alpha_on_any_key_colour(key_name, key_rgb):
+    """R3: yellow has a red/green lead of ~30, so a red or green key used to push the fluff into the unknown band."""
+    key = np.array(key_rgb, np.float32)
+    size = 96
+    fine = size * SCALE * 4
+    drawing = np.zeros((fine, fine), np.uint8)
+    cv2.circle(drawing, (fine // 2, fine // 2), fine // 4, 255, -1)
+    truth = cv2.resize(drawing.astype(np.float32) / 255.0, (size, size), interpolation=cv2.INTER_AREA)
+    rgb = truth[..., None] * YELLOW_FUR + (1 - truth[..., None]) * key
+    source = Image.fromarray(np.rint(rgb).astype(np.uint8), "RGB")
+    hard = np.where(np.linalg.norm(rgb - key, axis=2) > 40, 255, 0).astype(np.uint8)
+    cutout = Image.fromarray(np.dstack([np.asarray(source), hard]), "RGBA")
+
+    result = matte_edges(source, cutout, key_name)
+
+    alpha = np.asarray(result.getchannel("A"), np.float32) / 255.0
+    inside = cv2.erode((truth > 0.98).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+    outside = cv2.dilate((truth > 0.02).astype(np.uint8), np.ones((5, 5), np.uint8)) == 0
+    assert inside.sum() > 1000
+    assert alpha[inside].min() >= 0.99
+    assert alpha[outside].max() <= 0.01

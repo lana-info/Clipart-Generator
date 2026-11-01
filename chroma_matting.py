@@ -39,6 +39,15 @@ SHADED_KEY_MAX_HALF_WIDTH = 2.5  # shaded key slivers are thin; a wider key-like
 SHADED_KEY_REACH = 2            # a sliver this close to the engine's transparent area is an edge, not a gap
 SOLID_TINT = 15                 # sure subject leads the key channel by less than this over every other channel
 SOLID_EROSION = 7               # engine-opaque pixels this deep inside are sure subject regardless of tint
+TINT_CHROMA_GAP = 45.0          # degrees between a pixel's chroma and the key's: a subject colour at least
+#                                 this far off the key hue may have its key-channel lead read against
+#                                 the subject field; a tinted rim pixel moves toward the key hue, and
+#                                 by this gap key mixtures beyond ~t=0.2 stop qualifying
+FIELD_CHROMA_SIGMA = 12.0       # reach of the blurred subject field the extra chroma is measured against;
+#                                 the unknown band of an opaque fur field measured 3-16 px wide
+#                                 (p99 15.6, max 18.6 on the R3 fixture); at 1.5x the widest unbacked
+#                                 band a half-plane of core still passes FIELD_WEIGHT_MIN (weight 0.06)
+FIELD_WEIGHT_MIN = 0.05         # blurred core share below which there is no trusted field
 BACKGROUND_EROSION = 3
 SOLVER_EPS = 1e-7
 WINDOW_CHUNK = 40000
@@ -83,6 +92,48 @@ def _enclosed_shaded_key(rgb: np.ndarray, engine_alpha: np.ndarray, channel: int
     return candidate & enclosed_thin[labels]
 
 
+def _field_key_excess(rgb: np.ndarray, core: np.ndarray, key: np.ndarray):
+    """The pixel's extra chroma along the key's chroma axis over its subject field, the field's spread there, and whether a field exists.
+
+    A chromatic subject leads the key channel by its own pigment: yellow fur (240, 210, 45)
+    under a red key leads red over green by 30, over blue by 195, without any key tint
+    (docs/ERRORS.md {#chroma-review-20261029}, R3) — and an untinted test tuned to a neutral
+    subject throws exactly such fur into the unknown band, where the matting strips its
+    alpha. What a key tint adds is chroma along the field-to-key gradient, i.e. the key's
+    own chroma direction, so the pixel's chroma projection is judged against the blurred
+    sure-core field's projection. The field's own pigment spread along that axis (warm
+    strands inside the fur; under a green key the fur-to-strand difference is nearly
+    parallel to it) is measured the same way and widens the tolerance exactly where the
+    two cannot be told apart. Returns (excess, spread, known_field).
+    """
+    chroma = np.stack([rgb[..., 0] - rgb[..., 1], rgb[..., 1] - rgb[..., 2]], axis=2).astype(np.float32)
+    key_chroma = np.array([key[0] - key[1], key[1] - key[2]], np.float64)
+    key_hat = key_chroma / max(float(np.linalg.norm(key_chroma)), 1e-6)
+    projection = (chroma * key_hat).sum(axis=2)
+    size = (int(FIELD_CHROMA_SIGMA * 6) | 1,) * 2
+    core_f = core.astype(np.float32)
+    weight = cv2.GaussianBlur(core_f, size, FIELD_CHROMA_SIGMA)
+    known_field = weight > FIELD_WEIGHT_MIN
+    safe = np.maximum(weight, 1e-6)
+    mean = cv2.GaussianBlur(projection * core_f, size, FIELD_CHROMA_SIGMA) / safe
+    mean_square = cv2.GaussianBlur(projection * projection * core_f, size, FIELD_CHROMA_SIGMA) / safe
+    spread = np.sqrt(np.maximum(mean_square - mean * mean, 0.0))
+    return projection - mean, spread, known_field
+
+
+def _chroma_gap_pixels(rgb: np.ndarray, key: np.ndarray) -> np.ndarray:
+    """Per-pixel chroma angle to the key, the same (r-g, g-b) convention as ``chroma_gap``."""
+    pixel_chroma = np.stack([rgb[..., 0] - rgb[..., 1], rgb[..., 1] - rgb[..., 2]], axis=2)
+    key_chroma = np.array([key[0] - key[1], key[1] - key[2]], np.float64)
+    norms = np.linalg.norm(pixel_chroma, axis=2) * np.linalg.norm(key_chroma)
+    cosine = np.divide((pixel_chroma * key_chroma).sum(axis=2), norms, out=np.full(rgb.shape[:2], 0.0),
+                       where=norms > 1e-6)
+    # A neutral (chroma-free) pixel has no hue to compare: 90 degrees off anything, the
+    # same convention chroma_gap uses. It passes the gap test, but a neutral subject leads
+    # no channel, so the field allowance stays zero in effect.
+    return np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
+
+
 def _trimap(rgb: np.ndarray, engine_alpha: np.ndarray, channel: int, key: np.ndarray):
     """Return (sure_background, sure_subject) boolean masks; everything else is unknown."""
     key_lead = rgb[..., channel][..., None] - np.delete(rgb, channel, axis=2)
@@ -94,7 +145,21 @@ def _trimap(rgb: np.ndarray, engine_alpha: np.ndarray, channel: int, key: np.nda
     # subject coverage and paint a film across the gap.
     shaded_pocket = shaded_key_pocket(rgb, key)
     background = near_key | (engine_alpha == 0) | shaded_key | shaded_pocket
+    # CR-3 (docs/ERRORS.md {#chroma-review-20261029}, R3): a chromatic subject leads the
+    # key channel by its own pigment. Only a pixel whose hue is far off the key's hue may
+    # measure its key-ward chroma against the subject field instead of zero: a tinted rim
+    # pixel moves toward the key hue (past TINT_CHROMA_GAP key mixtures beyond ~t=0.2 stop
+    # qualifying), hue-close subjects (a leaf under the green key) keep the neutral rule,
+    # and without a sure core in reach there is no field to measure against.
+    core = _erode(opaque, SOLID_EROSION) & ~background
+    excess, spread, known_field = _field_key_excess(rgb, core, key)
+    far_from_key = _chroma_gap_pixels(rgb, key) > TINT_CHROMA_GAP
     untinted = (key_lead < SOLID_TINT / 255.0).all(axis=2)
+    # Over the field, key tint can only add chroma along the key's own axis; within the
+    # field's measured spread along that axis plus SOLID_TINT an opaque far-hue pixel is
+    # still sure subject. Hue-close subjects (a leaf under the green key) and pixels with
+    # no sure core in reach keep the neutral rule.
+    untinted |= far_from_key & known_field & (excess < SOLID_TINT / 255.0 + spread)
     subject = opaque & (_erode(opaque, SOLID_EROSION) | untinted) & ~background
     # Key-like pixels deep inside the engine's opaque area are not trusted as background (only slivers are).
     background &= ~_erode(opaque, BACKGROUND_EROSION) | shaded_key | shaded_pocket

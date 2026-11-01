@@ -24,6 +24,11 @@ PARTIAL_CAST = 6.0           # a partial-alpha pixel is a mixture: this shift al
 SPREAD_LO, SPREAD_HI = 7.0, 14.0  # Lab chroma spread of the reference: homogeneous below LO, none above HI
 LIGHT_BELOW, LIGHT_ABOVE = 25.0, 15.0   # a corrected partial pixel stays this close to the reference lightness
 PARTIAL_ALPHA = 0.98
+KEY_DEFICIT_REACH = 2.0      # px from the silhouette within which a key channel BELOW its subject reference
+#                              is still the generator's darkened key at the tip (chroma_matting's
+#                              SHADED_KEY_REACH = 2 norm); deeper, no mixture with the key can explain
+#                              the deficit and the pixel is the subject's own texture: hands off
+KEY_CHANNEL_TOL = 6.0        # /255 slack of the blurred reference's key-channel level (Lab roundtrip)
 
 
 def _blur(values: np.ndarray, sigma: float) -> np.ndarray:
@@ -72,6 +77,21 @@ def suppress_key_tint(image: Image.Image, key_color: str) -> Image.Image:
     strength = np.maximum(strength, np.where(partial, np.clip(cast / PARTIAL_CAST, 0, 1), 0.0))
     strength = strength * (1 - np.clip((spread - SPREAD_LO) / (SPREAD_HI - SPREAD_LO), 0, 1))
     strength = np.where(known, strength, 0.0)
+    if not strength.any():
+        return image
+
+    # Direction of the key gradient: mixing with the key only ever RAISES the key channel
+    # above the subject's own. A pixel whose key channel sits below its blurred reference
+    # cannot be key-contaminated at all. Inside the shallow tip band such a deficit is the
+    # generator's darkened key and keeps the tip correction; deeper (a dark warm strand in
+    # fur reads the same way in Lab) it is the subject's own texture, which the correction
+    # would visibly damage (R4 2026-10-29: 681 px of textured blue fur repainted to 8 px).
+    ref_lab = ref[..., :3].astype(np.float32)
+    ref_lab[..., 0] = np.clip(ref_lab[..., 0], 0.0, 100.0)   # Lab lightness lives in 0..100; a/b keep their sign
+    ref_rgb = cv2.cvtColor(ref_lab, cv2.COLOR_Lab2RGB) * 255.0
+    key_channel = int(np.argmax(key))
+    deficit = rgb[..., key_channel] * 255.0 < ref_rgb[..., key_channel] - KEY_CHANNEL_TOL
+    strength = np.where(deficit & (inside > KEY_DEFICIT_REACH), 0.0, strength)
     if not strength.any():
         return image
 
